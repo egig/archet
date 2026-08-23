@@ -23,5 +23,7 @@ export { buildCreateSchema, buildUpdateSchema } from './validation.js';
 
 export { generateId } from './id.js';
 
+export { normalizeTimestamps, redactSensitiveFields } from './serialize.js';
+
 export { defineConfig } from './config.js';
 export type { FrameworkConfig } from './config.js';

@@ -1,0 +1,93 @@
+import { Hono } from 'hono';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { OperationContext } from '../core/pipeline.js';
+import { PipelineError } from '../core/pipeline.js';
+import { redactSensitiveFields } from '../core/serialize.js';
+import { generateId } from '../core/id.js';
+import { toErrorResponse } from '../router/errors.js';
+import { readJsonBody } from '../router/create-router.js';
+import { User, registerPipeline } from './models/index.js';
+import { resolveSessionUser } from './pipeline.js';
+import { deleteSessionByToken, findUserByEmail, insertSession, type UserRow } from './lookup.js';
+import { verifyPassword } from './password.js';
+import { generateToken, sessionExpiry } from './token.js';
+
+type AnyDb = PgDatabase<any, any, any>;
+
+function requireString(input: Record<string, unknown>, key: string): string {
+  const value = input[key];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { [key]: 'required' } });
+  }
+  return value;
+}
+
+async function issueSession(db: AnyDb, userId: string) {
+  const token = generateToken();
+  const now = new Date();
+  const session = await insertSession(db, generateId(), userId, token, sessionExpiry(now), now);
+  return session.token;
+}
+
+function bearerToken(request: Request): string | null {
+  const header = request.headers.get('authorization');
+  if (!header?.startsWith('Bearer ')) return null;
+  const token = header.slice('Bearer '.length).trim();
+  return token.length > 0 ? token : null;
+}
+
+function redactUser(user: UserRow): Record<string, unknown> {
+  return redactSensitiveFields(User, user as unknown as Record<string, unknown>);
+}
+
+/** `/api/auth/*` — register/login/logout/me. Mount before the generic `/api/:model` router
+ * (src/router/create-router.ts) so this more specific prefix wins. */
+export function createAuthRouter(db: AnyDb): Hono {
+  const app = new Hono();
+
+  app.onError((err, c) => {
+    const { status, body } = toErrorResponse(err);
+    return c.json(body, status as never);
+  });
+
+  app.post('/register', async (c) => {
+    const body = await readJsonBody(c);
+    const input = { email: requireString(body, 'email'), password: requireString(body, 'password') };
+
+    const ctx: OperationContext = { operation: 'create', input, doc: null, model: User, db, request: c.req.raw };
+    const result = await registerPipeline(ctx);
+    const doc = result.doc!;
+
+    const token = await issueSession(db, doc.id as string);
+    return c.json({ data: { user: redactSensitiveFields(User, doc), token } }, 201);
+  });
+
+  app.post('/login', async (c) => {
+    const body = await readJsonBody(c);
+    const email = requireString(body, 'email');
+    const password = requireString(body, 'password');
+
+    const user = await findUserByEmail(db, email);
+    const valid = user ? await verifyPassword(password, user.passwordHash) : false;
+    if (!user || !user.active || !valid) {
+      throw new PipelineError({ code: 'INVALID_CREDENTIALS', status: 401 });
+    }
+
+    const token = await issueSession(db, user.id);
+    return c.json({ data: { user: redactUser(user), token } });
+  });
+
+  app.post('/logout', async (c) => {
+    const token = bearerToken(c.req.raw);
+    if (!token) throw new PipelineError({ code: 'UNAUTHENTICATED', status: 401, message: 'missing bearer token' });
+    await deleteSessionByToken(db, token);
+    return c.json({ data: null });
+  });
+
+  app.get('/me', async (c) => {
+    const user = await resolveSessionUser(db, c.req.raw);
+    return c.json({ data: redactUser(user) });
+  });
+
+  return app;
+}

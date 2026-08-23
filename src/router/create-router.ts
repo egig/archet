@@ -3,6 +3,7 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from '../core/model.js';
 import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
+import { redactSensitiveFields } from '../core/serialize.js';
 import { toErrorResponse } from './errors.js';
 import { parseInclude, parseListQuery } from './query.js';
 import { getOneRow, listRows } from './list.js';
@@ -15,7 +16,7 @@ function resolveModel(registry: Record<string, ModelDefinition>, name: string): 
   return model;
 }
 
-async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
+export async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
   try {
     const body: unknown = await c.req.json();
     if (typeof body !== 'object' || body === null || Array.isArray(body)) {
@@ -67,7 +68,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     const input = await readJsonBody(c);
     const ctx: OperationContext = { operation: 'create', input, doc: null, model, db, request: c.req.raw };
     const result = await model.operations.create(ctx);
-    return c.json({ data: result.doc }, 201);
+    return c.json({ data: result.doc && redactSensitiveFields(model, result.doc) }, 201);
   });
 
   app.patch('/:model/:id', async (c) => {
@@ -83,7 +84,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       request: c.req.raw,
     };
     const result = await model.operations.update(ctx);
-    return c.json({ data: result.doc });
+    return c.json({ data: result.doc && redactSensitiveFields(model, result.doc) });
   });
 
   app.delete('/:model/:id', async (c) => {
@@ -98,7 +99,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       request: c.req.raw,
     };
     const result = await model.operations.remove(ctx);
-    return c.json({ data: result.doc });
+    return c.json({ data: result.doc && redactSensitiveFields(model, result.doc) });
   });
 
   return app;

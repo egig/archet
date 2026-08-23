@@ -18,6 +18,9 @@ export interface OperationContext {
   model: ModelDefinition;
   db: AnyDb;
   request?: Request;
+  /** the authenticated user, resolved by `requireAuth` (archet/auth) and read by
+   * `requirePermission`/business logic — absent until an auth pipeline step sets it. */
+  user?: Record<string, unknown> | null;
 }
 
 export interface PipelineErrorOptions {

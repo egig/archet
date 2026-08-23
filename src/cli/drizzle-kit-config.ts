@@ -3,7 +3,7 @@ import path from 'node:path';
 
 /**
  * `drizzle-kit migrate` (unlike `generate`) only accepts a --config file, no direct
- * --schema/--out/--url flags — so we write one, derived from framework.config.ts, into the
+ * --schema/--out/--url flags — so we write one, derived from archet.config.ts, into the
  * same gitignored generatedDir as schema.ts/validators.ts/registry.ts (§6: a build artifact,
  * not something hand-edited).
  *

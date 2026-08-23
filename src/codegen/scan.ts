@@ -8,6 +8,9 @@ export interface ScannedModel {
   filePath: string;
   exportName: string;
   model: ModelDefinition;
+  /** true for the framework's own User/Role/Permission/Session models (src/auth/builtins.ts) —
+   * codegen imports these from the `archet/auth` package specifier rather than a relative path. */
+  builtin?: boolean;
 }
 
 function isModelDefinition(value: unknown): value is ModelDefinition {
@@ -28,7 +31,7 @@ async function findModelFiles(modelsDir: string): Promise<string[]> {
     .map((entry) => path.join(entry.parentPath, entry.name));
 }
 
-function assertNoDuplicateNames(scanned: ScannedModel[]): void {
+export function assertNoDuplicateNames(scanned: ScannedModel[]): void {
   const seen = new Map<string, string>();
   for (const { model, filePath } of scanned) {
     const existing = seen.get(model.name);
@@ -41,7 +44,7 @@ function assertNoDuplicateNames(scanned: ScannedModel[]): void {
   }
 }
 
-function assertReferencesResolve(scanned: ScannedModel[]): void {
+export function assertReferencesResolve(scanned: ScannedModel[]): void {
   const names = new Set(scanned.map((s) => s.model.name));
   for (const { model } of scanned) {
     for (const [key, f] of Object.entries(model.fields)) {
@@ -57,9 +60,11 @@ function assertReferencesResolve(scanned: ScannedModel[]): void {
 
 /**
  * Loads every models/**\/*.model.ts file via tsx's programmatic API (no separate tsc build
- * step) and collects every ModelDefinition each file exports. Fails loud (§2.5) rather than
- * writing generated output against a broken model graph: duplicate model names and dangling
- * `field.reference` targets are both rejected here, before any codegen runs.
+ * step) and collects every ModelDefinition each file exports. Does *not* validate the result —
+ * a user model may legitimately reference a built-in model (e.g. `field.reference('users', ...)`)
+ * that isn't visible here, so `generate()` (src/codegen/generate.ts) runs
+ * `assertNoDuplicateNames`/`assertReferencesResolve` itself, against this list merged with
+ * `BUILTIN_MODELS`, before any codegen runs.
  */
 export async function scanModels(modelsDir: string): Promise<ScannedModel[]> {
   const files = await findModelFiles(modelsDir);
@@ -75,7 +80,5 @@ export async function scanModels(modelsDir: string): Promise<ScannedModel[]> {
     }
   }
 
-  assertNoDuplicateNames(scanned);
-  assertReferencesResolve(scanned);
   return scanned;
 }

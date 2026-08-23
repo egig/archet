@@ -4,7 +4,7 @@ import { tsImport } from 'tsx/esm/api';
 import type { FrameworkConfig } from '../core/config.js';
 
 export async function loadConfig(cwd: string): Promise<FrameworkConfig> {
-  const configPath = path.join(cwd, 'framework.config.ts');
+  const configPath = path.join(cwd, 'archet.config.ts');
   const moduleUrl = pathToFileURL(configPath).href;
   const mod = (await tsImport(moduleUrl, import.meta.url)) as { default?: FrameworkConfig };
   if (!mod.default) {
@@ -16,7 +16,7 @@ export async function loadConfig(cwd: string): Promise<FrameworkConfig> {
 export function resolveDirs(cwd: string, config: FrameworkConfig) {
   return {
     modelsDir: path.resolve(cwd, config.modelsDir ?? 'models'),
-    generatedDir: path.resolve(cwd, config.generatedDir ?? 'src/.generated'),
+    generatedDir: path.resolve(cwd, config.generatedDir ?? '.archet'),
     migrationsDir: path.resolve(cwd, config.migrationsDir ?? 'drizzle/migrations'),
   };
 }

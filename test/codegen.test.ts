@@ -60,7 +60,8 @@ describe('generate() against a self-contained model fixture', () => {
 
   it('emits a schema with §4 conventions: timestamptz, partial unique index, CHECK, RESTRICT FK', async () => {
     const { modelCount } = await generate({ modelsDir, generatedDir });
-    expect(modelCount).toBe(2);
+    // 2 user models + 4 built-in auth models (User/Role/Permission/Session, always present).
+    expect(modelCount).toBe(6);
 
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
@@ -96,6 +97,23 @@ describe('generate() against a self-contained model fixture', () => {
     );
     expect(registrySrc).toContain('export { Customer }');
     expect(registrySrc).toContain('export { Invoice }');
+  });
+
+  it('always includes the built-in User/Role/Permission/Session models, imported from `archet/auth`', async () => {
+    await generate({ modelsDir, generatedDir });
+    const registrySrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
+    );
+    const schemaSrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
+    );
+    for (const name of ['User', 'Role', 'Permission', 'Session']) {
+      expect(registrySrc).toContain(`export { ${name} } from 'archet/auth';`);
+    }
+    expect(schemaSrc).toContain("pgTable('users'");
+    expect(schemaSrc).toContain("pgTable('roles'");
+    expect(schemaSrc).toContain("pgTable('permissions'");
+    expect(schemaSrc).toContain("pgTable('sessions'");
   });
 
   it('rejects a dangling field.reference target before writing any files', async () => {

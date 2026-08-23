@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { scanModels } from './scan.js';
+import { assertNoDuplicateNames, assertReferencesResolve, scanModels } from './scan.js';
+import { BUILTIN_MODELS } from './builtins.js';
 import { generateSchemaSource } from './schema-gen.js';
 import { generateValidatorsSource } from './validators-gen.js';
 import { generateRegistrySource } from './registry-gen.js';
@@ -16,7 +17,9 @@ export interface GenerateResult {
 }
 
 export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
-  const scanned = await scanModels(opts.modelsDir);
+  const scanned = [...BUILTIN_MODELS, ...(await scanModels(opts.modelsDir))];
+  assertNoDuplicateNames(scanned);
+  assertReferencesResolve(scanned);
 
   await mkdir(opts.generatedDir, { recursive: true });
 

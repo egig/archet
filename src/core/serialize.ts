@@ -29,3 +29,13 @@ export function normalizeTimestamps(model: ModelDefinition, row: Record<string, 
   }
   return out;
 }
+
+/** Strips every `field.*({ sensitive: true })` column (e.g. a password hash) from a row before
+ * it can reach an HTTP response — applied at every router response boundary, never in persistence. */
+export function redactSensitiveFields(model: ModelDefinition, row: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...row };
+  for (const [key, f] of Object.entries(model.fields)) {
+    if (f.sensitive) delete out[key];
+  }
+  return out;
+}

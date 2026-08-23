@@ -1,14 +1,9 @@
 node_modules/
 dist/
-src/.generated/
 .env
 *.log
 
 # example/app content — this repo tracks the archet framework itself (src/core, src/cli,
-# src/codegen, src/router), not an app built on it. These exist on disk for local dogfooding
-# (see DESIGN.md) but shouldn't be committed to the framework's own history.
-/models/
-/logic/
-/framework.config.ts
-/src/server.ts
-/drizzle/
+# src/codegen, src/router), not an app built on it. This directory exists on disk for local
+# dogfooding (see DESIGN.md) but shouldn't be committed to the framework's own history.
+/example/

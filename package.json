@@ -9,14 +9,15 @@
   "exports": {
     ".": "./dist/core/index.js",
     "./core": "./dist/core/index.js",
-    "./router": "./dist/router/index.js"
+    "./router": "./dist/router/index.js",
+    "./auth": "./dist/auth/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && chmod +x dist/cli/bin.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "cli": "tsx src/cli/bin.ts",
-    "serve": "tsx src/cli/bin.ts serve"
+    "cli": "cd example && tsx ../src/cli/bin.ts",
+    "serve": "cd example && tsx ../src/cli/bin.ts serve"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

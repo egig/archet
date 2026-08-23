@@ -7,12 +7,13 @@ import postgres from 'postgres';
 import { tsImport } from 'tsx/esm/api';
 import { createApiRouter } from '../../router/create-router.js';
 import { buildRegistryMap } from '../../router/registry-map.js';
+import { createAuthRouter } from '../../auth/router.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
 
 /**
  * §5/§6: the dynamic `/api/:model` router only needs a registry (name -> ModelDefinition) and a
  * db client — apps never need to hand-write a server entry file. `serve` builds both from
- * framework.config.ts and the generated registry, and boots a plain @hono/node-server listener.
+ * archet.config.ts and the generated registry, and boots a plain @hono/node-server listener.
  */
 export async function runServe(cwd: string): Promise<ServerType> {
   const config = await loadConfig(cwd);
@@ -29,6 +30,8 @@ export async function runServe(cwd: string): Promise<ServerType> {
   const db = drizzle(client);
 
   const app = new Hono();
+  // more specific prefix first: `/api/auth/*` must win over the generic `/api/:model` pattern.
+  app.route('/api/auth', createAuthRouter(db));
   app.route('/api', createApiRouter(registry, db));
 
   const port = Number(process.env.PORT ?? 3000);

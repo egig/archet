@@ -5,7 +5,7 @@ export interface FrameworkConfig {
   };
   /** default: 'models' */
   modelsDir?: string;
-  /** default: 'src/.generated' — gitignored, rebuilt by `generate` every time */
+  /** default: '.archet' — gitignored, rebuilt by `generate` every time */
   generatedDir?: string;
   /** default: 'drizzle/migrations' — git-tracked; separate from generatedDir (Q8) */
   migrationsDir?: string;

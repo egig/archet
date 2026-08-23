@@ -5,6 +5,8 @@ export interface FieldCommonOptions<T = unknown> {
   default?: T;
   unique?: boolean;
   indexed?: boolean;
+  /** stored, but stripped from every HTTP response — e.g. a password hash. */
+  sensitive?: boolean;
 }
 
 interface BaseFieldDefinition {
@@ -12,6 +14,7 @@ interface BaseFieldDefinition {
   default?: unknown;
   unique: boolean;
   indexed: boolean;
+  sensitive: boolean;
 }
 
 export interface StringFieldDefinition extends BaseFieldDefinition {
@@ -82,6 +85,7 @@ function base(opts: FieldCommonOptions): BaseFieldDefinition {
     default: opts.default,
     unique: opts.unique ?? false,
     indexed: opts.indexed ?? false,
+    sensitive: opts.sensitive ?? false,
   };
 }
 

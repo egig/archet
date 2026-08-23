@@ -12,7 +12,7 @@ program.name('archet').description('Model -> Postgres schema, codegen, and compo
 
 program
   .command('init')
-  .description('Scaffold a new project: package.json, tsconfig.json, framework.config.ts, and an example model')
+  .description('Scaffold a new project: package.json, tsconfig.json, archet.config.ts, and an example model')
   .action(async () => {
     await runInit(process.cwd());
   });
@@ -47,7 +47,7 @@ program
 
 program
   .command('serve')
-  .description('Boot the API server: framework.config.ts + the generated registry -> a listening /api/:model router')
+  .description('Boot the API server: archet.config.ts + the generated registry -> a listening /api/:model router')
   .action(async () => {
     await runServe(process.cwd());
   });
