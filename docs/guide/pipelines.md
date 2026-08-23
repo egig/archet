@@ -1,0 +1,86 @@
+# Pipelines
+
+`create`, `update`, and `remove` on every model are pipelines: an ordered chain of small functions built with `pipe(...)`. This is where your business logic lives.
+
+## Anatomy of a pipeline function
+
+```ts
+type PipelineFn = (ctx: OperationContext) => OperationContext | Promise<OperationContext>;
+
+interface OperationContext {
+  operation: 'create' | 'update' | 'remove';
+  id?: string;                             // required for update/remove, absent for create
+  input: Record<string, unknown>;          // the pending write payload — mutate this
+  doc: Record<string, unknown> | null;     // the record before this operation; auto-prefetched
+  model: ModelDefinition;
+  db: PgDatabase<any, any, any>;
+  request?: Request;
+  user?: Record<string, unknown> | null;   // set by requireAuth, read by requirePermission
+}
+```
+
+A pipeline function receives the context, does its work, and returns a (possibly new) context. To reject the operation, throw a `PipelineError`:
+
+```ts
+import { PipelineError, type PipelineFn } from 'archet/core';
+
+export const checkStock: PipelineFn = async (ctx) => {
+  const available = await stockFor(ctx.db, ctx.input.customerId as string);
+  if (!available) {
+    throw new PipelineError({ code: 'OUT_OF_STOCK', status: 409, message: 'no stock available' });
+  }
+  return ctx;
+};
+```
+
+## `pipe(...)`
+
+```ts
+import { pipe, validate, persist } from 'archet/core';
+
+pipe(validate, checkStock, applyDiscount, persist, notify);
+```
+
+`pipe()` wraps the whole chain in a single database transaction, with one exception: **`persist` / `persist.remove` / `persist.hardRemove` mark a write boundary.** Everything up to and including that boundary runs inside the transaction; everything after it runs post-commit, non-transactionally. A failure after the boundary (e.g. `notify` above) does **not** roll back the already-committed write — so put side effects with external consequences (emails, webhooks, notifications) after `persist`, and validation/business rules before it.
+
+Before the first function in the chain runs, `pipe()` auto-prefetches `ctx.doc` for `update`/`remove` (a single consistent read at the start of the transaction), and throws `NOT_FOUND` if the id doesn't resolve.
+
+## Built-in pipeline functions
+
+### `validate`
+
+Runs the model's Zod schema (built from its fields) against `ctx.input` — `buildCreateSchema` for `create`, `buildUpdateSchema` otherwise — and replaces `ctx.input` with the parsed, coerced result. On failure it throws `PipelineError` with `code: 'VALIDATION_ERROR'` and a `fields` map of per-field messages.
+
+### `persist`
+
+Writes `ctx.input` to the database:
+
+- `persist` — insert (create) or update, and set `ctx.doc` to the resulting row.
+- `persist.remove` — soft-delete.
+- `persist.hardRemove` — hard-delete; sets `ctx.doc` to `null`.
+
+Each of these marks the pipeline's write boundary.
+
+## Writing your own business logic
+
+A pipeline function typically does one of:
+
+- **Read from `ctx.db`** to check external state (stock, quota, uniqueness beyond what a DB constraint gives you) and throw a `PipelineError` if a precondition fails.
+- **Mutate `ctx.input`** before `persist` runs — e.g. `applyDiscount` recalculating `amount`, or `hashPassword` (see [Auth](/guide/auth)) replacing a plaintext `password` key with a `passwordHash` column.
+- **Act on `ctx.doc`** after `persist` — e.g. `notify` sending an email now that the row exists and is committed.
+
+```ts
+export const applyDiscount: PipelineFn = (ctx) => {
+  const amount = Number(ctx.input.amount);
+  return { ...ctx, input: { ...ctx.input, amount: amount * 0.9 } };
+};
+
+export const notify: PipelineFn = async (ctx) => {
+  await sendEmail(ctx.doc!.customerId as string, 'Invoice created');
+  return ctx;
+};
+```
+
+## Auth-related pipeline functions
+
+`requireAuth` and `requirePermission(resource, action)` (from `archet/auth`) are ordinary pipeline functions and compose the same way — see [Auth](/guide/auth#guarding-your-own-pipelines).

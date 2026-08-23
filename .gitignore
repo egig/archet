@@ -2,6 +2,8 @@ node_modules/
 dist/
 .env
 *.log
+docs/.vitepress/cache/
+docs/.vitepress/dist/
 
 # example/app content — this repo tracks the archet framework itself (src/core, src/cli,
 # src/codegen, src/router), not an app built on it. This directory exists on disk for local

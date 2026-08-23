@@ -19,7 +19,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "cli": "cd example && tsx ../src/cli/bin.ts",
-    "serve": "cd example && tsx ../src/cli/bin.ts serve"
+    "serve": "cd example && tsx ../src/cli/bin.ts serve",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
@@ -46,6 +49,7 @@
     "react-dom": "^19.2.8",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "vitepress": "^1.6.4",
     "vitest": "^2.1.8"
   }
 }
