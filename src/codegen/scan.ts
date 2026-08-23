@@ -1,0 +1,81 @@
+import { readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { tsImport } from 'tsx/esm/api';
+import type { ModelDefinition } from '../core/model.js';
+
+export interface ScannedModel {
+  filePath: string;
+  exportName: string;
+  model: ModelDefinition;
+}
+
+function isModelDefinition(value: unknown): value is ModelDefinition {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as ModelDefinition).name === 'string' &&
+    typeof (value as ModelDefinition).tableName === 'string' &&
+    typeof (value as ModelDefinition).fields === 'object' &&
+    typeof (value as ModelDefinition).operations === 'object'
+  );
+}
+
+async function findModelFiles(modelsDir: string): Promise<string[]> {
+  const entries = await readdir(modelsDir, { withFileTypes: true, recursive: true });
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.model.ts'))
+    .map((entry) => path.join(entry.parentPath, entry.name));
+}
+
+function assertNoDuplicateNames(scanned: ScannedModel[]): void {
+  const seen = new Map<string, string>();
+  for (const { model, filePath } of scanned) {
+    const existing = seen.get(model.name);
+    if (existing) {
+      throw new Error(
+        `duplicate model name '${model.name}' declared in both '${existing}' and '${filePath}' — model names must be unique (they double as the table name and REST route segment).`,
+      );
+    }
+    seen.set(model.name, filePath);
+  }
+}
+
+function assertReferencesResolve(scanned: ScannedModel[]): void {
+  const names = new Set(scanned.map((s) => s.model.name));
+  for (const { model } of scanned) {
+    for (const [key, f] of Object.entries(model.fields)) {
+      if (f.kind === 'reference' && !names.has(f.targetModel)) {
+        throw new Error(
+          `model '${model.name}': field '${key}' references unknown model '${f.targetModel}'. ` +
+            `Known models: ${[...names].join(', ') || '(none)'}`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Loads every models/**\/*.model.ts file via tsx's programmatic API (no separate tsc build
+ * step) and collects every ModelDefinition each file exports. Fails loud (§2.5) rather than
+ * writing generated output against a broken model graph: duplicate model names and dangling
+ * `field.reference` targets are both rejected here, before any codegen runs.
+ */
+export async function scanModels(modelsDir: string): Promise<ScannedModel[]> {
+  const files = await findModelFiles(modelsDir);
+  const scanned: ScannedModel[] = [];
+
+  for (const filePath of files) {
+    const moduleUrl = pathToFileURL(filePath).href;
+    const mod = (await tsImport(moduleUrl, import.meta.url)) as Record<string, unknown>;
+    for (const [exportName, value] of Object.entries(mod)) {
+      if (isModelDefinition(value)) {
+        scanned.push({ filePath, exportName, model: value });
+      }
+    }
+  }
+
+  assertNoDuplicateNames(scanned);
+  assertReferencesResolve(scanned);
+  return scanned;
+}

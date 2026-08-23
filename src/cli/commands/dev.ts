@@ -1,0 +1,97 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import { watch } from 'node:fs';
+import { generate } from '../../codegen/generate.js';
+import { loadConfig, resolveDirs } from '../load-config.js';
+import { writeDrizzleKitConfig } from '../drizzle-kit-config.js';
+import { runDrizzleKit } from '../run-drizzle-kit.js';
+
+const DEBOUNCE_MS = 200;
+
+async function generateAndPush(cwd: string, dirs: ReturnType<typeof resolveDirs>): Promise<void> {
+  await generate({ modelsDir: dirs.modelsDir, generatedDir: dirs.generatedDir });
+  const drizzleConfigFile = await writeDrizzleKitConfig(cwd, dirs.generatedDir, dirs.migrationsDir);
+  // §7: `dev` is the one place `push` is used — immediate schema sync, no migration files.
+  // `--force` auto-approves data-loss statements; acceptable because this only ever targets a
+  // local dev database, never staging/prod (which always goes through generate+migrate instead).
+  await runDrizzleKit(['push', '--config', drizzleConfigFile, '--force'], cwd);
+}
+
+/** §6: watch model files; on change, regenerate + push + restart the dev server. */
+export async function runDev(cwd: string): Promise<void> {
+  const config = await loadConfig(cwd);
+  const dirs = resolveDirs(cwd, config);
+
+  let child: ChildProcess | null = null;
+  let restarting = false;
+  let pendingRestart = false;
+
+  // Re-invoke this same CLI entry point (whatever launched `dev` — the .ts source under tsx,
+  // or the built dist/cli/bin.js) with `serve` instead of `dev`, via `npx tsx` so both cases work
+  // uniformly. A child process, not an in-process restart, so a bad model change crashes the
+  // spawned server without taking `dev`'s watch loop down with it.
+  const cliEntry = process.argv[1]!;
+
+  function startServer(): void {
+    child = spawn('npx', ['tsx', cliEntry, 'serve'], { cwd, stdio: 'inherit' });
+    child.on('exit', (code, signal) => {
+      if (!restarting && code !== 0 && signal === null) {
+        console.error(`[dev] server exited with code ${code}`);
+      }
+    });
+  }
+
+  async function stopServer(): Promise<void> {
+    if (!child) return;
+    const dying = child;
+    await new Promise<void>((resolve) => {
+      dying.once('exit', () => resolve());
+      dying.kill();
+    });
+    child = null;
+  }
+
+  async function restart(reason: string): Promise<void> {
+    if (restarting) {
+      pendingRestart = true;
+      return;
+    }
+    restarting = true;
+    console.log(`[dev] ${reason} — regenerating and pushing schema...`);
+    try {
+      await generateAndPush(cwd, dirs);
+    } catch (err) {
+      console.error('[dev] generate/push failed, keeping the previous server running:', err instanceof Error ? err.message : err);
+      restarting = false;
+      return;
+    }
+    await stopServer();
+    startServer();
+    restarting = false;
+    if (pendingRestart) {
+      pendingRestart = false;
+      await restart('queued change');
+    }
+  }
+
+  await generateAndPush(cwd, dirs);
+  startServer();
+  console.log(`[dev] watching ${dirs.modelsDir} for changes`);
+
+  let debounceTimer: NodeJS.Timeout | undefined;
+  watch(dirs.modelsDir, { recursive: true }, (_event, filename) => {
+    if (!filename || !filename.endsWith('.model.ts')) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => void restart(`${filename} changed`), DEBOUNCE_MS);
+  });
+
+  const shutdown = async () => {
+    clearTimeout(debounceTimer);
+    await stopServer();
+    process.exit(0);
+  };
+  process.on('SIGINT', () => void shutdown());
+  process.on('SIGTERM', () => void shutdown());
+
+  // keep the process alive — fs.watch + the child process are the only reasons this doesn't exit.
+  await new Promise<void>(() => {});
+}
