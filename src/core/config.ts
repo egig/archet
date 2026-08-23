@@ -9,6 +9,10 @@ export interface FrameworkConfig {
   generatedDir?: string;
   /** default: 'drizzle/migrations' — git-tracked; separate from generatedDir (Q8) */
   migrationsDir?: string;
+  /** default: 'admin/client/main.tsx' — the consumer-authored admin UI entry point that
+   * `archet build`/`archet dev` bundle with esbuild. Absent entirely if the app hasn't
+   * adopted the admin feature — `build`/`dev` skip the admin build step in that case. */
+  adminEntry?: string;
 }
 
 export function defineConfig(config: FrameworkConfig): FrameworkConfig {

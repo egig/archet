@@ -6,6 +6,7 @@ import { runMigrate } from './commands/migrate.js';
 import { runStudio } from './commands/studio.js';
 import { runDev } from './commands/dev.js';
 import { runServe } from './commands/serve.js';
+import { runBuild } from './commands/build.js';
 
 const program = new Command();
 program.name('archet').description('Model -> Postgres schema, codegen, and composable pipelines.');
@@ -50,6 +51,13 @@ program
   .description('Boot the API server: archet.config.ts + the generated registry -> a listening /api/:model router')
   .action(async () => {
     await runServe(process.cwd());
+  });
+
+program
+  .command('build')
+  .description('Build the admin client (esbuild + Tailwind, hashed + manifest) and a bundled server artifact')
+  .action(async () => {
+    await runBuild(process.cwd());
   });
 
 program.parseAsync(process.argv).catch((err: unknown) => {

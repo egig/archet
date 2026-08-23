@@ -18,5 +18,6 @@ export function resolveDirs(cwd: string, config: FrameworkConfig) {
     modelsDir: path.resolve(cwd, config.modelsDir ?? 'models'),
     generatedDir: path.resolve(cwd, config.generatedDir ?? '.archet'),
     migrationsDir: path.resolve(cwd, config.migrationsDir ?? 'drizzle/migrations'),
+    adminEntryFile: path.resolve(cwd, config.adminEntry ?? 'admin/client/main.tsx'),
   };
 }

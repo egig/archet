@@ -10,10 +10,12 @@
     ".": "./dist/core/index.js",
     "./core": "./dist/core/index.js",
     "./router": "./dist/router/index.js",
-    "./auth": "./dist/auth/index.js"
+    "./auth": "./dist/auth/index.js",
+    "./admin": "./dist/admin/index.js",
+    "./admin/client": "./dist/admin/client/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli/bin.js",
+    "build": "tsx scripts/build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "cli": "cd example && tsx ../src/cli/bin.ts",
@@ -21,18 +23,28 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@tailwindcss/cli": "^4.3.3",
     "commander": "^12.1.0",
     "drizzle-orm": "^0.36.4",
+    "esbuild": "^0.28.2",
     "hono": "^4.6.14",
     "postgres": "^3.4.5",
     "uuidv7": "^1.0.2",
     "zod": "^3.24.1"
   },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
   "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "drizzle-kit": "^0.28.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8",
-    "@types/node": "^22.10.2"
+    "vitest": "^2.1.8"
   }
 }
