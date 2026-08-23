@@ -4,7 +4,7 @@ layout: home
 hero:
   name: archet
   text: Models in, API out.
-  tagline: A Frappe-inspired application framework — TypeScript models compile to a Postgres schema, a REST API, an admin panel, and auth, with composable pipelines wherever you need custom logic.
+  tagline: Archetype driven business application framework — TypeScript models compile to a Postgres schema, a REST API, an admin panel, and auth, with composable pipelines wherever you need custom logic.
   actions:
     - theme: brand
       text: Get Started

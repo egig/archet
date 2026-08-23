@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress';
 
 export default defineConfig({
   title: 'archet',
-  description: 'A Frappe-inspired application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.',
+  description: 'Archetype driven business application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.',
   base: '/archet/',
   cleanUrls: true,
   themeConfig: {
