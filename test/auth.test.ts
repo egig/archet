@@ -3,13 +3,15 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
+import { defineModel, field } from '../src/core/index.js';
 import { generateId } from '../src/core/id.js';
 import type { OperationContext } from '../src/core/pipeline.js';
 import { hashPassword, verifyPassword } from '../src/auth/password.js';
 import { hashPassword as hashPasswordPipeline } from '../src/auth/pipeline.js';
-import { User, Role, Permission } from '../src/auth/models/index.js';
+import { User, Role, Permission, Session } from '../src/auth/models/index.js';
 import { createAuthRouter } from '../src/auth/router.js';
 import { createApiRouter } from '../src/router/create-router.js';
+import { createAdminRouter } from '../src/admin/router.js';
 
 describe('password hashing (src/auth/password.ts)', () => {
   it('hashes and verifies a round trip', async () => {
@@ -51,6 +53,15 @@ describeIfDb('auth system (against a live Postgres)', () => {
   let db: PgDatabase<any, any, any>;
   let authApp: ReturnType<typeof createAuthRouter>;
   let apiApp: ReturnType<typeof createApiRouter>;
+  let adminApp: ReturnType<typeof createAdminRouter>;
+
+  const Widget = defineModel('widgets', {
+    fields: {
+      name: field.string({ required: true }),
+      ownerId: field.reference('users', { required: false }),
+    },
+    admin: { label: 'Widgets', displayField: 'name' },
+  });
 
   beforeAll(async () => {
     client = postgres(connectionString!);
@@ -79,6 +90,11 @@ describeIfDb('auth system (against a live Postgres)', () => {
 
     authApp = createAuthRouter(db);
     apiApp = createApiRouter({ roles: Role, permissions: Permission, users: User }, db);
+    adminApp = createAdminRouter(
+      '.archet-test',
+      { users: User, roles: Role, permissions: Permission, sessions: Session, widgets: Widget },
+      db,
+    );
   });
 
   beforeEach(async () => {
@@ -157,6 +173,89 @@ describeIfDb('auth system (against a live Postgres)', () => {
     expect(after.status).toBe(401);
   });
 
+  it('GET /me includes the resolved permissions for the caller\'s role', async () => {
+    const { token, user } = await registerUser('perms@example.com', 'pw');
+
+    const noRole = await authApp.request('/me', { headers: { authorization: `Bearer ${token}` } });
+    expect(((await noRole.json()) as { data: { permissions: unknown[] } }).data.permissions).toEqual([]);
+
+    const roleId = generateId();
+    const now = new Date().toISOString();
+    await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, 'viewer')`);
+    await db.execute(
+      sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action)
+          VALUES (${generateId()}, ${now}, ${now}, ${roleId}, 'invoices', 'list')`,
+    );
+    await db.execute(sql`UPDATE users SET role_id = ${roleId} WHERE id = ${user.id}`);
+
+    const withRole = await authApp.request('/me', { headers: { authorization: `Bearer ${token}` } });
+    const body = (await withRole.json()) as { data: { permissions: { resource: string; action: string }[] } };
+    expect(body.data.permissions).toEqual([{ resource: 'invoices', action: 'list' }]);
+  });
+
+  describe('cookie-based session (admin SPA transport)', () => {
+    function cookieFromSetHeader(res: Response): string {
+      const raw = res.headers.get('set-cookie');
+      expect(raw).toBeTruthy();
+      return raw!.split(';')[0]!;
+    }
+
+    it('login sets an HttpOnly session cookie usable in place of the Authorization header', async () => {
+      await registerUser('cookie@example.com', 'pw');
+      const res = await authApp.request('/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'cookie@example.com', password: 'pw' }),
+      });
+      expect(res.status).toBe(200);
+      const setCookie = res.headers.get('set-cookie')!;
+      expect(setCookie).toMatch(/^archet_session=/);
+      expect(setCookie).toMatch(/HttpOnly/i);
+      expect(setCookie).toMatch(/SameSite=Lax/i);
+      // plain http:// in tests — Secure must not be set, or the browser would drop the cookie entirely.
+      expect(setCookie).not.toMatch(/Secure/i);
+
+      const cookie = cookieFromSetHeader(res);
+      const me = await authApp.request('/me', { headers: { cookie } });
+      expect(me.status).toBe(200);
+    });
+
+    it('a Bearer header takes precedence over a cookie when both are present', async () => {
+      const a = await registerUser('a@example.com', 'pw');
+      const b = await registerUser('b@example.com', 'pw');
+      const bCookieRes = await authApp.request('/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'b@example.com', password: 'pw' }),
+      });
+      const bCookie = cookieFromSetHeader(bCookieRes);
+
+      const res = await authApp.request('/me', {
+        headers: { authorization: `Bearer ${a.token}`, cookie: bCookie },
+      });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { data: { email: string } }).data.email).toBe('a@example.com');
+    });
+
+    it('logout works from the cookie alone and clears it', async () => {
+      await registerUser('logout-cookie@example.com', 'pw');
+      const res = await authApp.request('/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'logout-cookie@example.com', password: 'pw' }),
+      });
+      const cookie = cookieFromSetHeader(res);
+
+      const logout = await authApp.request('/logout', { method: 'POST', headers: { cookie } });
+      expect(logout.status).toBe(200);
+      const clearHeader = logout.headers.get('set-cookie')!;
+      expect(clearHeader).toMatch(/^archet_session=;|Max-Age=0/i);
+
+      const after = await authApp.request('/me', { headers: { cookie } });
+      expect(after.status).toBe(401);
+    });
+  });
+
   it('requirePermission wired into Role.operations: no token -> 401, wrong permission -> 403, granted permission -> 201', async () => {
     const { token, user } = await registerUser('admin@example.com', 'pw');
 
@@ -195,5 +294,50 @@ describeIfDb('auth system (against a live Postgres)', () => {
     });
     expect(allowed.status).toBe(201);
     expect(((await allowed.json()) as { data: { name: string } }).data.name).toBe('editor');
+  });
+
+  describe('admin metadata API (src/admin/router.ts)', () => {
+    it('GET /api/models requires auth', async () => {
+      const res = await adminApp.request('/api/models');
+      expect(res.status).toBe(401);
+    });
+
+    it('lists non-hidden models with admin label/displayField, excludes the hidden Session model', async () => {
+      const { token } = await registerUser('models@example.com', 'pw');
+      const res = await adminApp.request('/api/models', { headers: { authorization: `Bearer ${token}` } });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: { name: string; label: string; displayField: string }[] };
+
+      const names = body.data.map((m) => m.name);
+      expect(names).toContain('widgets');
+      expect(names).toContain('users');
+      expect(names).not.toContain('sessions');
+
+      const widgets = body.data.find((m) => m.name === 'widgets')!;
+      expect(widgets.label).toBe('Widgets');
+      expect(widgets.displayField).toBe('name');
+
+      const users = body.data.find((m) => m.name === 'users')!;
+      expect(users.displayField).toBe('id'); // no admin.displayField declared -> defaults to 'id'
+    });
+
+    it("strips operations/zod-schema and exposes passwordHash's writeAs", async () => {
+      const { token } = await registerUser('meta@example.com', 'pw');
+      const res = await adminApp.request('/api/models/users', { headers: { authorization: `Bearer ${token}` } });
+      const body = (await res.json()) as { data: { fields: { key: string; sensitive: boolean; writeAs?: string }[] } };
+
+      const passwordHash = body.data.fields.find((f) => f.key === 'passwordHash')!;
+      expect(passwordHash.sensitive).toBe(true);
+      expect(passwordHash.writeAs).toBe('password');
+      expect(JSON.stringify(body.data)).not.toMatch(/operations/);
+    });
+
+    it('GET /api/models/:name 404s for a hidden model, matching an unknown model', async () => {
+      const { token } = await registerUser('hidden@example.com', 'pw');
+      const hidden = await adminApp.request('/api/models/sessions', { headers: { authorization: `Bearer ${token}` } });
+      expect(hidden.status).toBe(404);
+      const unknown = await adminApp.request('/api/models/nope', { headers: { authorization: `Bearer ${token}` } });
+      expect(unknown.status).toBe(404);
+    });
   });
 });

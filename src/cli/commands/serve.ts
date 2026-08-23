@@ -31,7 +31,7 @@ export async function runServe(cwd: string): Promise<ServerType> {
   const db = drizzle(client);
 
   const app = new Hono();
-  app.route('/admin', createAdminRouter(generatedDir));
+  app.route('/admin', createAdminRouter(generatedDir, registry, db));
   // more specific prefix first: `/api/auth/*` must win over the generic `/api/:model` pattern.
   app.route('/api/auth', createAuthRouter(db));
   app.route('/api', createApiRouter(registry, db));

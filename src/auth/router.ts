@@ -1,4 +1,5 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
+import { setCookie, deleteCookie } from 'hono/cookie';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
@@ -8,9 +9,10 @@ import { toErrorResponse } from '../router/errors.js';
 import { readJsonBody } from '../router/create-router.js';
 import { User, registerPipeline } from './models/index.js';
 import { resolveSessionUser } from './pipeline.js';
-import { deleteSessionByToken, findUserByEmail, insertSession, type UserRow } from './lookup.js';
+import { deleteSessionByToken, findUserByEmail, insertSession, listPermissionsForRole, type UserRow } from './lookup.js';
 import { verifyPassword } from './password.js';
 import { generateToken, sessionExpiry } from './token.js';
+import { resolveSessionToken, SESSION_COOKIE_NAME } from './cookie.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
@@ -29,15 +31,31 @@ async function issueSession(db: AnyDb, userId: string) {
   return session.token;
 }
 
-function bearerToken(request: Request): string | null {
-  const header = request.headers.get('authorization');
-  if (!header?.startsWith('Bearer ')) return null;
-  const token = header.slice('Bearer '.length).trim();
-  return token.length > 0 ? token : null;
+/** Mirrors the token onto an `HttpOnly` cookie so the admin SPA (no manual header injection)
+ * and non-browser API clients (the `Authorization` header, still returned in the body) both
+ * work. `Secure` is conditional on the request's own protocol — hardcoding it on would break
+ * plain-http `archet dev`. */
+function setSessionCookie(c: Context, token: string): void {
+  setCookie(c, SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: new URL(c.req.url).protocol === 'https:',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60, // matches SESSION_TTL_MS in token.ts
+  });
+}
+
+function clearSessionCookie(c: Context): void {
+  deleteCookie(c, SESSION_COOKIE_NAME, { path: '/' });
 }
 
 function redactUser(user: UserRow): Record<string, unknown> {
   return redactSensitiveFields(User, user as unknown as Record<string, unknown>);
+}
+
+async function userWithPermissions(db: AnyDb, user: UserRow): Promise<Record<string, unknown>> {
+  const permissions = typeof user.roleId === 'string' ? await listPermissionsForRole(db, user.roleId) : [];
+  return { ...redactUser(user), permissions };
 }
 
 /** `/api/auth/*` — register/login/logout/me. Mount before the generic `/api/:model` router
@@ -59,6 +77,7 @@ export function createAuthRouter(db: AnyDb): Hono {
     const doc = result.doc!;
 
     const token = await issueSession(db, doc.id as string);
+    setSessionCookie(c, token);
     return c.json({ data: { user: redactSensitiveFields(User, doc), token } }, 201);
   });
 
@@ -74,19 +93,23 @@ export function createAuthRouter(db: AnyDb): Hono {
     }
 
     const token = await issueSession(db, user.id);
+    setSessionCookie(c, token);
     return c.json({ data: { user: redactUser(user), token } });
   });
 
   app.post('/logout', async (c) => {
-    const token = bearerToken(c.req.raw);
-    if (!token) throw new PipelineError({ code: 'UNAUTHENTICATED', status: 401, message: 'missing bearer token' });
+    const token = resolveSessionToken(c.req.raw);
+    if (!token) {
+      throw new PipelineError({ code: 'UNAUTHENTICATED', status: 401, message: 'missing bearer token or session cookie' });
+    }
     await deleteSessionByToken(db, token);
+    clearSessionCookie(c);
     return c.json({ data: null });
   });
 
   app.get('/me', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
-    return c.json({ data: redactUser(user) });
+    return c.json({ data: await userWithPermissions(db, user) });
   });
 
   return app;

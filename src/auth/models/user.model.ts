@@ -4,7 +4,7 @@ import { hashPassword, requireAuth, requirePermission } from '../pipeline.js';
 export const User = defineModel('users', {
   fields: {
     email: field.string({ required: true, unique: true, indexed: true, maxLength: 320 }),
-    passwordHash: field.string({ required: true, sensitive: true }),
+    passwordHash: field.string({ required: true, sensitive: true, writeAs: 'password' }),
     roleId: field.reference('roles', { required: false, indexed: true }),
     active: field.boolean({ default: true }),
   },

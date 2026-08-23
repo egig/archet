@@ -2,15 +2,9 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { PipelineError, type PipelineFn } from '../core/pipeline.js';
 import { hashPassword as hashPasswordValue } from './password.js';
 import { findSessionByToken, findUserById, listPermissionsForRole, type UserRow } from './lookup.js';
+import { resolveSessionToken } from './cookie.js';
 
 type AnyDb = PgDatabase<any, any, any>;
-
-function bearerToken(request: Request | undefined): string | null {
-  const header = request?.headers.get('authorization');
-  if (!header?.startsWith('Bearer ')) return null;
-  const token = header.slice('Bearer '.length).trim();
-  return token.length > 0 ? token : null;
-}
 
 /** If `ctx.input.password` (plaintext) is present, replaces it with the model's real
  * `passwordHash` column before `validate` runs — a no-op when there's nothing to hash (e.g. a
@@ -25,8 +19,8 @@ export const hashPassword: PipelineFn = async (ctx) => {
  * pipeline fn and the plain Hono handlers in `src/auth/router.ts` (e.g. `GET /me`) so both paths
  * apply the exact same session/expiry/active checks. Throws 401 UNAUTHENTICATED otherwise. */
 export async function resolveSessionUser(db: AnyDb, request: Request | undefined): Promise<UserRow> {
-  const token = bearerToken(request);
-  if (!token) throw new PipelineError({ code: 'UNAUTHENTICATED', status: 401, message: 'missing bearer token' });
+  const token = resolveSessionToken(request);
+  if (!token) throw new PipelineError({ code: 'UNAUTHENTICATED', status: 401, message: 'missing bearer token or session cookie' });
 
   const session = await findSessionByToken(db, token);
   if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {

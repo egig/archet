@@ -7,17 +7,30 @@ export interface OperationsConfig {
   remove: PipelineFn;
 }
 
+export interface AdminModelOptions {
+  /** excluded from the admin sidebar and the `/admin/api/models` metadata endpoint entirely —
+   * e.g. the built-in `Session` model, which is managed only through `/api/auth/*`. */
+  hidden?: boolean;
+  /** sidebar/heading text; defaults to a capitalized `name` when omitted. */
+  label?: string;
+  /** field key shown for a record in reference-field dropdowns and list-view titles; defaults
+   * to 'id' when omitted rather than guessed, since a wrong guess is worse than an honest one. */
+  displayField?: string;
+}
+
 export interface ModelDefinition {
   /** also the table name and the REST route segment (§5 — no auto-pluralization) */
   name: string;
   tableName: string;
   fields: Record<string, FieldDefinition>;
   operations: OperationsConfig;
+  admin?: AdminModelOptions;
 }
 
 export interface DefineModelConfig {
   fields: Record<string, FieldDefinition>;
   operations?: Partial<OperationsConfig>;
+  admin?: AdminModelOptions;
 }
 
 function isReferenceField(f: FieldDefinition): f is ReferenceFieldDefinition {
@@ -42,5 +55,5 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
     remove: config.operations?.remove ?? pipe(persist.remove),
   };
 
-  return { name, tableName: name, fields: config.fields, operations };
+  return { name, tableName: name, fields: config.fields, operations, admin: config.admin };
 }

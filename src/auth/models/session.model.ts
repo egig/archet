@@ -17,4 +17,5 @@ export const Session = defineModel('sessions', {
     update: pipe(requireAuth, requirePermission('sessions', 'update'), validate, persist),
     remove: pipe(requireAuth, requirePermission('sessions', 'remove'), persist.remove),
   },
+  admin: { hidden: true },
 });

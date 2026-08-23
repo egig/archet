@@ -7,6 +7,11 @@ export interface FieldCommonOptions<T = unknown> {
   indexed?: boolean;
   /** stored, but stripped from every HTTP response — e.g. a password hash. */
   sensitive?: boolean;
+  /** this field is written under a different, undeclared input key — e.g. `passwordHash`
+   * declares `writeAs: 'password'` because a pipeline fn (`hashPassword`) synthesizes the real
+   * column from a plaintext `password` key that never appears in `fields`. Read by admin
+   * metadata (src/admin/serialize-model.ts) so a generated form knows which key to submit under. */
+  writeAs?: string;
 }
 
 interface BaseFieldDefinition {
@@ -15,6 +20,7 @@ interface BaseFieldDefinition {
   unique: boolean;
   indexed: boolean;
   sensitive: boolean;
+  writeAs?: string;
 }
 
 export interface StringFieldDefinition extends BaseFieldDefinition {
@@ -86,6 +92,7 @@ function base(opts: FieldCommonOptions): BaseFieldDefinition {
     unique: opts.unique ?? false,
     indexed: opts.indexed ?? false,
     sensitive: opts.sensitive ?? false,
+    writeAs: opts.writeAs,
   };
 }
 
