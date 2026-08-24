@@ -34,6 +34,10 @@ export default defineConfig({
           { text: 'Deploying', link: '/guide/deploy' },
         ],
       },
+      {
+        text: 'Project',
+        items: [{ text: 'Changelog', link: '/guide/changelog' }],
+      },
     ],
     socialLinks: [{ icon: 'github', link: 'https://github.com/egig/ratchet' }],
     search: { provider: 'local' },
