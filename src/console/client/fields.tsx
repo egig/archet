@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { ConsoleFieldMeta } from '../serialize-model.js';
 import { listRows, uploadFile, type UploadedFile } from './api.js';
 import { useModels } from './models.js';
+import { useFieldRenderers } from './field-renderers.js';
 
 /** What a `file` field's form value looks like — either an existing record's read shape
  * (`{ url, filename, mimeType, size }`, from `deriveFileFields`) or a fresh upload's response
@@ -61,9 +62,11 @@ export interface FieldInputProps {
   modelName?: string;
 }
 
-export function FieldInput({ field, inputKey, value, onChange, error, mode, modelName }: FieldInputProps) {
+export function FieldInput(props: FieldInputProps) {
+  const { field, inputKey, value, onChange, error, mode, modelName } = props;
   const referenceOptions = useReferenceOptions(field.kind === 'reference' ? field.targetModel : undefined);
   const { models: modelRefOptions } = useModels();
+  const fieldRenderers = useFieldRenderers();
   const required = field.writeAs ? mode === 'create' && field.required : field.required;
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -75,6 +78,9 @@ export function FieldInput({ field, inputKey, value, onChange, error, mode, mode
       {errorEl}
     </div>
   );
+
+  const customRenderer = field.customType ? fieldRenderers[field.customType] : undefined;
+  if (customRenderer) return customRenderer(props);
 
   switch (field.kind) {
     case 'text':

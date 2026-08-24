@@ -22,10 +22,15 @@ export type { FileStorageAdapter, StoredFile } from './storage.js';
 export { defineModel } from './model.js';
 export type { ModelDefinition, OperationsConfig, DefineModelConfig, ConsoleModelOptions } from './model.js';
 
+export { defineDomainSettings } from './domain.js';
+export type { DomainSettingsDefinition, DefineDomainSettingsConfig } from './domain.js';
+
 export { pipe, validate, persist, PipelineError } from './pipeline.js';
 export type { OperationContext, Operation, PipelineFn, PipelineErrorOptions } from './pipeline.js';
 
-export { buildCreateSchema, buildUpdateSchema } from './validation.js';
+export { buildCreateSchema, buildUpdateSchema, buildDomainSettingsSchema } from './validation.js';
+
+export { getDomainSettings, updateDomainSettings } from './domain-settings-persistence.js';
 
 export { generateId } from './id.js';
 

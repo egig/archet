@@ -25,6 +25,11 @@ interface BaseFieldDefinition {
   sensitive: boolean;
   writeAs?: string;
   displayText?: string;
+  /** set by `field.custom()` — a name the console client's `fieldRenderers` registry (see
+   * `console/client/field-renderers.tsx`) can key a custom form editor off of. Storage and
+   * validation are untouched: the field keeps its wrapped base kind's column type and Zod schema,
+   * `customType` is metadata only, read by `console/serialize-model.ts`. */
+  customType?: string;
 }
 
 export interface StringFieldDefinition extends BaseFieldDefinition {
@@ -201,5 +206,14 @@ export const field = {
       preview: opts.preview,
       maxSize: opts.maxSize,
     };
+  },
+
+  /** Tags an existing field definition with a `name` the console client can key a custom form
+   * editor off of (see `console/client/field-renderers.tsx`), without introducing a new storage
+   * kind — `base`'s Postgres column and Zod validation apply unchanged, e.g.
+   * `field.custom('html', field.text())` stores and validates exactly like `field.text()`, it
+   * just renders differently in the console. */
+  custom<F extends FieldDefinition>(name: string, base: F): F {
+    return { ...base, customType: name };
   },
 };

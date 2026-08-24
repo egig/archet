@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tsImport } from 'tsx/esm/api';
 import type { ModelDefinition } from '../core/model.js';
+import { folderDomainOf } from './domain-path.js';
 
 export interface ScannedModel {
   filePath: string;
@@ -11,6 +12,10 @@ export interface ScannedModel {
   /** true for the framework's own User/Role/Permission/Session models (src/auth/builtins.ts) —
    * codegen imports these from the `@egig/ratchet/auth` package specifier rather than a relative path. */
   builtin?: boolean;
+  /** this model's Domain (ADR 0001), inferred from the top-level `modelsDir` subdirectory its file
+   * lives in; undefined for a model declared directly under `modelsDir`. Builtins set this
+   * explicitly (see builtins.ts) since they aren't reachable by this scan. */
+  domain?: string;
 }
 
 function isModelDefinition(value: unknown): value is ModelDefinition {
@@ -75,7 +80,7 @@ export async function scanModels(modelsDir: string): Promise<ScannedModel[]> {
     const mod = (await tsImport(moduleUrl, import.meta.url)) as Record<string, unknown>;
     for (const [exportName, value] of Object.entries(mod)) {
       if (isModelDefinition(value)) {
-        scanned.push({ filePath, exportName, model: value });
+        scanned.push({ filePath, exportName, model: value, domain: folderDomainOf(modelsDir, path.dirname(filePath)) });
       }
     }
   }

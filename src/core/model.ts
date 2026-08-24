@@ -17,6 +17,11 @@ export interface ConsoleModelOptions {
    * omitted, defaults to the first `string`-kind field declared on the model (e.g. `name` or
    * `title`), or 'id' if the model has no string field. */
   displayField?: string;
+  /** the Domain (see CONTEXT.md) this model belongs to — groups it under a labeled section in the
+   * console sidebar, alongside every other model in the same Domain. Set by codegen from the
+   * model's folder location (`models/auth/*.model.ts` -> `'auth'`, ADR 0001), not meant to be
+   * hand-authored here. */
+  domain?: string;
 }
 
 export interface ModelDefinition {

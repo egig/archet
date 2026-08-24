@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { tsImport } from 'tsx/esm/api';
 import { createApiRouter } from '../../router/create-router.js';
-import { buildRegistryMap } from '../../router/registry-map.js';
+import { buildRegistryMap, buildDomainSettingsRegistryMap } from '../../router/registry-map.js';
 import { createAuthRouter } from '../../auth/router.js';
 import { createConsoleRouter } from '../../console/router.js';
 import { createNodeFsAssetSource } from '../../console/node-assets.js';
@@ -30,6 +30,13 @@ export async function runServe(cwd: string): Promise<ServerType> {
   >;
   const registry = buildRegistryMap(registryModule);
 
+  const domainsFile = path.join(generatedDir, 'domains.ts');
+  const domainsModule = (await tsImport(pathToFileURL(domainsFile).href, import.meta.url)) as Record<
+    string,
+    unknown
+  >;
+  const domainSettingsRegistry = buildDomainSettingsRegistryMap(domainsModule);
+
   const client = postgres(config.db.connectionString);
   const db = drizzle(client);
 
@@ -45,7 +52,10 @@ export async function runServe(cwd: string): Promise<ServerType> {
   // be '/' (root mount), where its own catch-all would otherwise swallow every path.
   app.route('/api/auth', createAuthRouter(db));
   app.route('/api', createApiRouter(registry, db, storage));
-  app.route(dirs.consolePath, createConsoleRouter(createNodeFsAssetSource(generatedDir), registry, db, dirs.consolePath));
+  app.route(
+    dirs.consolePath,
+    createConsoleRouter(createNodeFsAssetSource(generatedDir), registry, db, dirs.consolePath, domainSettingsRegistry),
+  );
 
   const port = Number(process.env.PORT ?? 3000);
   return serveNode({ fetch: app.fetch, port }, (info) => {

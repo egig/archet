@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from 'react-router';
 import { useAuth } from './auth.js';
 import { useModels } from './models.js';
+import { useDomains } from './domains.js';
+import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { ConsoleBrand, ConsolePage } from './ConsoleApp.js';
 
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
@@ -11,9 +13,34 @@ export interface LayoutProps {
   pages?: ConsolePage[];
 }
 
+function humanizeDomain(domain: string): string {
+  return domain.length === 0 ? domain : domain.charAt(0).toUpperCase() + domain.slice(1);
+}
+
+/** Splits the sidebar's model list into Domain-grouped sections (in the order each Domain's
+ * models first appear) plus a flat tail of models with no Domain — mirrors `ConsoleModelMeta`'s
+ * `domain` field (see `serialize-model.ts`), which is only set once a model's file lives under a
+ * `modelsDir` subdirectory (ADR 0001). */
+function groupByDomain(models: ConsoleModelMeta[]): { domain: string; models: ConsoleModelMeta[] }[] {
+  const order: string[] = [];
+  const byDomain = new Map<string, ConsoleModelMeta[]>();
+  for (const model of models) {
+    if (!model.domain) continue;
+    if (!byDomain.has(model.domain)) {
+      order.push(model.domain);
+      byDomain.set(model.domain, []);
+    }
+    byDomain.get(model.domain)!.push(model);
+  }
+  return order.map((domain) => ({ domain, models: byDomain.get(domain)! }));
+}
+
 export function Layout({ brand, pages = [] }: LayoutProps) {
   const { user, logout } = useAuth();
   const { models, loading, error } = useModels();
+  const { getDomain } = useDomains();
+  const grouped = groupByDomain(models);
+  const ungrouped = models.filter((model) => !model.domain);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -38,7 +65,27 @@ export function Layout({ brand, pages = [] }: LayoutProps) {
           )}
           {loading && <p className="px-4 py-2 text-xs text-gray-400">Loading models…</p>}
           {error && <p className="px-4 py-2 text-xs text-red-600">{error}</p>}
-          {models.map((model) => (
+          {grouped.map(({ domain, models: domainModels }) => {
+            const domainMeta = getDomain(domain);
+            return (
+              <div key={domain} className="mb-2 border-b border-gray-200 pb-2">
+                <p className="px-4 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  {domainMeta?.label ?? humanizeDomain(domain)}
+                </p>
+                {domainModels.map((model) => (
+                  <NavLink key={model.name} to={`/${model.name}`} className={navLinkClassName}>
+                    {model.label}
+                  </NavLink>
+                ))}
+                {domainMeta && (
+                  <NavLink to={`/domains/${domain}/settings`} className={navLinkClassName}>
+                    Settings
+                  </NavLink>
+                )}
+              </div>
+            );
+          })}
+          {ungrouped.map((model) => (
             <NavLink key={model.name} to={`/${model.name}`} className={navLinkClassName}>
               {model.label}
             </NavLink>

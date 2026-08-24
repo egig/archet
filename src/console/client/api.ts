@@ -1,4 +1,5 @@
 import type { ConsoleModelMeta } from '../serialize-model.js';
+import type { ConsoleDomainMeta } from '../serialize-domain.js';
 
 // '/' (root mount) needs an empty prefix, not a literal '/', so `${MOUNT_PREFIX}/meta/models`
 // doesn't come out as '//meta/models'.
@@ -78,6 +79,21 @@ export function me(): Promise<AuthUser> {
 
 export function listModels(): Promise<ConsoleModelMeta[]> {
   return request(`${MOUNT_PREFIX}/meta/models`);
+}
+
+export function listDomains(): Promise<ConsoleDomainMeta[]> {
+  return request(`${MOUNT_PREFIX}/meta/domains`);
+}
+
+export function getDomainSettings(domain: string): Promise<Record<string, unknown>> {
+  return request(`${MOUNT_PREFIX}/meta/domains/${encodeURIComponent(domain)}/settings`);
+}
+
+export function updateDomainSettings(domain: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return request(`${MOUNT_PREFIX}/meta/domains/${encodeURIComponent(domain)}/settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export interface OffsetPage {

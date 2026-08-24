@@ -133,4 +133,4 @@ interface ConsoleModelOptions {
 }
 ```
 
-See [Console](/guide/console) for how these are consumed.
+See [Console](/guide/console) for how these are consumed — including how a model's folder location under `modelsDir` groups it into a Domain in the console sidebar.

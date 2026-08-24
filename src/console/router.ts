@@ -1,10 +1,14 @@
 import { Hono, type Context } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from '../core/model.js';
+import type { DomainSettingsDefinition } from '../core/domain.js';
 import { PipelineError } from '../core/pipeline.js';
+import { getDomainSettings, updateDomainSettings } from '../core/domain-settings-persistence.js';
 import { resolveSessionUser } from '../auth/pipeline.js';
 import { toErrorResponse } from '../router/errors.js';
+import { readJsonBody } from '../router/create-router.js';
 import { serializeModelMeta } from './serialize-model.js';
+import { serializeDomainSettingsMeta } from './serialize-domain.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
@@ -81,12 +85,17 @@ function assetPathFrom(c: Context, mountPath: string): string {
  *
  * `mountPath` must match wherever the caller actually mounts the returned router — it's only used
  * to compute absolute asset URLs and strip the matched prefix back off `c.req.path`, since Hono's
- * `.route()` doesn't rewrite `c.req.path` itself. */
+ * `.route()` doesn't rewrite `c.req.path` itself.
+ *
+ * `domainSettingsRegistry` (domain -> DomainSettingsDefinition, default `{}`) backs the
+ * `/meta/domains*` routes below the same way `registry` backs `/meta/models*` — optional, and
+ * defaulted, so an existing caller that hasn't adopted Domain Settings keeps compiling unchanged. */
 export function createConsoleRouter(
   assetSource: ConsoleAssetSource,
   registry: Record<string, ModelDefinition>,
   db: AnyDb,
   mountPath: string,
+  domainSettingsRegistry: Record<string, DomainSettingsDefinition> = {},
 ): Hono {
   const app = new Hono();
 
@@ -108,6 +117,33 @@ export function createConsoleRouter(
     const model = registry[c.req.param('name')];
     if (!model || model.console?.hidden) throw new PipelineError({ code: 'MODEL_NOT_FOUND', status: 404 });
     return c.json({ data: serializeModelMeta(model) });
+  });
+
+  // Every Domain with a declared `defineDomainSettings()` — not every Domain a model happens to
+  // group under (a Domain that only groups models, with no settings of its own, has nothing to
+  // list here; the sidebar's per-Domain grouping reads `ConsoleModelMeta.domain` instead, see
+  // `console/client/Layout.tsx`).
+  app.get('/meta/domains', async (c) => {
+    await resolveSessionUser(db, c.req.raw);
+    const domains = Object.values(domainSettingsRegistry).map(serializeDomainSettingsMeta);
+    return c.json({ data: domains });
+  });
+
+  app.get('/meta/domains/:name/settings', async (c) => {
+    await resolveSessionUser(db, c.req.raw);
+    const def = domainSettingsRegistry[c.req.param('name')];
+    if (!def) throw new PipelineError({ code: 'DOMAIN_NOT_FOUND', status: 404 });
+    const values = await getDomainSettings(db, def);
+    return c.json({ data: values });
+  });
+
+  app.patch('/meta/domains/:name/settings', async (c) => {
+    await resolveSessionUser(db, c.req.raw);
+    const def = domainSettingsRegistry[c.req.param('name')];
+    if (!def) throw new PipelineError({ code: 'DOMAIN_NOT_FOUND', status: 404 });
+    const input = await readJsonBody(c);
+    const values = await updateDomainSettings(db, def, input);
+    return c.json({ data: values });
   });
 
   app.get('/assets/*', async (c) => {
