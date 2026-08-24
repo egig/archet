@@ -119,6 +119,84 @@ describeIfDb('auth system (against a live Postgres)', () => {
     return { res, ...body.data };
   }
 
+  describe('root admin onboarding (src/auth/router.ts POST/GET /setup)', () => {
+    it('GET /setup reports required until a root admin is created, then never again', async () => {
+      const before = await authApp.request('/setup');
+      expect(((await before.json()) as { data: { required: boolean } }).data.required).toBe(true);
+
+      const create = await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'root@example.com', password: 'hunter2' }),
+      });
+      expect(create.status).toBe(201);
+
+      const after = await authApp.request('/setup');
+      expect(((await after.json()) as { data: { required: boolean } }).data.required).toBe(false);
+    });
+
+    it('the created user can immediately act on any resource (roles:create) with no prior grant', async () => {
+      const setup = await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'root2@example.com', password: 'hunter2' }),
+      });
+      const { token } = ((await setup.json()) as { data: { token: string } }).data;
+
+      const res = await apiApp.request('/roles', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: 'editor' }),
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it('a second setup attempt 409s once a root admin exists', async () => {
+      await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'root3@example.com', password: 'hunter2' }),
+      });
+
+      const second = await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'someone-else@example.com', password: 'hunter2' }),
+      });
+      expect(second.status).toBe(409);
+      expect(((await second.json()) as { error: { code: string } }).error.code).toBe('SETUP_ALREADY_COMPLETE');
+    });
+
+    it('deactivating the root admin does not reopen setup', async () => {
+      const setup = await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'root4@example.com', password: 'hunter2' }),
+      });
+      const { user } = ((await setup.json()) as { data: { user: { id: string } } }).data;
+
+      await db.execute(sql`UPDATE users SET active = false WHERE id = ${user.id}`);
+
+      const status = await authApp.request('/setup');
+      expect(((await status.json()) as { data: { required: boolean } }).data.required).toBe(false);
+    });
+
+    it('reuses the same Root role + *:* permission on a fresh instance instead of duplicating it', async () => {
+      await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'root5@example.com', password: 'hunter2' }),
+      });
+
+      const roles = (await db.execute(sql`SELECT id FROM roles WHERE name = 'Root'`)) as unknown as unknown[];
+      expect(roles.length).toBe(1);
+      const permissions = (await db.execute(
+        sql`SELECT id FROM permissions WHERE resource = '*' AND action = '*'`,
+      )) as unknown as unknown[];
+      expect(permissions.length).toBe(1);
+    });
+  });
+
   it('register creates a user + session and never returns passwordHash', async () => {
     const { res, user, token } = await registerUser('ada@example.com', 'hunter2');
     expect(res.status).toBe(201);

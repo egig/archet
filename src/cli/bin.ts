@@ -8,6 +8,14 @@ import { runDev } from './commands/dev.js';
 import { runServe } from './commands/serve.js';
 import { runBuild } from './commands/build.js';
 
+// Every command below resolves paths off `process.cwd()` — load `.env` from that same directory
+// (e.g. `DATABASE_URL`) before any of them run. Silently a no-op for projects with no `.env`.
+try {
+  process.loadEnvFile();
+} catch (err) {
+  if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+}
+
 const program = new Command();
 program.name('ratchet').description('Model -> Postgres schema, codegen, and composable pipelines.');
 

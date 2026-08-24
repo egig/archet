@@ -3,6 +3,7 @@ import { AuthProvider } from './auth.js';
 import { RequireAuth } from './RequireAuth.js';
 import { Layout } from './Layout.js';
 import { LoginPage } from './LoginPage.js';
+import { SetupPage } from './SetupPage.js';
 import { IndexRedirect } from './IndexRedirect.js';
 import { ModelListPage } from './ModelListPage.js';
 import { ModelFormPage } from './ModelFormPage.js';
@@ -12,6 +13,7 @@ export function AdminApp() {
     <BrowserRouter basename="/admin">
       <AuthProvider>
         <Routes>
+          <Route path="/setup" element={<SetupPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route element={<RequireAuth />}>
             <Route element={<Layout />}>

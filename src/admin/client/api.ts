@@ -52,6 +52,14 @@ export interface AuthUser {
   permissions: { resource: string; action: string }[];
 }
 
+export function setupStatus(): Promise<{ required: boolean }> {
+  return request('/api/auth/setup');
+}
+
+export function setup(email: string, password: string): Promise<{ user: AuthUser; token: string }> {
+  return request('/api/auth/setup', { method: 'POST', body: JSON.stringify({ email, password }) });
+}
+
 export function login(email: string, password: string): Promise<{ user: AuthUser; token: string }> {
   return request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 }

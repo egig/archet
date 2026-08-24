@@ -5,12 +5,21 @@ import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
 import { redactSensitiveFields } from '../core/serialize.js';
 import { generateId } from '../core/id.js';
+import { insertRow } from '../core/persistence.js';
 import { toErrorResponse } from '../router/errors.js';
 import { readJsonBody } from '../router/create-router.js';
-import { User, registerPipeline } from './models/index.js';
+import { User, Role, Permission, registerPipeline } from './models/index.js';
 import { resolveSessionUser } from './pipeline.js';
-import { deleteSessionByToken, findUserByEmail, insertSession, listPermissionsForRole, type UserRow } from './lookup.js';
-import { verifyPassword } from './password.js';
+import {
+  deleteSessionByToken,
+  findRoleByName,
+  findUserByEmail,
+  hasRootAdmin,
+  insertSession,
+  listPermissionsForRole,
+  type UserRow,
+} from './lookup.js';
+import { hashPassword as hashPasswordValue, verifyPassword } from './password.js';
 import { generateToken, sessionExpiry } from './token.js';
 import { resolveSessionToken, SESSION_COOKIE_NAME } from './cookie.js';
 
@@ -58,14 +67,50 @@ async function userWithPermissions(db: AnyDb, user: UserRow): Promise<Record<str
   return { ...redactUser(user), permissions };
 }
 
-/** `/api/auth/*` — register/login/logout/me. Mount before the generic `/api/:model` router
- * (src/router/create-router.ts) so this more specific prefix wins. */
+const ROOT_ROLE_NAME = 'Root';
+
+/** `/api/auth/*` — setup/register/login/logout/me. Mount before the generic `/api/:model`
+ * router (src/router/create-router.ts) so this more specific prefix wins. */
 export function createAuthRouter(db: AnyDb): Hono {
   const app = new Hono();
 
   app.onError((err, c) => {
     const { status, body } = toErrorResponse(err);
     return c.json(body, status as never);
+  });
+
+  app.get('/setup', async (c) => {
+    return c.json({ data: { required: !(await hasRootAdmin(db)) } });
+  });
+
+  /** One-time bootstrap: creates the first user with unrestricted (`*:*`) access, so a fresh
+   * instance has a way in without a DB console. Unauthenticated, but self-gating — re-checks
+   * `hasRootAdmin` inside the transaction so a concurrent double-submit can't create two. Becomes
+   * a permanent 409 once any user holds `*:*`, regardless of that user's `active` state (see
+   * `hasRootAdmin`'s doc comment). */
+  app.post('/setup', async (c) => {
+    const body = await readJsonBody(c);
+    const email = requireString(body, 'email');
+    const password = requireString(body, 'password');
+
+    const user = await db.transaction(async (tx) => {
+      const txDb = tx as AnyDb;
+      if (await hasRootAdmin(txDb)) {
+        throw new PipelineError({ code: 'SETUP_ALREADY_COMPLETE', status: 409, message: 'a root admin already exists' });
+      }
+
+      const role = (await findRoleByName(txDb, ROOT_ROLE_NAME)) ?? (await insertRow(txDb, Role, { name: ROOT_ROLE_NAME }));
+      const permissions = await listPermissionsForRole(txDb, role.id as string);
+      if (!permissions.some((p) => p.resource === '*' && p.action === '*')) {
+        await insertRow(txDb, Permission, { roleId: role.id, resource: '*', action: '*' });
+      }
+
+      return insertRow(txDb, User, { email, passwordHash: await hashPasswordValue(password), roleId: role.id });
+    });
+
+    const token = await issueSession(db, user.id as string);
+    setSessionCookie(c, token);
+    return c.json({ data: { user: redactSensitiveFields(User, user), token } }, 201);
   });
 
   app.post('/register', async (c) => {

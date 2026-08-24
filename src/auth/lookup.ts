@@ -84,3 +84,31 @@ export async function listPermissionsForRole(db: AnyDb, roleId: string): Promise
   );
   return rows.map((r) => rowToCamelCase(r) as unknown as PermissionRow);
 }
+
+export interface RoleRow {
+  id: string;
+  name: string;
+}
+
+export async function findRoleByName(db: AnyDb, name: string): Promise<RoleRow | null> {
+  const rows = await execRows(db, sql`SELECT id, name FROM roles WHERE name = ${name} AND deleted_at IS NULL LIMIT 1`);
+  return rows[0] ? (rowToCamelCase(rows[0]) as unknown as RoleRow) : null;
+}
+
+/**
+ * True once *any* user — active or not — holds a `*:*` permission through their role. Used to
+ * decide whether `/api/auth/setup` (root-admin onboarding) is still open. Deliberately ignores
+ * `active`: gating on it would let deactivating the sole root admin reopen unauthenticated root
+ * creation to anyone who hits the admin UI.
+ */
+export async function hasRootAdmin(db: AnyDb): Promise<boolean> {
+  const rows = await execRows(
+    db,
+    sql`SELECT 1
+        FROM users u
+        JOIN permissions p ON p.role_id = u.role_id AND p.deleted_at IS NULL
+        WHERE u.deleted_at IS NULL AND p.resource = '*' AND p.action = '*'
+        LIMIT 1`,
+  );
+  return rows.length > 0;
+}

@@ -3,26 +3,37 @@ import { Navigate, useNavigate } from 'react-router';
 import { ApiRequestError } from './api.js';
 import { useAuth } from './auth.js';
 
-export function LoginPage() {
-  const { user, loading, setupRequired, login } = useAuth();
+/** Shown instead of `/login` until `GET /api/auth/setup` reports a root admin already exists
+ * (see `useAuth().setupRequired`). Creates the one `*:*` user via `POST /api/auth/setup` and
+ * signs them in, same as a fresh login. */
+export function SetupPage() {
+  const { loading, setupRequired, completeSetup } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (!loading && setupRequired) return <Navigate to="/setup" replace />;
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && !setupRequired) return <Navigate to="/login" replace />;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await login(email, password);
+      await completeSetup(email, password);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiRequestError && err.code === 'INVALID_CREDENTIALS' ? 'Invalid email or password.' : 'Login failed.');
+      setError(
+        err instanceof ApiRequestError && err.code === 'SETUP_ALREADY_COMPLETE'
+          ? 'A root admin was already created — sign in instead.'
+          : 'Setup failed.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -31,7 +42,8 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="mb-6 text-lg font-semibold text-gray-900">Ratchet admin</h1>
+        <h1 className="mb-1 text-lg font-semibold text-gray-900">Create the root admin</h1>
+        <p className="mb-6 text-sm text-gray-500">This is a one-time setup step — this account gets full access.</p>
 
         <label className="mb-3 block text-sm">
           <span className="mb-1 block text-gray-700">Email</span>
@@ -45,13 +57,24 @@ export function LoginPage() {
           />
         </label>
 
-        <label className="mb-4 block text-sm">
+        <label className="mb-3 block text-sm">
           <span className="mb-1 block text-gray-700">Password</span>
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          />
+        </label>
+
+        <label className="mb-4 block text-sm">
+          <span className="mb-1 block text-gray-700">Confirm password</span>
+          <input
+            type="password"
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
           />
         </label>
@@ -63,7 +86,7 @@ export function LoginPage() {
           disabled={submitting}
           className="w-full rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
-          {submitting ? 'Signing in…' : 'Sign in'}
+          {submitting ? 'Creating…' : 'Create root admin'}
         </button>
       </form>
     </div>
