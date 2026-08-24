@@ -20,9 +20,9 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { createApiRouter, buildRegistryMap } from 'ratchet/router';
-import { createAuthRouter } from 'ratchet/auth';
-import { createConsoleRouter, type ConsoleAsset, type ConsoleAssetSource, type ConsoleManifest } from 'ratchet/console';
+import { createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
+import { createAuthRouter } from '@egig/ratchet/auth';
+import { createConsoleRouter, type ConsoleAsset, type ConsoleAssetSource, type ConsoleManifest } from '@egig/ratchet/console';
 import * as registryModule from '../../.ratchet/registry.js';
 
 const CONSOLE_PATH = '/console';

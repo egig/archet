@@ -41,8 +41,8 @@ The `User` model never declares a plaintext `password` field. Instead its `passw
 `requireAuth` and `requirePermission(resource, action)` are ordinary [pipeline functions](/guide/pipelines) — compose them into any model's operations:
 
 ```ts
-import { pipe, validate, persist } from 'ratchet/core';
-import { requireAuth, requirePermission } from 'ratchet/auth';
+import { pipe, validate, persist } from '@egig/ratchet/core';
+import { requireAuth, requirePermission } from '@egig/ratchet/auth';
 
 export const Invoice = defineModel('invoices', {
   fields: { /* ... */ },

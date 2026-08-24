@@ -9,7 +9,7 @@ export interface ScannedModel {
   exportName: string;
   model: ModelDefinition;
   /** true for the framework's own User/Role/Permission/Session models (src/auth/builtins.ts) —
-   * codegen imports these from the `ratchet/auth` package specifier rather than a relative path. */
+   * codegen imports these from the `@egig/ratchet/auth` package specifier rather than a relative path. */
   builtin?: boolean;
 }
 

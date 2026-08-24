@@ -1,8 +1,15 @@
 {
-  "name": "ratchet",
+  "name": "@egig/ratchet",
   "version": "0.1.0",
-  "description": "-inspired application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.",
+  "description": "Model driven application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.",
+  "license": "MIT",
   "type": "module",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "ratchet": "./dist/cli/bin.js"
   },

@@ -30,8 +30,8 @@ Vercel Functions default to a Node.js runtime — the same postgres.js driver as
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
-import { createApiRouter, buildRegistryMap } from 'ratchet/router';
-import { createAuthRouter } from 'ratchet/auth';
+import { createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
+import { createAuthRouter } from '@egig/ratchet/auth';
 import * as registryModule from '../.ratchet/registry.js';
 
 const registry = buildRegistryMap(registryModule as Record<string, unknown>);

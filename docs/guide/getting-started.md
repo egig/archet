@@ -10,7 +10,7 @@ Ratchet turns a directory of TypeScript model files into a Postgres schema, a RE
 ## Scaffold a project
 
 ```sh
-npx ratchet init
+npx @egig/ratchet init
 ```
 
 This writes `package.json`, `tsconfig.json`, `ratchet.config.ts`, `models/example.model.ts`, `drizzle/migrations/`, and a `.gitignore` into the current directory. It never overwrites a file that's already there, so it's safe to re-run in a partially set-up directory.
@@ -18,7 +18,7 @@ This writes `package.json`, `tsconfig.json`, `ratchet.config.ts`, `models/exampl
 `ratchet.config.ts` points at your models and where generated output should go:
 
 ```ts
-import { defineConfig } from 'ratchet/core';
+import { defineConfig } from '@egig/ratchet/core';
 
 export default defineConfig({
   db: { connectionString: process.env.DATABASE_URL! },
@@ -40,7 +40,7 @@ export DATABASE_URL=postgres://user:pass@localhost:5432/mydb
 `models/example.model.ts` (written by `init`):
 
 ```ts
-import { defineModel, field } from 'ratchet/core';
+import { defineModel, field } from '@egig/ratchet/core';
 
 export const Example = defineModel('examples', {
   fields: {

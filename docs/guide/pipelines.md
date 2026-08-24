@@ -22,7 +22,7 @@ interface OperationContext {
 A pipeline function receives the context, does its work, and returns a (possibly new) context. To reject the operation, throw a `PipelineError`:
 
 ```ts
-import { PipelineError, type PipelineFn } from 'ratchet/core';
+import { PipelineError, type PipelineFn } from '@egig/ratchet/core';
 
 export const checkStock: PipelineFn = async (ctx) => {
   const available = await stockFor(ctx.db, ctx.input.customerId as string);
@@ -36,7 +36,7 @@ export const checkStock: PipelineFn = async (ctx) => {
 ## `pipe(...)`
 
 ```ts
-import { pipe, validate, persist } from 'ratchet/core';
+import { pipe, validate, persist } from '@egig/ratchet/core';
 
 pipe(validate, checkStock, applyDiscount, persist, notify);
 ```

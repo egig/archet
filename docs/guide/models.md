@@ -3,7 +3,7 @@
 A model is defined once, with `defineModel()`, and drives everything else: the Postgres table, the Zod validators, the REST routes, and the console.
 
 ```ts
-import { defineModel, field } from 'ratchet/core';
+import { defineModel, field } from '@egig/ratchet/core';
 
 export const Customer = defineModel('customers', {
   fields: {
@@ -87,7 +87,7 @@ Override any subset:
 
 ```ts
 import { z } from 'zod';
-import { defineModel, field, pipe, validate, persist } from 'ratchet/core';
+import { defineModel, field, pipe, validate, persist } from '@egig/ratchet/core';
 import { checkStock, applyDiscount, notify } from '../logic/invoice.js';
 
 export const Invoice = defineModel('invoices', {

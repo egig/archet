@@ -22,7 +22,7 @@ function packageJson(name: string): string {
         },
         dependencies: {
           '@hono/node-server': '^1.13.7',
-          ratchet: RATCHET_VERSION,
+          '@egig/ratchet': RATCHET_VERSION,
           'drizzle-orm': '^0.36.4',
           hono: '^4.6.14',
           postgres: '^3.4.5',
@@ -63,7 +63,7 @@ const TSCONFIG = `{
 }
 `;
 
-const RATCHET_CONFIG = `import { defineConfig } from 'ratchet/core';
+const RATCHET_CONFIG = `import { defineConfig } from '@egig/ratchet/core';
 
 export default defineConfig({
   db: { connectionString: process.env.DATABASE_URL! },
@@ -73,7 +73,7 @@ export default defineConfig({
 });
 `;
 
-const EXAMPLE_MODEL = `import { defineModel, field } from 'ratchet/core';
+const EXAMPLE_MODEL = `import { defineModel, field } from '@egig/ratchet/core';
 
 export const Example = defineModel('examples', {
   fields: {
@@ -150,7 +150,7 @@ export async function runInit(cwd: string): Promise<void> {
 
   console.log('');
   console.log('next steps:');
-  console.log('  1. npm install   (note: "ratchet" isn\'t published yet — `npm link` it from this framework\'s checkout, or replace the dependency with a local path, until it is)');
+  console.log('  1. npm install');
   console.log('  2. set DATABASE_URL');
   console.log('  3. npm run generate   (writes .ratchet/*)');
   console.log('  4. npm run migrate && npm run serve   (or `npm run dev` for local push-based iteration)');

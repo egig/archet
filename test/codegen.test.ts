@@ -78,14 +78,14 @@ describe('generate() against a self-contained model fixture', () => {
     expect(schemaSrc).not.toContain('gen_random_uuid');
   });
 
-  it('emits validators that import the framework via the bare `ratchet/core` specifier, not a filesystem path', async () => {
+  it('emits validators that import the framework via the bare `@egig/ratchet/core` specifier, not a filesystem path', async () => {
     await generate({ modelsDir, generatedDir });
     const validatorsSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'validators.ts'), 'utf8'),
     );
     // this file lives inside a *consuming* project's tree — only a bare specifier resolves
     // correctly there regardless of package-manager layout (see validators-gen.ts).
-    expect(validatorsSrc).toContain("from 'ratchet/core'");
+    expect(validatorsSrc).toContain("from '@egig/ratchet/core'");
     expect(validatorsSrc).toContain('buildCreateSchema(Invoice)');
     expect(validatorsSrc).toContain('buildUpdateSchema(Invoice)');
   });
@@ -99,7 +99,7 @@ describe('generate() against a self-contained model fixture', () => {
     expect(registrySrc).toContain('export { Invoice }');
   });
 
-  it('always includes the built-in User/Role/Permission/Session models, imported from `ratchet/auth`', async () => {
+  it('always includes the built-in User/Role/Permission/Session models, imported from `@egig/ratchet/auth`', async () => {
     await generate({ modelsDir, generatedDir });
     const registrySrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
@@ -108,7 +108,7 @@ describe('generate() against a self-contained model fixture', () => {
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
     );
     for (const name of ['User', 'Role', 'Permission', 'Session']) {
-      expect(registrySrc).toContain(`export { ${name} } from 'ratchet/auth';`);
+      expect(registrySrc).toContain(`export { ${name} } from '@egig/ratchet/auth';`);
     }
     expect(schemaSrc).toContain("pgTable('users'");
     expect(schemaSrc).toContain("pgTable('roles'");
