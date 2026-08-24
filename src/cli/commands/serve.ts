@@ -10,6 +10,7 @@ import { buildRegistryMap } from '../../router/registry-map.js';
 import { createAuthRouter } from '../../auth/router.js';
 import { createConsoleRouter } from '../../console/router.js';
 import { createNodeFsAssetSource } from '../../console/node-assets.js';
+import { createNodeFsStorageAdapter } from '../../core/storage-node.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
 
 /**
@@ -32,12 +33,18 @@ export async function runServe(cwd: string): Promise<ServerType> {
   const client = postgres(config.db.connectionString);
   const db = drizzle(client);
 
+  // default local storage for `file` fields — sibling to `<generatedDir>/console`, gitignored
+  // the same way (`generatedDir` itself is). A production deploy target (e.g. Cloudflare) builds
+  // its own adapter (R2, ...) and passes it to `createApiRouter` instead — see
+  // `example/deploy/cloudflare/worker.ts`.
+  const storage = createNodeFsStorageAdapter(path.join(generatedDir, 'storage'));
+
   const app = new Hono();
   // more specific prefix first: `/api/auth/*` must win over the generic `/api/:model` pattern,
   // and both must win over the console router — which is registered last since `consolePath` can
   // be '/' (root mount), where its own catch-all would otherwise swallow every path.
   app.route('/api/auth', createAuthRouter(db));
-  app.route('/api', createApiRouter(registry, db));
+  app.route('/api', createApiRouter(registry, db, storage));
   app.route(dirs.consolePath, createConsoleRouter(createNodeFsAssetSource(generatedDir), registry, db, dirs.consolePath));
 
   const port = Number(process.env.PORT ?? 3000);

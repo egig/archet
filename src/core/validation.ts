@@ -31,6 +31,16 @@ function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
       // model's static field definitions are built. The real check is
       // `requireValidPermissionTarget` (ratchet/auth), which runs per-request with `ctx.registry`.
       return z.string();
+    case 'file':
+      // the shape returned by the upload endpoint (see `router/create-router.ts`) and stored
+      // as-is in the jsonb column — accept/maxSize/mime-sniffing are enforced at upload time,
+      // not re-validated here.
+      return z.object({
+        key: z.string(),
+        filename: z.string(),
+        mimeType: z.string(),
+        size: z.number().int().nonnegative(),
+      });
   }
 }
 

@@ -31,6 +31,7 @@ All fields accept the common options below, plus any type-specific ones.
 | `field.enum(values, opts)` | `values` is a non-empty array of string literals |
 | `field.json(opts)` | `schema?: ZodTypeAny` — validates the JSON payload |
 | `field.reference(targetModel, opts)` | `targetModel: string` — see [Relations](#relations) |
+| `field.file(opts)` | `accept?: string`, `preview?: 'image'`, `maxSize?: number` — see [Files & images](#files-images) |
 
 ### Common options
 
@@ -51,6 +52,22 @@ interface FieldCommonOptions<T> {
 - **`sensitive`** marks a field as stored but stripped from every HTTP response — e.g. a password hash.
 - **`writeAs`** is for a field written under a different, undeclared input key. For example, a `passwordHash` column declares `writeAs: 'password'` because a pipeline function (`hashPassword`) synthesizes the real column from a plaintext `password` key that never appears in `fields`. The console form reads this to know which key to submit under.
 - **`displayText`** is the label shown for this field in console list-view column headers and form labels; when omitted it defaults to the field key humanized (e.g. `roleId` -> "Role Id").
+
+## Files & images
+
+```ts
+avatar: field.file({ preview: 'image' }),       // accept defaults to 'image/*'
+resume: field.file({ accept: 'application/pdf', maxSize: 5 * 1024 * 1024 }),
+```
+
+A `file` field stores a reference (`{ key, filename, mimeType, size }`, jsonb), not the bytes — the actual blob lives in whatever `FileStorageAdapter` the app passes to `createApiRouter(registry, db, storage)` (a Node filesystem adapter, `ratchet/storage/node`, is the default under `ratchet serve`; other backends — R2, S3, ... — are the app's own adapter, injected the same way a console asset source is, since a backend like R2 isn't resolvable from a plain config value). Uploading is two steps:
+
+1. `POST /api/:model/:field/upload` (multipart, form field `file`) stores the blob and returns the reference.
+2. That reference is sent as the field's own value on the normal `POST`/`PATCH /api/:model` call.
+
+`accept` (a comma-separated list of mime types/`type/*` wildcards) is checked against the upload's *sniffed* bytes, never the client-declared Content-Type. `preview: 'image'` turns on thumbnail rendering in the console and defaults `accept` to `'image/*'` when `accept` is omitted. A record's own API response never exposes the raw storage `key` — it's rewritten to a `url` pointing at `GET /api/:model/:id/:field`, which streams the blob back after the same lookup `GET /api/:model/:id` does (so a soft-deleted record's file 404s too). Replacing a field's value deletes the old blob from storage after the write commits; a soft-removed record's files are left alone, matching how a soft-deleted row keeps its other data.
+
+Only the `is` filter operator applies to a `file` field (`?filter=[["avatar","is",null]]` — has/doesn't have a file); there's no sort or equality, since the value is an object.
 
 ## Relations
 

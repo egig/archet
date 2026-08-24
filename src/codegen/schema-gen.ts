@@ -37,6 +37,7 @@ function columnExpr(key: string, f: FieldDefinition): string {
       expr = `varchar('${col}')`;
       break;
     case 'json':
+    case 'file':
       expr = `jsonb('${col}')`;
       break;
     case 'reference':

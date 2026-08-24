@@ -13,5 +13,11 @@
       "binding": "HYPERDRIVE",
       "id": "<your-hyperdrive-id>"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "<your-r2-bucket-name>"
+    }
   ]
 }

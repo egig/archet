@@ -90,6 +90,21 @@ export interface ActionRefFieldDefinition extends BaseFieldDefinition {
   allowWildcard: boolean;
 }
 
+/** Stores a reference to a blob held by a `FileStorageAdapter` (see `core/storage.ts`), not the
+ * bytes themselves — the column is `{ key, filename, mimeType, size }` (jsonb). `accept` is a
+ * comma-separated list of mime patterns (`'image/png'`, `'image/*'`) checked against the
+ * *sniffed* bytes of an upload, never the client-declared Content-Type — a mislabeled upload
+ * would otherwise bypass it. `preview: 'image'` is what turns on thumbnail rendering in the
+ * console (list + form) and — when `accept` is omitted — defaults `accept` to `'image/*'` so the
+ * common case is just `field.file({ preview: 'image' })`. `maxSize` (bytes) overrides
+ * `DEFAULT_MAX_FILE_SIZE` (core/storage.ts) for this field only. */
+export interface FileFieldDefinition extends BaseFieldDefinition {
+  kind: 'file';
+  accept?: string;
+  preview?: 'image';
+  maxSize?: number;
+}
+
 export type FieldDefinition =
   | StringFieldDefinition
   | TextFieldDefinition
@@ -101,7 +116,8 @@ export type FieldDefinition =
   | JsonFieldDefinition
   | ReferenceFieldDefinition
   | ModelRefFieldDefinition
-  | ActionRefFieldDefinition;
+  | ActionRefFieldDefinition
+  | FileFieldDefinition;
 
 function assertNoRequiredDefaultConflict(opts: FieldCommonOptions): void {
   if (opts.required && opts.default !== undefined) {
@@ -173,5 +189,17 @@ export const field = {
 
   actionRef(opts: { allowWildcard?: boolean } & FieldCommonOptions<string> = {}): ActionRefFieldDefinition {
     return { ...base(opts), kind: 'actionRef', allowWildcard: opts.allowWildcard ?? false };
+  },
+
+  file(
+    opts: { accept?: string; preview?: 'image'; maxSize?: number } & FieldCommonOptions = {},
+  ): FileFieldDefinition {
+    return {
+      ...base(opts),
+      kind: 'file',
+      accept: opts.accept ?? (opts.preview === 'image' ? 'image/*' : undefined),
+      preview: opts.preview,
+      maxSize: opts.maxSize,
+    };
   },
 };

@@ -4,7 +4,7 @@ import type { ReferenceFieldDefinition } from '../core/field.js';
 import type { ModelDefinition } from '../core/model.js';
 import { PipelineError } from '../core/pipeline.js';
 import { toSnakeCase } from '../core/naming.js';
-import { normalizeTimestamps, redactSensitiveFields } from '../core/serialize.js';
+import { deriveFileFields, normalizeTimestamps, redactSensitiveFields } from '../core/serialize.js';
 import { allColumnKeys } from './columns.js';
 import { encodeCursor, type FilterClause, type ParsedListQuery } from './query.js';
 
@@ -111,9 +111,11 @@ function nestRow(model: ModelDefinition, row: Record<string, unknown>, includes:
     // a dangling/optional reference with no matching row still joins to all-NULL columns.
     const relRow = nested[plan.relationName]!;
     out[plan.relationName] =
-      relRow.id === null ? null : redactSensitiveFields(plan.targetModel, normalizeTimestamps(plan.targetModel, relRow));
+      relRow.id === null
+        ? null
+        : deriveFileFields(plan.targetModel, redactSensitiveFields(plan.targetModel, normalizeTimestamps(plan.targetModel, relRow)));
   }
-  return redactSensitiveFields(model, normalizeTimestamps(model, out));
+  return deriveFileFields(model, redactSensitiveFields(model, normalizeTimestamps(model, out)));
 }
 
 export interface OffsetPage {

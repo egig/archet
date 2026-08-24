@@ -13,7 +13,11 @@ export type {
   ReferenceFieldDefinition,
   ModelRefFieldDefinition,
   ActionRefFieldDefinition,
+  FileFieldDefinition,
 } from './field.js';
+
+export { DEFAULT_MAX_FILE_SIZE, sniffMimeType, matchesAccept } from './storage.js';
+export type { FileStorageAdapter, StoredFile } from './storage.js';
 
 export { defineModel } from './model.js';
 export type { ModelDefinition, OperationsConfig, DefineModelConfig, ConsoleModelOptions } from './model.js';
@@ -25,7 +29,7 @@ export { buildCreateSchema, buildUpdateSchema } from './validation.js';
 
 export { generateId } from './id.js';
 
-export { normalizeTimestamps, redactSensitiveFields } from './serialize.js';
+export { normalizeTimestamps, redactSensitiveFields, deriveFileFields } from './serialize.js';
 
 export { defineConfig } from './config.js';
 export type { FrameworkConfig } from './config.js';

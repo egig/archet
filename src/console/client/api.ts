@@ -124,6 +124,34 @@ export function removeRow(model: string, id: string): Promise<Record<string, unk
   return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+export interface UploadedFile {
+  key: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+/** `POST /api/:model/:field/upload` (Q3's two-step upload) — the caller sends the returned
+ * `UploadedFile` as the field's own create/update value. Bypasses `request()`: a multipart body
+ * must not carry a manually-set `content-type` (the browser sets the boundary itself). */
+export async function uploadFile(model: string, field: string, file: File): Promise<UploadedFile> {
+  const body = new FormData();
+  body.append('file', file);
+  const res = await fetch(`/api/${encodeURIComponent(model)}/${encodeURIComponent(field)}/upload`, { method: 'POST', body });
+
+  let json: unknown = null;
+  try {
+    json = await res.json();
+  } catch {
+    // no/invalid JSON body — fall through, handled below per status
+  }
+  if (!res.ok) {
+    const errorBody = (json as Partial<ApiErrorBody> | null)?.error ? (json as ApiErrorBody) : { error: { code: 'UNKNOWN_ERROR' } };
+    throw new ApiRequestError(res.status, errorBody);
+  }
+  return (json as { data: UploadedFile }).data;
+}
+
 export function hasPermission(permissions: AuthUser['permissions'], resource: string, action: string): boolean {
   return permissions.some((p) => (p.resource === resource || p.resource === '*') && (p.action === action || p.action === '*'));
 }

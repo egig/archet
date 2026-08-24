@@ -20,6 +20,9 @@ export interface ConsoleFieldMeta {
   values?: readonly string[];
   targetModel?: string;
   allowWildcard?: boolean;
+  accept?: string;
+  preview?: 'image';
+  maxSize?: number;
 }
 
 export interface ConsoleModelMeta {
@@ -65,6 +68,11 @@ function serializeField(key: string, f: ModelDefinition['fields'][string]): Cons
   if (f.kind === 'enum') meta.values = f.values;
   if (f.kind === 'reference') meta.targetModel = f.targetModel;
   if (f.kind === 'modelRef' || f.kind === 'actionRef') meta.allowWildcard = f.allowWildcard;
+  if (f.kind === 'file') {
+    meta.accept = f.accept;
+    meta.preview = f.preview;
+    meta.maxSize = f.maxSize;
+  }
   return meta;
 }
 

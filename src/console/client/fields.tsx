@@ -1,7 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { ConsoleFieldMeta } from '../serialize-model.js';
-import { listRows } from './api.js';
+import { listRows, uploadFile, type UploadedFile } from './api.js';
 import { useModels } from './models.js';
+
+/** What a `file` field's form value looks like — either an existing record's read shape
+ * (`{ url, filename, mimeType, size }`, from `deriveFileFields`) or a fresh upload's response
+ * (`UploadedFile`, `{ key, filename, mimeType, size }`). Distinguished by which of `url`/`key`
+ * is present; see `buildPayload` in `ModelFormPage.tsx`, which only resubmits the latter. */
+export type FileFieldValue = { url?: string; key?: string; filename: string; mimeType: string; size: number };
 
 const inputClass =
   'w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none';
@@ -51,12 +57,16 @@ export interface FieldInputProps {
   /** create vs update — a `writeAs` (e.g. password) field is required on create but optional
    * (blank = leave unchanged) on update. */
   mode: 'create' | 'update';
+  /** only needed by `kind: 'file'`, to build its upload URL (`POST /api/:modelName/:field/upload`). */
+  modelName?: string;
 }
 
-export function FieldInput({ field, inputKey, value, onChange, error, mode }: FieldInputProps) {
+export function FieldInput({ field, inputKey, value, onChange, error, mode, modelName }: FieldInputProps) {
   const referenceOptions = useReferenceOptions(field.kind === 'reference' ? field.targetModel : undefined);
   const { models: modelRefOptions } = useModels();
   const required = field.writeAs ? mode === 'create' && field.required : field.required;
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const errorEl = error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null;
   const wrap = (input: ReactNode) => (
@@ -207,6 +217,45 @@ export function FieldInput({ field, inputKey, value, onChange, error, mode }: Fi
             </option>
           ))}
         </select>,
+      );
+    }
+
+    case 'file': {
+      const stored = value as FileFieldValue | undefined;
+      return wrap(
+        <div>
+          {stored && (
+            <div className="mb-2 flex items-center gap-2">
+              {field.preview === 'image' && stored.url && (
+                <img
+                  src={stored.url}
+                  alt={stored.filename}
+                  className="h-16 w-16 rounded border border-gray-200 object-cover"
+                />
+              )}
+              <span className="text-sm text-gray-600">{stored.filename}</span>
+            </div>
+          )}
+          <input
+            type="file"
+            accept={field.accept}
+            required={required && !stored}
+            disabled={uploading || !modelName}
+            onChange={(e) => {
+              const picked = e.target.files?.[0];
+              if (!picked || !modelName) return;
+              setUploading(true);
+              setUploadError(null);
+              uploadFile(modelName, field.key, picked)
+                .then((result: UploadedFile) => onChange(inputKey, result))
+                .catch((err: unknown) => setUploadError(err instanceof Error ? err.message : 'upload failed'))
+                .finally(() => setUploading(false));
+            }}
+            className={inputClass}
+          />
+          {uploading && <p className="mt-1 text-xs text-gray-500">Uploading…</p>}
+          {uploadError && <p className="mt-1 text-xs text-red-600">{uploadError}</p>}
+        </div>,
       );
     }
 

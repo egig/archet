@@ -54,3 +54,24 @@ export const Customer = defineModel('customers', {
 ```
 
 A `field.reference(...)` on a model automatically renders as a dropdown in the generated form, populated from the target model's rows and labeled with its `displayField`. A field with `sensitive: true` (e.g. `passwordHash`) never round-trips to the client; one with `writeAs` submits under its declared input key instead of its column name; one with `displayText` uses that as its list/form label instead of a humanized field key (see [Common options](/guide/models#common-options)).
+
+## Extending the console
+
+`console/client/main.tsx` lives in your app, not the framework, so it's the place to customize the console — pass `brand` and/or `pages` to `<ConsoleApp />`:
+
+```tsx
+import { createRoot } from 'react-dom/client';
+import { ConsoleApp } from '@egig/ratchet/console/client';
+import { SalesReport } from './SalesReport.js';
+
+const root = document.getElementById('root')!;
+createRoot(root).render(
+  <ConsoleApp
+    brand={{ name: 'Acme Admin', logo: <img src="/logo.svg" className="h-6 w-6" /> }}
+    pages={[{ path: 'reports/sales', label: 'Sales report', element: <SalesReport /> }]}
+  />,
+);
+```
+
+- `brand.name` / `brand.logo` replace the sidebar's default "Ratchet console" heading.
+- `pages` adds sidebar links and routes (mounted under `consolePath`, alongside the generated model pages) for arbitrary components you write yourself — each page renders inside the authenticated `Layout`, so it gets the same sidebar and session as the generated views. `path` is relative (e.g. `'reports/sales'`, not `/reports/sales`).

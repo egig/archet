@@ -3,10 +3,10 @@ import { useNavigate, useParams } from 'react-router';
 import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { useModels } from './models.js';
 import { ApiRequestError, createRow, getRow, updateRow } from './api.js';
-import { FieldInput } from './fields.js';
+import { FieldInput, type FileFieldValue } from './fields.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
 
-type FormValues = Record<string, string | boolean>;
+type FormValues = Record<string, string | boolean | FileFieldValue>;
 
 function inputKeyFor(f: ConsoleFieldMeta): string {
   return f.writeAs ?? f.key;
@@ -28,6 +28,10 @@ function initialValues(model: ConsoleModelMeta, row: Record<string, unknown> | n
       values[key] = isoToDatetimeLocal(raw);
     } else if (f.kind === 'json') {
       values[key] = raw === undefined || raw === null ? '' : JSON.stringify(raw, null, 2);
+    } else if (f.kind === 'file') {
+      // an existing record's `{ url, filename, mimeType, size }` (display-only — buildPayload
+      // never resubmits this, only a fresh upload's `{ key, ... }`); absent entirely for "no file yet".
+      if (raw && typeof raw === 'object') values[key] = raw as FileFieldValue;
     } else if (f.writeAs) {
       values[key] = ''; // password et al: never round-tripped from a read
     } else {
@@ -72,6 +76,14 @@ function buildPayload(model: ConsoleModelMeta, values: FormValues, mode: 'create
         }
         payload[key] = datetimeLocalToIso(raw as string);
         break;
+      case 'file': {
+        // only a fresh upload (has `key`) is ever resubmitted — an untouched existing file
+        // (display-only `{ url, ... }`) is left out entirely, same "leave unchanged" convention
+        // as writeAs/password on update; on create, omitting a required file is caught server-side.
+        const stored = raw as FileFieldValue | undefined;
+        if (stored?.key) payload[key] = { key: stored.key, filename: stored.filename, mimeType: stored.mimeType, size: stored.size };
+        break;
+      }
       default:
         if ((raw === '' || raw === undefined) && !required) break;
         payload[key] = raw;
@@ -115,7 +127,7 @@ export function ModelFormPage() {
   if (!model) return <p className="text-sm text-red-600">Unknown model.</p>;
 
   function handleChange(key: string, value: unknown) {
-    setValues((prev) => ({ ...prev, [key]: value as string | boolean }));
+    setValues((prev) => ({ ...prev, [key]: value as string | boolean | FileFieldValue }));
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -171,6 +183,7 @@ export function ModelFormPage() {
                   onChange={handleChange}
                   error={fieldErrors[key] ?? (f.writeAs ? fieldErrors[f.key] : undefined)}
                   mode={mode}
+                  modelName={model.name}
                 />
               </label>
             );

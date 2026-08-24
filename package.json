@@ -20,7 +20,8 @@
     "./auth": "./dist/auth/index.js",
     "./console": "./dist/console/index.js",
     "./console/client": "./dist/console/client/index.js",
-    "./console/node": "./dist/console/node-assets.js"
+    "./console/node": "./dist/console/node-assets.js",
+    "./storage/node": "./dist/core/storage-node.js"
   },
   "scripts": {
     "build": "tsx scripts/build.ts",
