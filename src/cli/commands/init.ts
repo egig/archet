@@ -1,7 +1,7 @@
 import { mkdir, writeFile, readFile, access } from 'node:fs/promises';
 import path from 'node:path';
 
-const ARCHET_VERSION = '^0.1.0';
+const ARCHE_VERSION = '^0.1.0';
 
 function packageJson(name: string): string {
   return (
@@ -12,17 +12,17 @@ function packageJson(name: string): string {
         private: true,
         type: 'module',
         scripts: {
-          dev: 'archet dev',
-          serve: 'archet serve',
-          generate: 'archet generate',
-          migrate: 'archet migrate',
-          studio: 'archet studio',
+          dev: 'arche dev',
+          serve: 'arche serve',
+          generate: 'arche generate',
+          migrate: 'arche migrate',
+          studio: 'arche studio',
           build: 'tsc -p tsconfig.json',
           typecheck: 'tsc -p tsconfig.json --noEmit',
         },
         dependencies: {
           '@hono/node-server': '^1.13.7',
-          archet: ARCHET_VERSION,
+          arche: ARCHE_VERSION,
           'drizzle-orm': '^0.36.4',
           hono: '^4.6.14',
           postgres: '^3.4.5',
@@ -58,22 +58,22 @@ const TSCONFIG = `{
     "sourceMap": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "models", "logic", "archet.config.ts"],
-  "exclude": ["dist", "node_modules", ".archet"]
+  "include": ["src", "models", "logic", "arche.config.ts"],
+  "exclude": ["dist", "node_modules", ".arche"]
 }
 `;
 
-const ARCHET_CONFIG = `import { defineConfig } from 'archet/core';
+const ARCHE_CONFIG = `import { defineConfig } from 'arche/core';
 
 export default defineConfig({
   db: { connectionString: process.env.DATABASE_URL! },
   modelsDir: 'models',
-  generatedDir: '.archet',
+  generatedDir: '.arche',
   migrationsDir: 'drizzle/migrations',
 });
 `;
 
-const EXAMPLE_MODEL = `import { defineModel, field } from 'archet/core';
+const EXAMPLE_MODEL = `import { defineModel, field } from 'arche/core';
 
 export const Example = defineModel('examples', {
   fields: {
@@ -84,7 +84,7 @@ export const Example = defineModel('examples', {
 
 const GITIGNORE = `node_modules/
 dist/
-.archet/
+.arche/
 .env
 *.log
 `;
@@ -94,7 +94,7 @@ function sanitizePackageName(dirName: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return cleaned.length > 0 ? cleaned : 'archet-app';
+  return cleaned.length > 0 ? cleaned : 'arche-app';
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -123,35 +123,35 @@ async function appendGitignore(cwd: string): Promise<void> {
     return;
   }
   const existing = await readFile(gitignorePath, 'utf8');
-  if (!existing.includes('.archet')) {
-    await writeFile(gitignorePath, `${existing}\n# archet\n${GITIGNORE}`, 'utf8');
+  if (!existing.includes('.arche')) {
+    await writeFile(gitignorePath, `${existing}\n# arche\n${GITIGNORE}`, 'utf8');
     console.log('updated .gitignore');
   } else {
-    console.log('skipped .gitignore (already covers .archet)');
+    console.log('skipped .gitignore (already covers .arche)');
   }
 }
 
-/** §6/§10: scaffolds a full starter project — package.json, tsconfig.json, archet.config.ts,
- * an example model, and drizzle/migrations/. No server entry file to write: `archet serve`
+/** §6/§10: scaffolds a full starter project — package.json, tsconfig.json, arche.config.ts,
+ * an example model, and drizzle/migrations/. No server entry file to write: `arche serve`
  * (framework-owned, see src/cli/commands/serve.ts) boots the API directly from
- * archet.config.ts + the generated registry. Never overwrites a file that's already there —
+ * arche.config.ts + the generated registry. Never overwrites a file that's already there —
  * safe to re-run in a partially set-up directory. */
 export async function runInit(cwd: string): Promise<void> {
   await mkdir(path.join(cwd, 'models'), { recursive: true });
-  await mkdir(path.join(cwd, '.archet'), { recursive: true });
+  await mkdir(path.join(cwd, '.arche'), { recursive: true });
   await mkdir(path.join(cwd, 'drizzle', 'migrations'), { recursive: true });
 
   const pkgName = sanitizePackageName(path.basename(cwd));
   await writeIfAbsent(path.join(cwd, 'package.json'), packageJson(pkgName), 'package.json');
   await writeIfAbsent(path.join(cwd, 'tsconfig.json'), TSCONFIG, 'tsconfig.json');
-  await writeIfAbsent(path.join(cwd, 'archet.config.ts'), ARCHET_CONFIG, 'archet.config.ts');
+  await writeIfAbsent(path.join(cwd, 'arche.config.ts'), ARCHE_CONFIG, 'arche.config.ts');
   await writeIfAbsent(path.join(cwd, 'models', 'example.model.ts'), EXAMPLE_MODEL, 'models/example.model.ts');
   await appendGitignore(cwd);
 
   console.log('');
   console.log('next steps:');
-  console.log('  1. npm install   (note: "archet" isn\'t published yet — `npm link` it from this framework\'s checkout, or replace the dependency with a local path, until it is)');
+  console.log('  1. npm install   (note: "arche" isn\'t published yet — `npm link` it from this framework\'s checkout, or replace the dependency with a local path, until it is)');
   console.log('  2. set DATABASE_URL');
-  console.log('  3. npm run generate   (writes .archet/*)');
+  console.log('  3. npm run generate   (writes .arche/*)');
   console.log('  4. npm run migrate && npm run serve   (or `npm run dev` for local push-based iteration)');
 }

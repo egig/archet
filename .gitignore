@@ -5,7 +5,7 @@ dist/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 
-# example/app content — this repo tracks the archet framework itself (src/core, src/cli,
+# example/app content — this repo tracks the arche framework itself (src/core, src/cli,
 # src/codegen, src/router), not an app built on it. This directory exists on disk for local
 # dogfooding (see DESIGN.md) but shouldn't be committed to the framework's own history.
 /example/

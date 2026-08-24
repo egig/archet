@@ -34,7 +34,7 @@ async function issueSession(db: AnyDb, userId: string) {
 /** Mirrors the token onto an `HttpOnly` cookie so the admin SPA (no manual header injection)
  * and non-browser API clients (the `Authorization` header, still returned in the body) both
  * work. `Secure` is conditional on the request's own protocol — hardcoding it on would break
- * plain-http `archet dev`. */
+ * plain-http `arche dev`. */
 function setSessionCookie(c: Context, token: string): void {
   setCookie(c, SESSION_COOKIE_NAME, token, {
     httpOnly: true,

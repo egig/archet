@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: archet
+  name: arche
   text: Models in, API out.
   tagline: Archetype driven business application framework — TypeScript models compile to a Postgres schema, a REST API, an admin panel, and auth, with composable pipelines wherever you need custom logic.
   actions:
@@ -11,11 +11,11 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/egig/archet
+      link: https://github.com/egig/arche
 
 features:
   - title: Models -> Schema
-    details: Define a model once with defineModel() and field(); archet generates the Drizzle schema, Zod validators, and a model registry for you.
+    details: Define a model once with defineModel() and field(); arche generates the Drizzle schema, Zod validators, and a model registry for you.
   - title: One generic REST API
     details: Every model gets GET/POST/PATCH/DELETE at /api/:model for free — filtering, sorting, cursor and offset pagination, and ?include= relations included.
   - title: Composable pipelines

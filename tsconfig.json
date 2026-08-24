@@ -17,5 +17,5 @@
     "noUncheckedIndexedAccess": true
   },
   "include": ["src", "example", "test"],
-  "exclude": ["dist", "node_modules", "example/.archet"]
+  "exclude": ["dist", "node_modules", "example/.arche"]
 }

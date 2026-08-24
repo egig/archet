@@ -1,10 +1,10 @@
 {
-  "name": "archet",
+  "name": "arche",
   "version": "0.1.0",
-  "description": "A Frappe-inspired application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.",
+  "description": "-inspired application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.",
   "type": "module",
   "bin": {
-    "archet": "./dist/cli/bin.js"
+    "arche": "./dist/cli/bin.js"
   },
   "exports": {
     ".": "./dist/core/index.js",

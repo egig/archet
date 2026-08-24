@@ -34,7 +34,7 @@ function renderShell(manifest: AdminManifest): string {
     '<html>',
     '<head>',
     '<meta charset="utf-8">',
-    '<title>archet admin</title>',
+    '<title>arche admin</title>',
     css,
     '</head>',
     '<body>',
@@ -50,7 +50,7 @@ function serveShell(generatedDir: string) {
     const manifest = loadManifest(generatedDir);
     if (!manifest) {
       return c.text(
-        'admin UI not built yet — run `archet build` or `archet dev` (requires an admin/client/main.tsx entry)',
+        'admin UI not built yet — run `arche build` or `arche dev` (requires an admin/client/main.tsx entry)',
         503,
       );
     }
@@ -59,7 +59,7 @@ function serveShell(generatedDir: string) {
 }
 
 /** `/admin/*` — serves the admin UI shell + its built assets (resolved via the manifest
- * `archet build`/`archet dev` write to `<generatedDir>/admin/manifest.json`, see
+ * `arche build`/`arche dev` write to `<generatedDir>/admin/manifest.json`, see
  * src/cli/build-admin.ts), plus a small `/admin/api/models[/:name]` metadata API the admin SPA
  * uses to render its sidebar and dynamically-generated CRUD views — driven by the same registry
  * map `createApiRouter` (src/router/create-router.ts) uses for `/api/:model`, so the two never

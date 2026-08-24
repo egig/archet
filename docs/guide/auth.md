@@ -1,6 +1,6 @@
 # Auth
 
-`archet/auth` provides session-based authentication (`User`, `Role`, `Permission`, `Session` models, plus a router and pipeline helpers) that `archet serve` mounts at `/api/auth`, ahead of the generic `/api/:model` router.
+`arche/auth` provides session-based authentication (`User`, `Role`, `Permission`, `Session` models, plus a router and pipeline helpers) that `arche serve` mounts at `/api/auth`, ahead of the generic `/api/:model` router.
 
 ## Endpoints
 
@@ -31,8 +31,8 @@ The `User` model never declares a plaintext `password` field. Instead its `passw
 `requireAuth` and `requirePermission(resource, action)` are ordinary [pipeline functions](/guide/pipelines) — compose them into any model's operations:
 
 ```ts
-import { pipe, validate, persist } from 'archet/core';
-import { requireAuth, requirePermission } from 'archet/auth';
+import { pipe, validate, persist } from 'arche/core';
+import { requireAuth, requirePermission } from 'arche/auth';
 
 export const Invoice = defineModel('invoices', {
   fields: { /* ... */ },

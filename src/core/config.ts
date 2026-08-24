@@ -5,12 +5,12 @@ export interface FrameworkConfig {
   };
   /** default: 'models' */
   modelsDir?: string;
-  /** default: '.archet' — gitignored, rebuilt by `generate` every time */
+  /** default: '.arche' — gitignored, rebuilt by `generate` every time */
   generatedDir?: string;
   /** default: 'drizzle/migrations' — git-tracked; separate from generatedDir (Q8) */
   migrationsDir?: string;
   /** default: 'admin/client/main.tsx' — the consumer-authored admin UI entry point that
-   * `archet build`/`archet dev` bundle with esbuild. Absent entirely if the app hasn't
+   * `arche build`/`arche dev` bundle with esbuild. Absent entirely if the app hasn't
    * adopted the admin feature — `build`/`dev` skip the admin build step in that case. */
   adminEntry?: string;
 }

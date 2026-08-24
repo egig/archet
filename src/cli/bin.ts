@@ -9,11 +9,11 @@ import { runServe } from './commands/serve.js';
 import { runBuild } from './commands/build.js';
 
 const program = new Command();
-program.name('archet').description('Model -> Postgres schema, codegen, and composable pipelines.');
+program.name('arche').description('Model -> Postgres schema, codegen, and composable pipelines.');
 
 program
   .command('init')
-  .description('Scaffold a new project: package.json, tsconfig.json, archet.config.ts, and an example model')
+  .description('Scaffold a new project: package.json, tsconfig.json, arche.config.ts, and an example model')
   .action(async () => {
     await runInit(process.cwd());
   });
@@ -48,7 +48,7 @@ program
 
 program
   .command('serve')
-  .description('Boot the API server: archet.config.ts + the generated registry -> a listening /api/:model router')
+  .description('Boot the API server: arche.config.ts + the generated registry -> a listening /api/:model router')
   .action(async () => {
     await runServe(process.cwd());
   });

@@ -14,8 +14,8 @@ export interface ErrorResponse {
 }
 
 /**
- * `instanceof PipelineError` fails when the thrower and this check load `archet` as two separate
- * module instances (e.g. a generated file importing the bare `archet/*` specifier resolves to a
+ * `instanceof PipelineError` fails when the thrower and this check load `arche` as two separate
+ * module instances (e.g. a generated file importing the bare `arche/*` specifier resolves to a
  * different install/build than a relative `../core/pipeline.js` import elsewhere) — a real risk
  * with symlinked/self-referenced packages, not just a theoretical one. Falling back to a
  * structural check keeps the "every rejected request gets a normalized shape" guarantee even

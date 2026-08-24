@@ -10,7 +10,7 @@ export function Layout() {
     <div className="flex min-h-screen bg-gray-50">
       <aside className="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
         <div className="border-b border-gray-200 px-4 py-4">
-          <p className="text-sm font-semibold text-gray-900">archet admin</p>
+          <p className="text-sm font-semibold text-gray-900">arche admin</p>
           {user && <p className="truncate text-xs text-gray-500">{user.email}</p>}
         </div>
 
