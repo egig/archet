@@ -91,7 +91,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
     authApp = createAuthRouter(db);
     apiApp = createApiRouter({ roles: Role, permissions: Permission, users: User }, db);
     adminApp = createAdminRouter(
-      '.arche-test',
+      '.ratchet-test',
       { users: User, roles: Role, permissions: Permission, sessions: Session, widgets: Widget },
       db,
     );
@@ -209,7 +209,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
       });
       expect(res.status).toBe(200);
       const setCookie = res.headers.get('set-cookie')!;
-      expect(setCookie).toMatch(/^arche_session=/);
+      expect(setCookie).toMatch(/^ratchet_session=/);
       expect(setCookie).toMatch(/HttpOnly/i);
       expect(setCookie).toMatch(/SameSite=Lax/i);
       // plain http:// in tests — Secure must not be set, or the browser would drop the cookie entirely.
@@ -249,7 +249,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
       const logout = await authApp.request('/logout', { method: 'POST', headers: { cookie } });
       expect(logout.status).toBe(200);
       const clearHeader = logout.headers.get('set-cookie')!;
-      expect(clearHeader).toMatch(/^arche_session=;|Max-Age=0/i);
+      expect(clearHeader).toMatch(/^ratchet_session=;|Max-Age=0/i);
 
       const after = await authApp.request('/me', { headers: { cookie } });
       expect(after.status).toBe(401);

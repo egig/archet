@@ -1,6 +1,6 @@
 # REST API
 
-`arche serve` mounts one generic router at `/api/:model` — every model gets the same route family, dispatched by looking up `:model` in the registry at request time. There are no per-model generated route files.
+`ratchet serve` mounts one generic router at `/api/:model` — every model gets the same route family, dispatched by looking up `:model` in the registry at request time. There are no per-model generated route files.
 
 ## Routes
 
@@ -78,12 +78,12 @@ Every route shares the same error shape. Common codes:
 
 ## Building your own router
 
-`arche/router` exports the pieces `arche serve` composes for you, if you need to mount them yourself (e.g. inside a custom Hono app):
+`ratchet/router` exports the pieces `ratchet serve` composes for you, if you need to mount them yourself (e.g. inside a custom Hono app):
 
 ```ts
-import { createApiRouter, buildRegistryMap } from 'arche/router';
+import { createApiRouter, buildRegistryMap } from 'ratchet/router';
 
-const registry = buildRegistryMap(registryModule); // from .arche/registry.ts
+const registry = buildRegistryMap(registryModule); // from .ratchet/registry.ts
 const app = new Hono();
 app.route('/api', createApiRouter(registry, db));
 ```

@@ -1,10 +1,10 @@
 # Admin Panel
 
-`arche serve` mounts a generated admin SPA at `/admin` — a sidebar of models, list/form views generated from each model's field metadata, and session-based login, with no per-model UI code to write.
+`ratchet serve` mounts a generated admin SPA at `/admin` — a sidebar of models, list/form views generated from each model's field metadata, and session-based login, with no per-model UI code to write.
 
 ## How it's built
 
-`arche build` (or `arche dev`, for local iteration) bundles `admin/client/main.tsx` with esbuild + Tailwind into hashed assets plus a `manifest.json`, written under `<generatedDir>/admin/`. `createAdminRouter` serves that shell and its assets at `/admin/*`, and falls back to a 503 with an instructive message if the admin hasn't been built yet.
+`ratchet build` (or `ratchet dev`, for local iteration) bundles `admin/client/main.tsx` with esbuild + Tailwind into hashed assets plus a `manifest.json`, written under `<generatedDir>/admin/`. `createAdminRouter` serves that shell and its assets at `/admin/*`, and falls back to a 503 with an instructive message if the admin hasn't been built yet.
 
 Because the SPA uses client-side routing, every path under `/admin` (not just `/admin` itself) serves the same HTML shell — a hard refresh on `/admin/customers/:id` needs to resolve to the shell too, since routing happens in the browser after it loads.
 

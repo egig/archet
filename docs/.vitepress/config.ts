@@ -1,14 +1,14 @@
 import { defineConfig } from 'vitepress';
 
 export default defineConfig({
-  title: 'arche',
-  description: 'Archetype driven business -inspired application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.',
-  base: '/arche/',
+  title: 'Ratchet',
+  description: 'Rather archetype, you can build something out of. TypeScript models -> Postgres schema, codegen, and composable pipelines.',
+  base: '/ratchet/',
   cleanUrls: true,
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
-      { text: 'GitHub', link: 'https://github.com/egig/arche' },
+      { text: 'GitHub', link: 'https://github.com/egig/ratchet' },
     ],
     sidebar: [
       {
@@ -34,7 +34,7 @@ export default defineConfig({
         ],
       },
     ],
-    socialLinks: [{ icon: 'github', link: 'https://github.com/egig/arche' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/egig/ratchet' }],
     search: { provider: 'local' },
   },
 });

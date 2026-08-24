@@ -22,7 +22,7 @@ interface OperationContext {
 A pipeline function receives the context, does its work, and returns a (possibly new) context. To reject the operation, throw a `PipelineError`:
 
 ```ts
-import { PipelineError, type PipelineFn } from 'arche/core';
+import { PipelineError, type PipelineFn } from 'ratchet/core';
 
 export const checkStock: PipelineFn = async (ctx) => {
   const available = await stockFor(ctx.db, ctx.input.customerId as string);
@@ -36,7 +36,7 @@ export const checkStock: PipelineFn = async (ctx) => {
 ## `pipe(...)`
 
 ```ts
-import { pipe, validate, persist } from 'arche/core';
+import { pipe, validate, persist } from 'ratchet/core';
 
 pipe(validate, checkStock, applyDiscount, persist, notify);
 ```
@@ -83,4 +83,4 @@ export const notify: PipelineFn = async (ctx) => {
 
 ## Auth-related pipeline functions
 
-`requireAuth` and `requirePermission(resource, action)` (from `arche/auth`) are ordinary pipeline functions and compose the same way — see [Auth](/guide/auth#guarding-your-own-pipelines).
+`requireAuth` and `requirePermission(resource, action)` (from `ratchet/auth`) are ordinary pipeline functions and compose the same way — see [Auth](/guide/auth#guarding-your-own-pipelines).

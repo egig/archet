@@ -18,7 +18,7 @@ export interface OperationContext {
   model: ModelDefinition;
   db: AnyDb;
   request?: Request;
-  /** the authenticated user, resolved by `requireAuth` (arche/auth) and read by
+  /** the authenticated user, resolved by `requireAuth` (ratchet/auth) and read by
    * `requirePermission`/business logic — absent until an auth pipeline step sets it. */
   user?: Record<string, unknown> | null;
 }

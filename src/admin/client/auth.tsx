@@ -10,7 +10,7 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-/** Hydrates from the `arche_session` cookie (set by `/api/auth/login`) via `GET /api/auth/me`
+/** Hydrates from the `ratchet_session` cookie (set by `/api/auth/login`) via `GET /api/auth/me`
  * on mount, so a page reload stays logged in without any client-side token storage. */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
