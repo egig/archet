@@ -1,4 +1,8 @@
-import type { AdminModelMeta } from '../serialize-model.js';
+import type { ConsoleModelMeta } from '../serialize-model.js';
+
+// '/' (root mount) needs an empty prefix, not a literal '/', so `${MOUNT_PREFIX}/meta/models`
+// doesn't come out as '//meta/models'.
+const MOUNT_PREFIX = __CONSOLE_PATH__ === '/' ? '' : __CONSOLE_PATH__;
 
 export interface ApiErrorBody {
   error: { code: string; message?: string; fields?: Record<string, string> };
@@ -72,8 +76,8 @@ export function me(): Promise<AuthUser> {
   return request('/api/auth/me');
 }
 
-export function listModels(): Promise<AdminModelMeta[]> {
-  return request('/admin/api/models');
+export function listModels(): Promise<ConsoleModelMeta[]> {
+  return request(`${MOUNT_PREFIX}/meta/models`);
 }
 
 export interface OffsetPage {

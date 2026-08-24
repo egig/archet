@@ -8,8 +8,8 @@ import { tsImport } from 'tsx/esm/api';
 import { createApiRouter } from '../../router/create-router.js';
 import { buildRegistryMap } from '../../router/registry-map.js';
 import { createAuthRouter } from '../../auth/router.js';
-import { createAdminRouter } from '../../admin/router.js';
-import { createNodeFsAssetSource } from '../../admin/node-assets.js';
+import { createConsoleRouter } from '../../console/router.js';
+import { createNodeFsAssetSource } from '../../console/node-assets.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
 
 /**
@@ -19,7 +19,8 @@ import { loadConfig, resolveDirs } from '../load-config.js';
  */
 export async function runServe(cwd: string): Promise<ServerType> {
   const config = await loadConfig(cwd);
-  const { generatedDir } = resolveDirs(cwd, config);
+  const dirs = resolveDirs(cwd, config);
+  const { generatedDir } = dirs;
 
   const registryFile = path.join(generatedDir, 'registry.ts');
   const registryModule = (await tsImport(pathToFileURL(registryFile).href, import.meta.url)) as Record<
@@ -32,10 +33,12 @@ export async function runServe(cwd: string): Promise<ServerType> {
   const db = drizzle(client);
 
   const app = new Hono();
-  app.route('/admin', createAdminRouter(createNodeFsAssetSource(generatedDir), registry, db));
-  // more specific prefix first: `/api/auth/*` must win over the generic `/api/:model` pattern.
+  // more specific prefix first: `/api/auth/*` must win over the generic `/api/:model` pattern,
+  // and both must win over the console router — which is registered last since `consolePath` can
+  // be '/' (root mount), where its own catch-all would otherwise swallow every path.
   app.route('/api/auth', createAuthRouter(db));
   app.route('/api', createApiRouter(registry, db));
+  app.route(dirs.consolePath, createConsoleRouter(createNodeFsAssetSource(generatedDir), registry, db, dirs.consolePath));
 
   const port = Number(process.env.PORT ?? 3000);
   return serveNode({ fetch: app.fetch, port }, (info) => {

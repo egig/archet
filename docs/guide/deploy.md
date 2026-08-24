@@ -1,6 +1,6 @@
 # Deploying
 
-`ratchet serve` and the bundle from `ratchet build` are Node — that covers local development and any VPS/container host. Beyond that, `/api`, `/api/auth`, and `/admin` are built as plain [Hono](https://hono.dev) routers that take a `db` and a `registry` as arguments rather than constructing them internally, so they run on any runtime Hono supports. Nothing in `ratchet build`/`ratchet generate`/`ratchet migrate` targets those runtimes — they stay Node-only dev tooling. Deploying to one is a thin entry file you own, composing `createApiRouter`/`createAuthRouter`/`createAdminRouter` yourself with a driver and asset source that fit the target.
+`ratchet serve` and the bundle from `ratchet build` are Node — that covers local development and any VPS/container host. Beyond that, `/api`, `/api/auth`, and the console are built as plain [Hono](https://hono.dev) routers that take a `db` and a `registry` as arguments rather than constructing them internally, so they run on any runtime Hono supports. Nothing in `ratchet build`/`ratchet generate`/`ratchet migrate` targets those runtimes — they stay Node-only dev tooling. Deploying to one is a thin entry file you own, composing `createApiRouter`/`createAuthRouter`/`createConsoleRouter` yourself with a driver and asset source that fit the target — keeping whatever path you mount the console at in sync with `consolePath` in `ratchet.config.ts` is on you (see [Console](/guide/console)).
 
 ## Local development
 
@@ -12,7 +12,7 @@ Nothing else to configure — see [CLI Reference](/guide/cli).
 
 ## VPS / container
 
-`ratchet build` bundles a Node server entry to `dist/server.js` (postgres.js + `@hono/node-server`, admin assets read straight off disk). Ship that file, `.ratchet/`, and a `DATABASE_URL`:
+`ratchet build` bundles a Node server entry to `dist/server.js` (postgres.js + `@hono/node-server`, console assets read straight off disk). Ship that file, `.ratchet/`, and a `DATABASE_URL`:
 
 ```sh
 ratchet build
@@ -49,11 +49,11 @@ export default app; // a Hono app's own `.fetch` matches Vercel's fetch-export c
 { "rewrites": [{ "source": "/api/:path*", "destination": "/api" }] }
 ```
 
-`/admin` isn't mounted here. Copy `.ratchet/admin`'s built output into `public/admin` as part of your build step and let Vercel's CDN serve it directly — no function invocation, and it sidesteps needing an `AdminAssetSource` for Vercel at all.
+The console isn't mounted here. Copy `.ratchet/console`'s built output into `public/console` (or wherever `consolePath` points) as part of your build step and let Vercel's CDN serve it directly — no function invocation, and it sidesteps needing a `ConsoleAssetSource` for Vercel at all.
 
 ## Cloudflare Workers
 
-Two pieces Workers don't give you for free: a TCP path to Postgres, and a filesystem for the admin UI's built assets.
+Two pieces Workers don't give you for free: a TCP path to Postgres, and a filesystem for the console UI's built assets.
 
 **Database** — [Hyperdrive](https://developers.cloudflare.com/hyperdrive/) plus postgres.js, Cloudflare's documented pattern: Hyperdrive pools the upstream connection, so creating a fresh client per request is cheap and expected, not a mistake.
 
@@ -64,10 +64,10 @@ const db = drizzle(client);
 
 Requires `compatibility_flags: ["nodejs_compat"]` and a `hyperdrive` binding in `wrangler.jsonc`.
 
-**Admin assets** — [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/) serves `.ratchet/admin` straight from Cloudflare's CDN. `createAdminRouter`'s asset source is a small interface (`getManifest()`, `getAsset(path)`), so adapting the `env.ASSETS` binding to it is a few lines:
+**Console assets** — [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/) serves `.ratchet/console` straight from Cloudflare's CDN. `createConsoleRouter`'s asset source is a small interface (`getManifest()`, `getAsset(path)`), so adapting the `env.ASSETS` binding to it is a few lines:
 
 ```ts
-function createAssetsBindingSource(assets: { fetch(r: Request): Promise<Response> }): AdminAssetSource {
+function createAssetsBindingSource(assets: { fetch(r: Request): Promise<Response> }): ConsoleAssetSource {
   return {
     async getManifest() {
       const res = await assets.fetch(new Request('https://assets.local/manifest.json'));

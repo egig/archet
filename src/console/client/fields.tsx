@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import type { AdminFieldMeta } from '../serialize-model.js';
+import type { ConsoleFieldMeta } from '../serialize-model.js';
 import { listRows } from './api.js';
 import { useModels } from './models.js';
 
@@ -12,7 +12,7 @@ export interface ReferenceOption {
 }
 
 /** Fetches up to 100 rows of a reference field's target model to populate a `<select>` — a
- * plain fetched-into-a-dropdown list, not a searchable/paginated combobox; fine for admin-scale
+ * plain fetched-into-a-dropdown list, not a searchable/paginated combobox; fine for console-scale
  * lookups, not meant to scale to huge target tables. */
 export function useReferenceOptions(targetModel: string | undefined): ReferenceOption[] | null {
   const { getModel } = useModels();
@@ -43,7 +43,7 @@ export function useReferenceOptions(targetModel: string | undefined): ReferenceO
 }
 
 export interface FieldInputProps {
-  field: AdminFieldMeta;
+  field: ConsoleFieldMeta;
   inputKey: string;
   value: unknown;
   onChange: (key: string, value: unknown) => void;

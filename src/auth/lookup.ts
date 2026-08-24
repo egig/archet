@@ -99,7 +99,7 @@ export async function findRoleByName(db: AnyDb, name: string): Promise<RoleRow |
  * True once *any* user — active or not — holds a `*:*` permission through their role. Used to
  * decide whether `/api/auth/setup` (root-admin onboarding) is still open. Deliberately ignores
  * `active`: gating on it would let deactivating the sole root admin reopen unauthenticated root
- * creation to anyone who hits the admin UI.
+ * creation to anyone who hits the console UI.
  */
 export async function hasRootAdmin(db: AnyDb): Promise<boolean> {
   const rows = await execRows(

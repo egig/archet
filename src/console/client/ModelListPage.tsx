@@ -74,7 +74,7 @@ export function ModelListPage() {
               <th className="px-3 py-2">id</th>
               {columns.map((f) => (
                 <th key={f.key} className="px-3 py-2">
-                  {f.key}
+                  {f.label}
                 </th>
               ))}
               {(canUpdate || canRemove) && <th className="px-3 py-2" />}

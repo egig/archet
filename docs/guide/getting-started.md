@@ -1,6 +1,6 @@
 # Getting Started
 
-Ratchet turns a directory of TypeScript model files into a Postgres schema, a REST API, an admin panel, and auth — with composable pipelines wherever you need custom logic.
+Ratchet turns a directory of TypeScript model files into a Postgres schema, a REST API, a console, and auth — with composable pipelines wherever you need custom logic.
 
 ## Prerequisites
 
@@ -49,27 +49,27 @@ export const Example = defineModel('examples', {
 });
 ```
 
-See [Models & Fields](/guide/models) for the full field vocabulary and how relations, defaults, and admin options work.
+See [Models & Fields](/guide/models) for the full field vocabulary and how relations, defaults, and console options work.
 
 ## Generate, migrate, serve
 
 ```sh
 npm run generate   # models/**/*.model.ts -> .ratchet/{schema,validators,registry}.ts
 npm run migrate     # regenerate, then drizzle-kit generate + migrate
-npm run serve        # boot the API + admin panel
+npm run serve        # boot the API + console
 ```
 
 `ratchet serve` reads `ratchet.config.ts` and the generated registry and boots a listening server — there's no server entry file to hand-write. It mounts, in order:
 
-- `/admin` — the generated admin SPA
 - `/api/auth/*` — register/login/logout/me
 - `/api/:model` — the generic REST router, one route family for every model
+- `/console` — the generated console SPA (customize with `consolePath`; registered last since it can be mounted at `/`, see [Console](/guide/console))
 
 For local iteration, `npm run dev` watches `models/**/*.model.ts` and on every change regenerates, runs `drizzle-kit push`, and restarts the dev server — faster than the migration-file workflow, intended for development only.
 
 ## Next steps
 
-- [Models & Fields](/guide/models) — the field vocabulary, relations, and admin metadata
+- [Models & Fields](/guide/models) — the field vocabulary, relations, and console metadata
 - [Pipelines](/guide/pipelines) — where your business logic goes
 - [REST API](/guide/router) — filtering, sorting, pagination, and `?include=`
 - [CLI Reference](/guide/cli) — every `ratchet` command

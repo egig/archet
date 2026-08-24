@@ -63,7 +63,7 @@ program
 
 program
   .command('build')
-  .description('Build the admin client (esbuild + Tailwind, hashed + manifest) and a bundled server artifact')
+  .description('Build the console client (esbuild + Tailwind, hashed + manifest) and a bundled server artifact')
   .action(async () => {
     await runBuild(process.cwd());
   });

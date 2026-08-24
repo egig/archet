@@ -8,9 +8,9 @@ import { IndexRedirect } from './IndexRedirect.js';
 import { ModelListPage } from './ModelListPage.js';
 import { ModelFormPage } from './ModelFormPage.js';
 
-export function AdminApp() {
+export function ConsoleApp() {
   return (
-    <BrowserRouter basename="/admin">
+    <BrowserRouter basename={__CONSOLE_PATH__}>
       <AuthProvider>
         <Routes>
           <Route path="/setup" element={<SetupPage />} />

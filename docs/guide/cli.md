@@ -28,7 +28,7 @@ Watches `models/**/*.model.ts`. On every change: regenerates, runs `drizzle-kit 
 
 ## `ratchet serve`
 
-Boots the API server: reads `ratchet.config.ts` and the generated registry, and starts a listening server with `/admin`, `/api/auth/*`, and `/api/:model` mounted. No server entry file needed.
+Boots the API server: reads `ratchet.config.ts` and the generated registry, and starts a listening server with the console (`/console` by default — see `consolePath`), `/api/auth/*`, and `/api/:model` mounted. No server entry file needed.
 
 ```sh
 PORT=3000 DATABASE_URL=postgres://... ratchet serve
@@ -36,7 +36,7 @@ PORT=3000 DATABASE_URL=postgres://... ratchet serve
 
 ## `ratchet build`
 
-Builds the admin client (esbuild + Tailwind, hashed assets + manifest) and a bundled server artifact, for deploying without `tsx`/dev tooling at runtime.
+Builds the console client (esbuild + Tailwind, hashed assets + manifest) and a bundled server artifact, for deploying without `tsx`/dev tooling at runtime.
 
 ## `ratchet studio`
 

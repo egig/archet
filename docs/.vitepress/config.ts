@@ -30,7 +30,7 @@ export default defineConfig({
         items: [
           { text: 'REST API', link: '/guide/router' },
           { text: 'Auth', link: '/guide/auth' },
-          { text: 'Admin Panel', link: '/guide/admin' },
+          { text: 'Console', link: '/guide/console' },
           { text: 'Deploying', link: '/guide/deploy' },
         ],
       },

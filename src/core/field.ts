@@ -9,9 +9,12 @@ export interface FieldCommonOptions<T = unknown> {
   sensitive?: boolean;
   /** this field is written under a different, undeclared input key — e.g. `passwordHash`
    * declares `writeAs: 'password'` because a pipeline fn (`hashPassword`) synthesizes the real
-   * column from a plaintext `password` key that never appears in `fields`. Read by admin
-   * metadata (src/admin/serialize-model.ts) so a generated form knows which key to submit under. */
+   * column from a plaintext `password` key that never appears in `fields`. Read by console
+   * metadata (src/console/serialize-model.ts) so a generated form knows which key to submit under. */
   writeAs?: string;
+  /** human-readable label for the console list/form views; defaults to a humanized field key
+   * (e.g. `roleId` -> "Role Id") when omitted. */
+  displayText?: string;
 }
 
 interface BaseFieldDefinition {
@@ -21,6 +24,7 @@ interface BaseFieldDefinition {
   indexed: boolean;
   sensitive: boolean;
   writeAs?: string;
+  displayText?: string;
 }
 
 export interface StringFieldDefinition extends BaseFieldDefinition {
@@ -70,7 +74,7 @@ export interface ReferenceFieldDefinition extends BaseFieldDefinition {
  * against the live registry happens at request time (see `ratchet/auth`'s `requireValidPermissionTarget`),
  * not here — `baseSchemaForField` treats it as a plain string, since no registry exists yet when a
  * model file's static field definitions are evaluated. `allowWildcard` is UI-only metadata (see
- * `AdminFieldMeta`/`fields.tsx`): it doesn't loosen validation, it just tells the admin form
+ * `ConsoleFieldMeta`/`fields.tsx`): it doesn't loosen validation, it just tells the console form
  * whether to offer a `*` option alongside real model names. */
 export interface ModelRefFieldDefinition extends BaseFieldDefinition {
   kind: 'modelRef';
@@ -116,6 +120,7 @@ function base(opts: FieldCommonOptions): BaseFieldDefinition {
     indexed: opts.indexed ?? false,
     sensitive: opts.sensitive ?? false,
     writeAs: opts.writeAs,
+    displayText: opts.displayText,
   };
 }
 

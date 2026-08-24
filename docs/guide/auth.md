@@ -13,13 +13,13 @@
 | `POST` | `/api/auth/logout` | invalidate the current session |
 | `GET` | `/api/auth/me` | current user + their permissions |
 
-`setup`, `register`, and `login` all return `{ data: { user, token } }` (setup's `GET` returns `{ data: { required } }` instead) and set an `HttpOnly` session cookie (`Secure` when the request is HTTPS). The admin SPA relies on the cookie; non-browser clients can instead send `Authorization: Bearer <token>`.
+`setup`, `register`, and `login` all return `{ data: { user, token } }` (setup's `GET` returns `{ data: { required } }` instead) and set an `HttpOnly` session cookie (`Secure` when the request is HTTPS). The console SPA relies on the cookie; non-browser clients can instead send `Authorization: Bearer <token>`.
 
 ## Root admin onboarding
 
 A fresh instance has no users, so `requirePermission` would lock everyone out with no way to grant the first permission. `POST /api/auth/setup` closes that gap: it's unauthenticated, but only works once — it checks whether any user already holds a `*:*` permission (via their role) and 409s (`SETUP_ALREADY_COMPLETE`) if so. Otherwise it creates (or reuses) a `Root` role with a `{resource: '*', action: '*'}` permission, creates the submitted user under that role, and signs them in — the same shape as `register`/`login`.
 
-The admin SPA's `AuthProvider` checks `GET /api/auth/setup` on boot alongside `/me`. While a root admin doesn't yet exist, every admin route redirects to `/admin/setup` (a form styled like the login page, with a confirm-password field) instead of `/admin/login`; once it's created, `/admin/setup` itself redirects away.
+The console SPA's `AuthProvider` checks `GET /api/auth/setup` on boot alongside `/me`. While a root admin doesn't yet exist, every console route redirects to its `/setup` route (a form styled like the login page, with a confirm-password field) instead of `/login`; once it's created, `/setup` itself redirects away.
 
 Root status is keyed off the permission, not user count — a user created through public `/register` (below) has no role and no permissions, so it doesn't count, and `/register` itself is unaffected by whether setup has run.
 
@@ -57,4 +57,4 @@ export const Invoice = defineModel('invoices', {
 
 ## Roles and permissions
 
-`Role` and `Permission` are ordinary models, managed like any other through the generic REST API (or the admin panel) — grant a role a permission by creating a `Permission` row with `{ roleId, resource, action }`, using `'*'` for either field to grant broadly.
+`Role` and `Permission` are ordinary models, managed like any other through the generic REST API (or the console) — grant a role a permission by creating a `Permission` row with `{ roleId, resource, action }`, using `'*'` for either field to grant broadly.

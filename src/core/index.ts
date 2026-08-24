@@ -16,7 +16,7 @@ export type {
 } from './field.js';
 
 export { defineModel } from './model.js';
-export type { ModelDefinition, OperationsConfig, DefineModelConfig, AdminModelOptions } from './model.js';
+export type { ModelDefinition, OperationsConfig, DefineModelConfig, ConsoleModelOptions } from './model.js';
 
 export { pipe, validate, persist, PipelineError } from './pipeline.js';
 export type { OperationContext, Operation, PipelineFn, PipelineErrorOptions } from './pipeline.js';

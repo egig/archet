@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import type { AdminFieldMeta, AdminModelMeta } from '../serialize-model.js';
+import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { useModels } from './models.js';
 import { ApiRequestError, createRow, getRow, updateRow } from './api.js';
 import { FieldInput } from './fields.js';
@@ -8,15 +8,15 @@ import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
 
 type FormValues = Record<string, string | boolean>;
 
-function inputKeyFor(f: AdminFieldMeta): string {
+function inputKeyFor(f: ConsoleFieldMeta): string {
   return f.writeAs ?? f.key;
 }
 
-function effectiveRequired(f: AdminFieldMeta, mode: 'create' | 'update'): boolean {
+function effectiveRequired(f: ConsoleFieldMeta, mode: 'create' | 'update'): boolean {
   return f.writeAs ? mode === 'create' && f.required : f.required;
 }
 
-function initialValues(model: AdminModelMeta, row: Record<string, unknown> | null): FormValues {
+function initialValues(model: ConsoleModelMeta, row: Record<string, unknown> | null): FormValues {
   const values: FormValues = {};
   for (const f of model.fields) {
     if (f.sensitive && !f.writeAs) continue; // never writable through a declared key
@@ -37,7 +37,7 @@ function initialValues(model: AdminModelMeta, row: Record<string, unknown> | nul
   return values;
 }
 
-function buildPayload(model: AdminModelMeta, values: FormValues, mode: 'create' | 'update'): Record<string, unknown> {
+function buildPayload(model: ConsoleModelMeta, values: FormValues, mode: 'create' | 'update'): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
   for (const f of model.fields) {
     if (f.sensitive && !f.writeAs) continue;
@@ -161,7 +161,7 @@ export function ModelFormPage() {
             return (
               <label key={key} className="block text-sm">
                 <span className="mb-1 block text-gray-700">
-                  {key}
+                  {f.label}
                   {effectiveRequired(f, mode) && <span className="text-red-500"> *</span>}
                 </span>
                 <FieldInput

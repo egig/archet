@@ -1,6 +1,6 @@
 # Models & Fields
 
-A model is defined once, with `defineModel()`, and drives everything else: the Postgres table, the Zod validators, the REST routes, and the admin panel.
+A model is defined once, with `defineModel()`, and drives everything else: the Postgres table, the Zod validators, the REST routes, and the console.
 
 ```ts
 import { defineModel, field } from 'ratchet/core';
@@ -10,7 +10,7 @@ export const Customer = defineModel('customers', {
     name: field.string({ required: true, maxLength: 255 }),
     email: field.string({ required: true, unique: true, indexed: true, maxLength: 320 }),
   },
-  admin: { displayField: 'name' },
+  console: { displayField: 'name' },
 });
 ```
 
@@ -42,13 +42,15 @@ interface FieldCommonOptions<T> {
   indexed?: boolean;
   sensitive?: boolean;
   writeAs?: string;
+  displayText?: string;
 }
 ```
 
 - **`required`** and **`default`** are mutually exclusive — a field with a default is never absent, so declaring both throws at definition time.
 - **`indexed`** gates whether a field can appear in `?filter=` or `?sort=` on the REST API (see [REST API](/guide/router)).
 - **`sensitive`** marks a field as stored but stripped from every HTTP response — e.g. a password hash.
-- **`writeAs`** is for a field written under a different, undeclared input key. For example, a `passwordHash` column declares `writeAs: 'password'` because a pipeline function (`hashPassword`) synthesizes the real column from a plaintext `password` key that never appears in `fields`. The admin form reads this to know which key to submit under.
+- **`writeAs`** is for a field written under a different, undeclared input key. For example, a `passwordHash` column declares `writeAs: 'password'` because a pipeline function (`hashPassword`) synthesizes the real column from a plaintext `password` key that never appears in `fields`. The console form reads this to know which key to submit under.
+- **`displayText`** is the label shown for this field in console list-view column headers and form labels; when omitted it defaults to the field key humanized (e.g. `roleId` -> "Role Id").
 
 ## Relations
 
@@ -104,14 +106,14 @@ export const Invoice = defineModel('invoices', {
 });
 ```
 
-## Admin options
+## Console options
 
 ```ts
-interface AdminModelOptions {
-  hidden?: boolean;      // excluded from the admin sidebar and metadata endpoint entirely
+interface ConsoleModelOptions {
+  hidden?: boolean;      // excluded from the console sidebar and metadata endpoint entirely
   label?: string;         // sidebar/heading text; defaults to a capitalized `name`
-  displayField?: string; // field shown in reference dropdowns and list titles; defaults to 'id'
+  displayField?: string; // field shown in reference dropdowns and list titles; defaults to the first string field, or 'id'
 }
 ```
 
-See [Admin Panel](/guide/admin) for how these are consumed.
+See [Console](/guide/console) for how these are consumed.

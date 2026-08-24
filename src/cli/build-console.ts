@@ -8,20 +8,20 @@ import type { resolveDirs } from './load-config.js';
 
 type Dirs = ReturnType<typeof resolveDirs>;
 
-export interface AdminClientHandle {
-  /** No-op if the admin entry didn't exist and nothing was started. */
+export interface ConsoleClientHandle {
+  /** No-op if the console entry didn't exist and nothing was started. */
   stop: () => Promise<void>;
 }
 
-export interface BuildAdminClientOptions {
+export interface BuildConsoleClientOptions {
   watch: boolean;
   mode: 'dev' | 'prod';
 }
 
-const NOOP_HANDLE: AdminClientHandle = { stop: async () => {} };
+const NOOP_HANDLE: ConsoleClientHandle = { stop: async () => {} };
 
-function cssEntryFor(adminEntryFile: string): string | null {
-  const cssFile = path.join(path.dirname(adminEntryFile), 'styles.css');
+function cssEntryFor(consoleEntryFile: string): string | null {
+  const cssFile = path.join(path.dirname(consoleEntryFile), 'styles.css');
   return existsSync(cssFile) ? cssFile : null;
 }
 
@@ -51,25 +51,29 @@ async function killChild(child: ChildProcess): Promise<void> {
   });
 }
 
-/** Bundles `dirs.adminEntryFile` (skips, logging, if it doesn't exist — apps that haven't
- * adopted admin yet must stay unaffected) with esbuild, runs Tailwind's standalone CLI
- * against a sibling `styles.css` if present, and writes `<generatedDir>/admin/manifest.json`
- * mapping logical names to the actual (optionally content-hashed) asset paths. */
-export async function buildAdminClient(dirs: Dirs, options: BuildAdminClientOptions): Promise<AdminClientHandle> {
-  if (!existsSync(dirs.adminEntryFile)) {
-    console.log(`[admin] no entry at ${dirs.adminEntryFile} — skipping admin client build`);
+/** Bundles `dirs.consoleEntryFile` (skips, logging, if it doesn't exist — apps that haven't
+ * adopted the console yet must stay unaffected) with esbuild, runs Tailwind's standalone CLI
+ * against a sibling `styles.css` if present, and writes `<generatedDir>/console/manifest.json`
+ * mapping logical names to the actual (optionally content-hashed) asset paths. `dirs.consolePath`
+ * is inlined into the bundle via esbuild's `define` (`__CONSOLE_PATH__`, declared ambiently in
+ * src/console/client/env.d.ts) — the client needs it as the router `basename` and API prefix, and
+ * has no other runtime config channel (it's served as a static bundle, including from a pure edge
+ * CDN with no per-request server involved). Changing `consolePath` therefore requires a rebuild. */
+export async function buildConsoleClient(dirs: Dirs, options: BuildConsoleClientOptions): Promise<ConsoleClientHandle> {
+  if (!existsSync(dirs.consoleEntryFile)) {
+    console.log(`[console] no entry at ${dirs.consoleEntryFile} — skipping console client build`);
     return NOOP_HANDLE;
   }
 
-  const adminDir = path.join(dirs.generatedDir, 'admin');
-  const assetsDir = path.join(adminDir, 'assets');
+  const consoleDir = path.join(dirs.generatedDir, 'console');
+  const assetsDir = path.join(consoleDir, 'assets');
   await mkdir(assetsDir, { recursive: true });
 
-  const cssEntry = cssEntryFor(dirs.adminEntryFile);
+  const cssEntry = cssEntryFor(dirs.consoleEntryFile);
   const manifest: Record<string, string> = {};
 
   const esbuildOptions: esbuild.BuildOptions = {
-    entryPoints: { main: dirs.adminEntryFile },
+    entryPoints: { main: dirs.consoleEntryFile },
     bundle: true,
     outdir: assetsDir,
     entryNames: options.mode === 'prod' ? '[name]-[hash]' : '[name]',
@@ -80,13 +84,14 @@ export async function buildAdminClient(dirs: Dirs, options: BuildAdminClientOpti
     minify: options.mode === 'prod',
     metafile: true,
     logLevel: 'info',
+    define: { __CONSOLE_PATH__: JSON.stringify(dirs.consolePath) },
   };
 
   if (options.mode === 'dev') {
     // Fixed filenames in dev (Q5) — write the manifest once, up front, no metafile parsing needed.
     manifest['main.js'] = 'assets/main.js';
     if (cssEntry) manifest['main.css'] = 'assets/main.css';
-    await writeFile(path.join(adminDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+    await writeFile(path.join(consoleDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
     const ctx = await esbuild.context(esbuildOptions);
     await ctx.watch();
@@ -106,8 +111,8 @@ export async function buildAdminClient(dirs: Dirs, options: BuildAdminClientOpti
   const jsOutput = Object.keys(result.metafile!.outputs).find(
     (file) => file.endsWith('.js') && result.metafile!.outputs[file]!.entryPoint,
   );
-  if (!jsOutput) throw new Error('esbuild produced no JS output for the admin client entry');
-  manifest['main.js'] = path.relative(adminDir, jsOutput);
+  if (!jsOutput) throw new Error('esbuild produced no JS output for the console client entry');
+  manifest['main.js'] = path.relative(consoleDir, jsOutput);
 
   if (cssEntry) {
     const tmpCss = path.join(assetsDir, 'main.css');
@@ -115,16 +120,18 @@ export async function buildAdminClient(dirs: Dirs, options: BuildAdminClientOpti
     const hash = await hashFile(tmpCss);
     const hashedCss = path.join(assetsDir, `main-${hash}.css`);
     await rename(tmpCss, hashedCss);
-    manifest['main.css'] = path.relative(adminDir, hashedCss);
+    manifest['main.css'] = path.relative(consoleDir, hashedCss);
   }
 
-  await writeFile(path.join(adminDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  await writeFile(path.join(consoleDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
   return NOOP_HANDLE;
 }
 
 /** Edge-runtime groundwork only (see plan Context) — bundles a generated, statically-importing
  * server entry into one file. Does NOT change `ratchet serve`/`ratchet dev`'s runtime behavior,
- * which keep loading the registry dynamically via tsx. */
+ * which keep loading the registry dynamically via tsx. `/api/auth` and `/api` are registered
+ * before the console router so they keep precedence when `consolePath` is '/' (the console's own
+ * catch-all would otherwise swallow every path — see `FrameworkConfig.consolePath`). */
 export async function buildServerBundle(cwd: string, dirs: Dirs): Promise<void> {
   const entrySrc = [
     `// GENERATED by \`ratchet build\` — do not edit.`,
@@ -134,8 +141,8 @@ export async function buildServerBundle(cwd: string, dirs: Dirs): Promise<void> 
     `import postgres from 'postgres';`,
     `import { createApiRouter, buildRegistryMap } from 'ratchet/router';`,
     `import { createAuthRouter } from 'ratchet/auth';`,
-    `import { createAdminRouter } from 'ratchet/admin';`,
-    `import { createNodeFsAssetSource } from 'ratchet/admin/node';`,
+    `import { createConsoleRouter } from 'ratchet/console';`,
+    `import { createNodeFsAssetSource } from 'ratchet/console/node';`,
     `import * as registryModule from './registry.js';`,
     ``,
     `const connectionString = process.env.DATABASE_URL!;`,
@@ -144,9 +151,9 @@ export async function buildServerBundle(cwd: string, dirs: Dirs): Promise<void> 
     `const db = drizzle(client);`,
     ``,
     `const app = new Hono();`,
-    `app.route('/admin', createAdminRouter(createNodeFsAssetSource(${JSON.stringify(path.relative(cwd, dirs.generatedDir))}), registry, db));`,
     `app.route('/api/auth', createAuthRouter(db));`,
     `app.route('/api', createApiRouter(registry, db));`,
+    `app.route(${JSON.stringify(dirs.consolePath)}, createConsoleRouter(createNodeFsAssetSource(${JSON.stringify(path.relative(cwd, dirs.generatedDir))}), registry, db, ${JSON.stringify(dirs.consolePath)}));`,
     ``,
     `const port = Number(process.env.PORT ?? 3000);`,
     `serve({ fetch: app.fetch, port }, (info) => {`,

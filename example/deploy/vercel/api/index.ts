@@ -11,9 +11,9 @@
  * pooled connection string (and `drizzle-orm/postgres-js`) if you're not on Neon and your provider
  * already pools for you.
  *
- * `/admin` is intentionally not mounted here: Vercel serves static files under `public/` straight
- * from its CDN, with no function invocation at all, which is a better fit for the admin SPA's
- * built assets than routing them through this function — see `vercel.json` / deploy.md.
+ * The console is intentionally not mounted here: Vercel serves static files under `public/`
+ * straight from its CDN, with no function invocation at all, which is a better fit for the
+ * console SPA's built assets than routing them through this function — see `vercel.json` / deploy.md.
  */
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/neon-http';

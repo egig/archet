@@ -4,7 +4,7 @@ import { generate } from '../../codegen/generate.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
 import { writeDrizzleKitConfig } from '../drizzle-kit-config.js';
 import { runDrizzleKit } from '../run-drizzle-kit.js';
-import { buildAdminClient, type AdminClientHandle } from '../build-admin.js';
+import { buildConsoleClient, type ConsoleClientHandle } from '../build-console.js';
 
 const DEBOUNCE_MS = 200;
 
@@ -76,7 +76,7 @@ export async function runDev(cwd: string): Promise<void> {
 
   await generateAndPush(cwd, dirs);
   startServer();
-  const adminHandle: AdminClientHandle = await buildAdminClient(dirs, { watch: true, mode: 'dev' });
+  const consoleHandle: ConsoleClientHandle = await buildConsoleClient(dirs, { watch: true, mode: 'dev' });
   console.log(`[dev] watching ${dirs.modelsDir} for changes`);
 
   let debounceTimer: NodeJS.Timeout | undefined;
@@ -89,7 +89,7 @@ export async function runDev(cwd: string): Promise<void> {
   const shutdown = async () => {
     clearTimeout(debounceTimer);
     await stopServer();
-    await adminHandle.stop();
+    await consoleHandle.stop();
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown());

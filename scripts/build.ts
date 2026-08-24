@@ -4,14 +4,14 @@ import { spawnSync } from 'node:child_process';
 import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const SRC_DIRS = ['core', 'cli', 'codegen', 'router', 'auth', 'admin'];
+const SRC_DIRS = ['core', 'cli', 'codegen', 'router', 'auth', 'console'];
 
 function walk(dir: string, out: string[]): string[] {
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
     if (statSync(full).isDirectory()) {
       walk(full, out);
-    } else if (/\.(ts|tsx)$/.test(entry) && !entry.endsWith('.test.ts')) {
+    } else if (/\.(ts|tsx)$/.test(entry) && !entry.endsWith('.test.ts') && !entry.endsWith('.d.ts')) {
       out.push(full);
     }
   }

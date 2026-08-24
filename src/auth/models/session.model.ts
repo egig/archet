@@ -8,7 +8,7 @@ import { requireAuth, requirePermission } from '../pipeline.js';
  */
 export const Session = defineModel('sessions', {
   fields: {
-    userId: field.reference('users', { required: true, indexed: true }),
+    userId: field.reference('users', { required: true, indexed: true, displayText: 'User' }),
     token: field.string({ required: true, unique: true, indexed: true, maxLength: 255 }),
     expiresAt: field.datetime({ required: true, indexed: true }),
   },
@@ -17,5 +17,5 @@ export const Session = defineModel('sessions', {
     update: pipe(requireAuth, requirePermission('sessions', 'update'), validate, persist),
     remove: pipe(requireAuth, requirePermission('sessions', 'remove'), persist.remove),
   },
-  admin: { hidden: true },
+  console: { hidden: true },
 });

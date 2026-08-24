@@ -40,7 +40,7 @@ async function issueSession(db: AnyDb, userId: string) {
   return session.token;
 }
 
-/** Mirrors the token onto an `HttpOnly` cookie so the admin SPA (no manual header injection)
+/** Mirrors the token onto an `HttpOnly` cookie so the console SPA (no manual header injection)
  * and non-browser API clients (the `Authorization` header, still returned in the body) both
  * work. `Secure` is conditional on the request's own protocol — hardcoding it on would break
  * plain-http `ratchet dev`. */

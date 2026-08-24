@@ -20,6 +20,6 @@ features:
     details: Every model gets GET/POST/PATCH/DELETE at /api/:model for free — filtering, sorting, cursor and offset pagination, and ?include= relations included.
   - title: Composable pipelines
     details: create/update/remove are just pipe(...) chains of small functions around validate and persist — insert your own business logic anywhere in the chain.
-  - title: Auth and admin, batteries included
-    details: Session-based auth (register/login/logout/me), role/permission checks, and a generated admin SPA ship with the framework.
+  - title: Auth and console, batteries included
+    details: Session-based auth (register/login/logout/me), role/permission checks, and a generated console SPA ship with the framework.
 ---

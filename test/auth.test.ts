@@ -11,8 +11,8 @@ import { hashPassword as hashPasswordPipeline } from '../src/auth/pipeline.js';
 import { User, Role, Permission, Session } from '../src/auth/models/index.js';
 import { createAuthRouter } from '../src/auth/router.js';
 import { createApiRouter } from '../src/router/create-router.js';
-import { createAdminRouter } from '../src/admin/router.js';
-import { createNodeFsAssetSource } from '../src/admin/node-assets.js';
+import { createConsoleRouter } from '../src/console/router.js';
+import { createNodeFsAssetSource } from '../src/console/node-assets.js';
 
 describe('password hashing (src/auth/password.ts)', () => {
   it('hashes and verifies a round trip', async () => {
@@ -54,14 +54,14 @@ describeIfDb('auth system (against a live Postgres)', () => {
   let db: PgDatabase<any, any, any>;
   let authApp: ReturnType<typeof createAuthRouter>;
   let apiApp: ReturnType<typeof createApiRouter>;
-  let adminApp: ReturnType<typeof createAdminRouter>;
+  let consoleApp: ReturnType<typeof createConsoleRouter>;
 
   const Widget = defineModel('widgets', {
     fields: {
       name: field.string({ required: true }),
       ownerId: field.reference('users', { required: false }),
     },
-    admin: { label: 'Widgets', displayField: 'name' },
+    console: { label: 'Widgets', displayField: 'name' },
   });
 
   beforeAll(async () => {
@@ -91,10 +91,11 @@ describeIfDb('auth system (against a live Postgres)', () => {
 
     authApp = createAuthRouter(db);
     apiApp = createApiRouter({ roles: Role, permissions: Permission, users: User }, db);
-    adminApp = createAdminRouter(
+    consoleApp = createConsoleRouter(
       createNodeFsAssetSource('.ratchet-test'),
       { users: User, roles: Role, permissions: Permission, sessions: Session, widgets: Widget },
       db,
+      '/console',
     );
   });
 
@@ -375,15 +376,15 @@ describeIfDb('auth system (against a live Postgres)', () => {
     expect(((await allowed.json()) as { data: { name: string } }).data.name).toBe('editor');
   });
 
-  describe('admin metadata API (src/admin/router.ts)', () => {
-    it('GET /api/models requires auth', async () => {
-      const res = await adminApp.request('/api/models');
+  describe('console metadata API (src/console/router.ts)', () => {
+    it('GET /meta/models requires auth', async () => {
+      const res = await consoleApp.request('/meta/models');
       expect(res.status).toBe(401);
     });
 
     it('lists non-hidden models with admin label/displayField, excludes the hidden Session model', async () => {
       const { token } = await registerUser('models@example.com', 'pw');
-      const res = await adminApp.request('/api/models', { headers: { authorization: `Bearer ${token}` } });
+      const res = await consoleApp.request('/meta/models', { headers: { authorization: `Bearer ${token}` } });
       expect(res.status).toBe(200);
       const body = (await res.json()) as { data: { name: string; label: string; displayField: string }[] };
 
@@ -397,12 +398,12 @@ describeIfDb('auth system (against a live Postgres)', () => {
       expect(widgets.displayField).toBe('name');
 
       const users = body.data.find((m) => m.name === 'users')!;
-      expect(users.displayField).toBe('id'); // no admin.displayField declared -> defaults to 'id'
+      expect(users.displayField).toBe('email'); // no console.displayField declared -> infers first string field
     });
 
     it("strips operations/zod-schema and exposes passwordHash's writeAs", async () => {
       const { token } = await registerUser('meta@example.com', 'pw');
-      const res = await adminApp.request('/api/models/users', { headers: { authorization: `Bearer ${token}` } });
+      const res = await consoleApp.request('/meta/models/users', { headers: { authorization: `Bearer ${token}` } });
       const body = (await res.json()) as { data: { fields: { key: string; sensitive: boolean; writeAs?: string }[] } };
 
       const passwordHash = body.data.fields.find((f) => f.key === 'passwordHash')!;
@@ -411,11 +412,11 @@ describeIfDb('auth system (against a live Postgres)', () => {
       expect(JSON.stringify(body.data)).not.toMatch(/operations/);
     });
 
-    it('GET /api/models/:name 404s for a hidden model, matching an unknown model', async () => {
+    it('GET /meta/models/:name 404s for a hidden model, matching an unknown model', async () => {
       const { token } = await registerUser('hidden@example.com', 'pw');
-      const hidden = await adminApp.request('/api/models/sessions', { headers: { authorization: `Bearer ${token}` } });
+      const hidden = await consoleApp.request('/meta/models/sessions', { headers: { authorization: `Bearer ${token}` } });
       expect(hidden.status).toBe(404);
-      const unknown = await adminApp.request('/api/models/nope', { headers: { authorization: `Bearer ${token}` } });
+      const unknown = await consoleApp.request('/meta/models/nope', { headers: { authorization: `Bearer ${token}` } });
       expect(unknown.status).toBe(404);
     });
   });
