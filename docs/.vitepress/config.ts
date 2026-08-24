@@ -31,6 +31,7 @@ export default defineConfig({
           { text: 'REST API', link: '/guide/router' },
           { text: 'Auth', link: '/guide/auth' },
           { text: 'Admin Panel', link: '/guide/admin' },
+          { text: 'Deploying', link: '/guide/deploy' },
         ],
       },
     ],

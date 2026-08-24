@@ -1,36 +1,56 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual, type ScryptOptions } from 'node:crypto';
+const PBKDF2_ITERATIONS = 600_000; // OWASP-current guidance for PBKDF2-SHA256
+const SALT_BYTES = 16;
+const KEY_LENGTH_BITS = 256;
 
-function scrypt(password: string, salt: Buffer, keylen: number, options: ScryptOptions): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    scryptCallback(password, salt, keylen, options, (err, derivedKey) => {
-      if (err) reject(err);
-      else resolve(derivedKey);
-    });
-  });
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const SCRYPT_N = 16384;
-const SCRYPT_R = 8;
-const SCRYPT_P = 1;
-const KEY_LENGTH = 64;
+function fromHex(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
 
-/** Encodes as `scrypt:N:r:p:<saltHex>:<hashHex>` so params can change later without breaking
- * verification of hashes created under older params. */
+async function deriveKey(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+  const keyMaterial = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, [
+    'deriveBits',
+  ]);
+  const derived = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: salt as BufferSource, iterations, hash: 'SHA-256' },
+    keyMaterial,
+    KEY_LENGTH_BITS,
+  );
+  return new Uint8Array(derived);
+}
+
+/** Constant-time compare — Web Crypto has no `timingSafeEqual` equivalent. */
+function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
+  return diff === 0;
+}
+
+/** Encodes as `pbkdf2:<iterations>:<saltHex>:<hashHex>` so the iteration count can be raised later
+ * without breaking verification of hashes created under a lower count. Built entirely on Web Crypto
+ * (`crypto.subtle`) rather than `node:crypto`'s scrypt so hashing behaves identically on Node, Cloudflare
+ * Workers, Vercel Edge, Deno, and Bun — none of which expose scrypt through a standard API. */
 export async function hashPassword(plain: string): Promise<string> {
-  const salt = randomBytes(16);
-  const derived = await scrypt(plain, salt, KEY_LENGTH, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P });
-  return `scrypt:${SCRYPT_N}:${SCRYPT_R}:${SCRYPT_P}:${salt.toString('hex')}:${derived.toString('hex')}`;
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const derived = await deriveKey(plain, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2:${PBKDF2_ITERATIONS}:${toHex(salt)}:${toHex(derived)}`;
 }
 
 export async function verifyPassword(plain: string, encoded: string): Promise<boolean> {
   const parts = encoded.split(':');
-  if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
-  const [, nRaw, rRaw, pRaw, saltHex, hashHex] = parts as [string, string, string, string, string, string];
-  const N = Number.parseInt(nRaw, 10);
-  const r = Number.parseInt(rRaw, 10);
-  const p = Number.parseInt(pRaw, 10);
-  const salt = Buffer.from(saltHex, 'hex');
-  const expected = Buffer.from(hashHex, 'hex');
-  const derived = await scrypt(plain, salt, expected.length, { N, r, p });
-  return derived.length === expected.length && timingSafeEqual(derived, expected);
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
+  const [, iterationsRaw, saltHex, hashHex] = parts as [string, string, string, string];
+  const iterations = Number.parseInt(iterationsRaw, 10);
+  const salt = fromHex(saltHex);
+  const expected = fromHex(hashHex);
+  const derived = await deriveKey(plain, salt, iterations);
+  return timingSafeEqual(derived, expected);
 }

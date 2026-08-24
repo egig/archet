@@ -12,11 +12,12 @@ import { User, Role, Permission, Session } from '../src/auth/models/index.js';
 import { createAuthRouter } from '../src/auth/router.js';
 import { createApiRouter } from '../src/router/create-router.js';
 import { createAdminRouter } from '../src/admin/router.js';
+import { createNodeFsAssetSource } from '../src/admin/node-assets.js';
 
 describe('password hashing (src/auth/password.ts)', () => {
   it('hashes and verifies a round trip', async () => {
     const hash = await hashPassword('correct horse battery staple');
-    expect(hash).toMatch(/^scrypt:\d+:\d+:\d+:[0-9a-f]+:[0-9a-f]+$/);
+    expect(hash).toMatch(/^pbkdf2:\d+:[0-9a-f]+:[0-9a-f]+$/);
     expect(await verifyPassword('correct horse battery staple', hash)).toBe(true);
   });
 
@@ -91,7 +92,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
     authApp = createAuthRouter(db);
     apiApp = createApiRouter({ roles: Role, permissions: Permission, users: User }, db);
     adminApp = createAdminRouter(
-      '.ratchet-test',
+      createNodeFsAssetSource('.ratchet-test'),
       { users: User, roles: Role, permissions: Permission, sessions: Session, widgets: Widget },
       db,
     );

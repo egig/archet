@@ -9,6 +9,7 @@ import { createApiRouter } from '../../router/create-router.js';
 import { buildRegistryMap } from '../../router/registry-map.js';
 import { createAuthRouter } from '../../auth/router.js';
 import { createAdminRouter } from '../../admin/router.js';
+import { createNodeFsAssetSource } from '../../admin/node-assets.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
 
 /**
@@ -31,7 +32,7 @@ export async function runServe(cwd: string): Promise<ServerType> {
   const db = drizzle(client);
 
   const app = new Hono();
-  app.route('/admin', createAdminRouter(generatedDir, registry, db));
+  app.route('/admin', createAdminRouter(createNodeFsAssetSource(generatedDir), registry, db));
   // more specific prefix first: `/api/auth/*` must win over the generic `/api/:model` pattern.
   app.route('/api/auth', createAuthRouter(db));
   app.route('/api', createApiRouter(registry, db));

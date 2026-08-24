@@ -12,7 +12,8 @@
     "./router": "./dist/router/index.js",
     "./auth": "./dist/auth/index.js",
     "./admin": "./dist/admin/index.js",
-    "./admin/client": "./dist/admin/client/index.js"
+    "./admin/client": "./dist/admin/client/index.js",
+    "./admin/node": "./dist/admin/node-assets.js"
   },
   "scripts": {
     "build": "tsx scripts/build.ts",
@@ -41,6 +42,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

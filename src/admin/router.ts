@@ -1,7 +1,4 @@
-import path from 'node:path';
-import { readFileSync, existsSync } from 'node:fs';
 import { Hono, type Context } from 'hono';
-import { serveStatic } from '@hono/node-server/serve-static';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from '../core/model.js';
 import { PipelineError } from '../core/pipeline.js';
@@ -11,15 +8,22 @@ import { serializeModelMeta } from './serialize-model.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
-interface AdminManifest {
+export interface AdminManifest {
   'main.js': string;
   'main.css'?: string;
 }
 
-function loadManifest(generatedDir: string): AdminManifest | null {
-  const manifestFile = path.join(generatedDir, 'admin', 'manifest.json');
-  if (!existsSync(manifestFile)) return null;
-  return JSON.parse(readFileSync(manifestFile, 'utf8')) as AdminManifest;
+export interface AdminAsset {
+  body: BodyInit;
+  contentType: string;
+}
+
+/** Lets `createAdminRouter` serve the admin SPA's shell and built assets without assuming a local
+ * filesystem — Node's default (`ratchet/admin/node`) reads `<generatedDir>/admin` off disk; an edge
+ * deploy supplies its own (a platform assets binding, KV/R2, bundled imports, ...). */
+export interface AdminAssetSource {
+  getManifest(): Promise<AdminManifest | null>;
+  getAsset(assetPath: string): Promise<AdminAsset | null>;
 }
 
 function renderShell(manifest: AdminManifest): string {
@@ -45,9 +49,9 @@ function renderShell(manifest: AdminManifest): string {
   ].join('\n');
 }
 
-function serveShell(generatedDir: string) {
-  return (c: Context) => {
-    const manifest = loadManifest(generatedDir);
+function serveShell(assetSource: AdminAssetSource) {
+  return async (c: Context) => {
+    const manifest = await assetSource.getManifest();
     if (!manifest) {
       return c.text(
         'admin UI not built yet — run `ratchet build` or `ratchet dev` (requires an admin/client/main.tsx entry)',
@@ -58,13 +62,23 @@ function serveShell(generatedDir: string) {
   };
 }
 
-/** `/admin/*` — serves the admin UI shell + its built assets (resolved via the manifest
- * `ratchet build`/`ratchet dev` write to `<generatedDir>/admin/manifest.json`, see
- * src/cli/build-admin.ts), plus a small `/admin/api/models[/:name]` metadata API the admin SPA
+/** `app.route('/admin', ...)` (see e.g. src/cli/commands/serve.ts) prefixes route *matching* but
+ * doesn't rewrite `c.req.path` — strip the prefix ourselves so what we hand `assetSource` is the
+ * path relative to `/admin/assets/`, regardless of where this router got mounted. */
+function assetPathFrom(c: Context): string {
+  return c.req.path.replace(/^\/admin/, '').replace(/^\/assets\//, '');
+}
+
+/** `/admin/*` — serves the admin UI shell + its built assets (resolved via `assetSource`, see
+ * `AdminAssetSource` above), plus a small `/admin/api/models[/:name]` metadata API the admin SPA
  * uses to render its sidebar and dynamically-generated CRUD views — driven by the same registry
  * map `createApiRouter` (src/router/create-router.ts) uses for `/api/:model`, so the two never
  * drift. Mirrors src/auth/router.ts's `createXRouter(...) -> Hono` shape. */
-export function createAdminRouter(generatedDir: string, registry: Record<string, ModelDefinition>, db: AnyDb): Hono {
+export function createAdminRouter(
+  assetSource: AdminAssetSource,
+  registry: Record<string, ModelDefinition>,
+  db: AnyDb,
+): Hono {
   const app = new Hono();
 
   app.onError((err, c) => {
@@ -87,20 +101,16 @@ export function createAdminRouter(generatedDir: string, registry: Record<string,
     return c.json({ data: serializeModelMeta(model) });
   });
 
-  app.use(
-    '/assets/*',
-    serveStatic({
-      root: path.relative(process.cwd(), path.join(generatedDir, 'admin')),
-      // `app.route('/admin', ...)` in serve.ts prefixes matching but not `c.req.path` — strip it
-      // ourselves so `root` + rewritten path lands on `<generatedDir>/admin/assets/...`.
-      rewriteRequestPath: (p) => p.replace(/^\/admin/, ''),
-    }),
-  );
+  app.get('/assets/*', async (c) => {
+    const asset = await assetSource.getAsset(assetPathFrom(c));
+    if (!asset) return c.notFound();
+    return new Response(asset.body, { headers: { 'content-type': asset.contentType } });
+  });
 
   // catch-all, not just `/`: the SPA uses react-router's BrowserRouter (client-side, path-based
   // routes like `/admin/customers/:id`), so a hard refresh/deep link on any of those paths must
   // still resolve to the same shell — routing itself happens in the browser after it loads.
-  app.get('/*', serveShell(generatedDir));
+  app.get('/*', serveShell(assetSource));
 
   return app;
 }

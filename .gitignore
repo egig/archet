@@ -8,4 +8,9 @@ docs/.vitepress/dist/
 # example/app content — this repo tracks the ratchet framework itself (src/core, src/cli,
 # src/codegen, src/router), not an app built on it. This directory exists on disk for local
 # dogfooding (see DESIGN.md) but shouldn't be committed to the framework's own history.
-/example/
+# (`/example/*`, not `/example/`, so the `!/example/deploy/` exception below can actually apply —
+# git can't re-include a path whose parent directory itself was excluded wholesale.)
+/example/*
+# ...except the deploy templates (docs/guide/deploy.md links to these) — reference code for
+# framework users, not disposable dogfooding output.
+!/example/deploy/
