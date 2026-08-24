@@ -16,6 +16,7 @@ export interface AdminFieldMeta {
   scale?: number;
   values?: readonly string[];
   targetModel?: string;
+  allowWildcard?: boolean;
 }
 
 export interface AdminModelMeta {
@@ -23,6 +24,10 @@ export interface AdminModelMeta {
   label: string;
   displayField: string;
   fields: AdminFieldMeta[];
+  /** this model's real operation names (`Object.keys(model.operations)`, always
+   * create/update/remove today) — read by an `actionRef` field's dropdown so it lists actual
+   * operations instead of a hardcoded set (see `admin/client/fields.tsx`). */
+  operationNames: string[];
 }
 
 function humanize(name: string): string {
@@ -47,6 +52,7 @@ function serializeField(key: string, f: ModelDefinition['fields'][string]): Admi
   }
   if (f.kind === 'enum') meta.values = f.values;
   if (f.kind === 'reference') meta.targetModel = f.targetModel;
+  if (f.kind === 'modelRef' || f.kind === 'actionRef') meta.allowWildcard = f.allowWildcard;
   return meta;
 }
 
@@ -60,5 +66,6 @@ export function serializeModelMeta(model: ModelDefinition): AdminModelMeta {
     label: model.admin?.label ?? humanize(model.name),
     displayField: model.admin?.displayField ?? 'id',
     fields: Object.entries(model.fields).map(([key, f]) => serializeField(key, f)),
+    operationNames: Object.keys(model.operations),
   };
 }

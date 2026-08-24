@@ -66,7 +66,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
   app.post('/:model', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     const input = await readJsonBody(c);
-    const ctx: OperationContext = { operation: 'create', input, doc: null, model, db, request: c.req.raw };
+    const ctx: OperationContext = { operation: 'create', input, doc: null, model, db, request: c.req.raw, registry };
     const result = await model.operations.create(ctx);
     return c.json({ data: result.doc && redactSensitiveFields(model, result.doc) }, 201);
   });
@@ -82,6 +82,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       model,
       db,
       request: c.req.raw,
+      registry,
     };
     const result = await model.operations.update(ctx);
     return c.json({ data: result.doc && redactSensitiveFields(model, result.doc) });
@@ -97,6 +98,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       model,
       db,
       request: c.req.raw,
+      registry,
     };
     const result = await model.operations.remove(ctx);
     return c.json({ data: result.doc && redactSensitiveFields(model, result.doc) });

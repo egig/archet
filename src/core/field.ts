@@ -65,6 +65,27 @@ export interface ReferenceFieldDefinition extends BaseFieldDefinition {
   targetModel: string;
 }
 
+/** Names a model itself (e.g. `'users'`), not a row within one — unlike `ReferenceFieldDefinition`
+ * there's no fixed `targetModel`: any model in the app's registry is a valid value. Validation
+ * against the live registry happens at request time (see `ratchet/auth`'s `requireValidPermissionTarget`),
+ * not here — `baseSchemaForField` treats it as a plain string, since no registry exists yet when a
+ * model file's static field definitions are evaluated. `allowWildcard` is UI-only metadata (see
+ * `AdminFieldMeta`/`fields.tsx`): it doesn't loosen validation, it just tells the admin form
+ * whether to offer a `*` option alongside real model names. */
+export interface ModelRefFieldDefinition extends BaseFieldDefinition {
+  kind: 'modelRef';
+  allowWildcard: boolean;
+}
+
+/** Names an *operation* (e.g. `'create'`) rather than declaring a fixed set of them — the real
+ * set is whichever operation names actually exist across the app's models, read from the live
+ * registry at request time (see `ratchet/auth`'s `requireValidPermissionTarget`), the same way
+ * `ModelRefFieldDefinition` reads model names. `allowWildcard` mirrors `ModelRefFieldDefinition`'s. */
+export interface ActionRefFieldDefinition extends BaseFieldDefinition {
+  kind: 'actionRef';
+  allowWildcard: boolean;
+}
+
 export type FieldDefinition =
   | StringFieldDefinition
   | TextFieldDefinition
@@ -74,7 +95,9 @@ export type FieldDefinition =
   | DatetimeFieldDefinition
   | EnumFieldDefinition
   | JsonFieldDefinition
-  | ReferenceFieldDefinition;
+  | ReferenceFieldDefinition
+  | ModelRefFieldDefinition
+  | ActionRefFieldDefinition;
 
 function assertNoRequiredDefaultConflict(opts: FieldCommonOptions): void {
   if (opts.required && opts.default !== undefined) {
@@ -137,5 +160,13 @@ export const field = {
 
   reference(targetModel: string, opts: FieldCommonOptions<string> = {}): ReferenceFieldDefinition {
     return { ...base(opts), kind: 'reference', targetModel };
+  },
+
+  modelRef(opts: { allowWildcard?: boolean } & FieldCommonOptions<string> = {}): ModelRefFieldDefinition {
+    return { ...base(opts), kind: 'modelRef', allowWildcard: opts.allowWildcard ?? false };
+  },
+
+  actionRef(opts: { allowWildcard?: boolean } & FieldCommonOptions<string> = {}): ActionRefFieldDefinition {
+    return { ...base(opts), kind: 'actionRef', allowWildcard: opts.allowWildcard ?? false };
   },
 };

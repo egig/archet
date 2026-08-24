@@ -40,6 +40,8 @@ const OPERATORS_BY_KIND: Record<ColumnKind, ReadonlySet<string>> = {
   datetime: new Set(['=', '!=', '>', '>=', '<', '<=', 'is']),
   enum: new Set(['=', '!=', 'in', 'is']),
   reference: new Set(['=', '!=', 'in', 'is']),
+  modelRef: new Set(['=', '!=', 'in', 'is']),
+  actionRef: new Set(['=', '!=', 'in', 'is']),
   uuid: new Set(['=', '!=', 'in', 'is']),
   json: new Set([]),
 };

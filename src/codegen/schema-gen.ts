@@ -43,6 +43,12 @@ function columnExpr(key: string, f: FieldDefinition): string {
       // Q6: RESTRICT — refuse a hard-delete that would orphan referencing rows.
       expr = `uuid('${col}').references(() => ${tableVar(f.targetModel)}.id, { onDelete: 'restrict' })`;
       break;
+    case 'modelRef':
+    case 'actionRef':
+      // like 'enum': no length cap — real value enforcement is a per-request registry check,
+      // not something the schema can express (see core/validation.ts).
+      expr = `varchar('${col}')`;
+      break;
   }
   if (f.required || f.default !== undefined) expr += '.notNull()';
   if (f.default !== undefined) expr += `.default(${JSON.stringify(f.default)})`;

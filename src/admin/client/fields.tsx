@@ -55,6 +55,7 @@ export interface FieldInputProps {
 
 export function FieldInput({ field, inputKey, value, onChange, error, mode }: FieldInputProps) {
   const referenceOptions = useReferenceOptions(field.kind === 'reference' ? field.targetModel : undefined);
+  const { models: modelRefOptions } = useModels();
   const required = field.writeAs ? mode === 'create' && field.required : field.required;
 
   const errorEl = error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null;
@@ -170,6 +171,44 @@ export function FieldInput({ field, inputKey, value, onChange, error, mode }: Fi
           ))}
         </select>,
       );
+
+    case 'modelRef':
+      return wrap(
+        <select
+          required={required}
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(inputKey, e.target.value)}
+          className={inputClass}
+        >
+          {!required && <option value="">—</option>}
+          {field.allowWildcard && <option value="*">* (all resources)</option>}
+          {modelRefOptions.map((m) => (
+            <option key={m.name} value={m.name}>
+              {m.label}
+            </option>
+          ))}
+        </select>,
+      );
+
+    case 'actionRef': {
+      const actionOptions = [...new Set(modelRefOptions.flatMap((m) => m.operationNames))].sort();
+      return wrap(
+        <select
+          required={required}
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(inputKey, e.target.value)}
+          className={inputClass}
+        >
+          {!required && <option value="">—</option>}
+          {field.allowWildcard && <option value="*">* (all actions)</option>}
+          {actionOptions.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>,
+      );
+    }
 
     case 'string':
     default:

@@ -11,6 +11,8 @@ export type {
   EnumFieldDefinition,
   JsonFieldDefinition,
   ReferenceFieldDefinition,
+  ModelRefFieldDefinition,
+  ActionRefFieldDefinition,
 } from './field.js';
 
 export { defineModel } from './model.js';
