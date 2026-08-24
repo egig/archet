@@ -15,6 +15,15 @@ export function Layout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2">
+          <NavLink
+            to="/chat"
+            className={({ isActive }) =>
+              `block px-4 py-2 text-sm ${isActive ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`
+            }
+          >
+            Chat
+          </NavLink>
+          <div className="my-2 border-t border-gray-100" />
           {loading && <p className="px-4 py-2 text-xs text-gray-400">Loading models…</p>}
           {error && <p className="px-4 py-2 text-xs text-red-600">{error}</p>}
           {models.map((model) => (

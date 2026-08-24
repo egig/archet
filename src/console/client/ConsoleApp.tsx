@@ -7,6 +7,9 @@ import { SetupPage } from './SetupPage.js';
 import { IndexRedirect } from './IndexRedirect.js';
 import { ModelListPage } from './ModelListPage.js';
 import { ModelFormPage } from './ModelFormPage.js';
+import { ChatPage } from './ChatPage.js';
+import { ChatEmptyState } from './ChatEmptyState.js';
+import { ChatThread } from './ChatThread.js';
 
 export function ConsoleApp() {
   return (
@@ -18,6 +21,10 @@ export function ConsoleApp() {
           <Route element={<RequireAuth />}>
             <Route element={<Layout />}>
               <Route index element={<IndexRedirect />} />
+              <Route path="chat" element={<ChatPage />}>
+                <Route index element={<ChatEmptyState />} />
+                <Route path=":chatId" element={<ChatThread />} />
+              </Route>
               <Route path=":model" element={<ModelListPage />} />
               <Route path=":model/new" element={<ModelFormPage />} />
               <Route path=":model/:id" element={<ModelFormPage />} />

@@ -18,6 +18,7 @@
     "./core": "./dist/core/index.js",
     "./router": "./dist/router/index.js",
     "./auth": "./dist/auth/index.js",
+    "./automation": "./dist/automation/index.js",
     "./console": "./dist/console/index.js",
     "./console/client": "./dist/console/client/index.js",
     "./console/node": "./dist/console/node-assets.js"
@@ -33,16 +34,19 @@
     "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@hono/node-server": "^1.13.7",
     "@tailwindcss/cli": "^4.3.3",
     "commander": "^12.1.0",
     "drizzle-orm": "^0.36.4",
     "esbuild": "^0.28.2",
     "hono": "^4.6.14",
+    "openai": "^7.5.0",
     "postgres": "^3.4.5",
     "react-router": "^8.3.0",
     "uuidv7": "^1.0.2",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.25.2"
   },
   "peerDependencies": {
     "react": "^19.0.0",

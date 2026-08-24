@@ -1,16 +1,20 @@
 import { User, Role, Permission, Session } from '../auth/models/index.js';
+import { Agent, Chat, Message } from '../automation/models/index.js';
 import type { ScannedModel } from './scan.js';
 
 /**
- * The framework's own User/Role/Permission/Session models (src/auth/models/*.model.ts) — always
- * part of the model graph `generate()` builds from, without a consuming app declaring them under
- * `models/`. Unlike a scanned user model, there's no on-disk `filePath` to import from at
- * codegen time; `registry-gen.ts`/`validators-gen.ts` special-case `builtin: true` to import
- * these from the `@egig/ratchet/auth` package specifier instead.
+ * The framework's own built-in models — always part of the model graph `generate()` builds
+ * from, without a consuming app declaring them under `models/`. Unlike a scanned user model,
+ * there's no on-disk `filePath` to import from at codegen time; `registry-gen.ts`/
+ * `validators-gen.ts` special-case a set `builtinPackage` to import from that package specifier
+ * instead of a relative path.
  */
 export const BUILTIN_MODELS: ScannedModel[] = [
-  { filePath: '@egig/ratchet/auth (User)', exportName: 'User', model: User, builtin: true },
-  { filePath: '@egig/ratchet/auth (Role)', exportName: 'Role', model: Role, builtin: true },
-  { filePath: '@egig/ratchet/auth (Permission)', exportName: 'Permission', model: Permission, builtin: true },
-  { filePath: '@egig/ratchet/auth (Session)', exportName: 'Session', model: Session, builtin: true },
+  { filePath: '@egig/ratchet/auth (User)', exportName: 'User', model: User, builtinPackage: '@egig/ratchet/auth' },
+  { filePath: '@egig/ratchet/auth (Role)', exportName: 'Role', model: Role, builtinPackage: '@egig/ratchet/auth' },
+  { filePath: '@egig/ratchet/auth (Permission)', exportName: 'Permission', model: Permission, builtinPackage: '@egig/ratchet/auth' },
+  { filePath: '@egig/ratchet/auth (Session)', exportName: 'Session', model: Session, builtinPackage: '@egig/ratchet/auth' },
+  { filePath: '@egig/ratchet/automation (Agent)', exportName: 'Agent', model: Agent, builtinPackage: '@egig/ratchet/automation' },
+  { filePath: '@egig/ratchet/automation (Chat)', exportName: 'Chat', model: Chat, builtinPackage: '@egig/ratchet/automation' },
+  { filePath: '@egig/ratchet/automation (Message)', exportName: 'Message', model: Message, builtinPackage: '@egig/ratchet/automation' },
 ];
