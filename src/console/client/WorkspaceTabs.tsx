@@ -9,11 +9,17 @@ export interface WorkspaceTabsProps {
    * agent may have opened/edited/closed tabs via its create_workspace_views/... tools during that
    * turn (agent tool calls aren't reflected live, mid-turn; see automation/tool.ts). */
   refreshSignal: number;
+  /** the model a deep-linked/refreshed form dialog is open for (parsed from the URL by
+   * `WorkspacePage`) — used only to pick which tab to activate on this component's first load, so
+   * a hard refresh on e.g. `/workspace/:id/permissions/new` reopens the "Permissions" tab instead
+   * of defaulting to the first one. Ignored once a tab has actually been activated (`activeId` is
+   * non-null), so it never fights a manual tab switch. */
+  initialModel?: string;
 }
 
 /** The tab strip + active tab's content for one workspace — add/reorder/close tabs, all backed by
  * plain `workspace_views` rows through the generic (now owner-scoped) `/api/:model` router. */
-export function WorkspaceTabs({ workspaceId, refreshSignal }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, refreshSignal, initialModel }: WorkspaceTabsProps) {
   const { models } = useModels();
   const [views, setViews] = useState<WorkspaceViewRow[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -32,7 +38,10 @@ export function WorkspaceTabs({ workspaceId, refreshSignal }: WorkspaceTabsProps
       setViews(rows);
       setActiveId((current) => {
         const wanted = preferActiveId ?? current;
-        return rows.some((v) => v.id === wanted) ? wanted! : (rows[0]?.id ?? null);
+        if (rows.some((v) => v.id === wanted)) return wanted!;
+        // first load, nothing active yet: prefer the tab the open form dialog belongs to.
+        const forModel = !current && initialModel ? rows.find((v) => v.targetModel === initialModel) : undefined;
+        return (forModel ?? rows[0])?.id ?? null;
       });
       setError(null);
     } catch (err) {

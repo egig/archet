@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, Route, Routes, useNavigate, useParams } from 'react-router';
+import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import { listRows } from './api.js';
 import { useModels } from './models.js';
 import { WorkspaceTabs } from './WorkspaceTabs.js';
@@ -21,12 +21,17 @@ interface WorkspaceOption {
 export function WorkspacePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { models } = useModels();
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[] | null>(null);
   const [refreshSignal, setRefreshSignal] = useState(0);
   // `/` now redirects straight back into the workspace (`IndexRedirect.tsx`), so this link
   // targets the first sidebar model directly — otherwise "← Console" would just loop in place.
   const consolePath = models[0] ? `/${models[0].name}` : '/';
+  // the model segment of `:model/new` or `:model/:id`, when the form dialog's sub-route is
+  // matched below — read from the URL rather than `useParams` (which only sees params declared on
+  // *this* component's own route) so `WorkspaceTabs` can restore the right tab after a refresh.
+  const openModel = workspaceId ? location.pathname.split(`/workspace/${workspaceId}/`)[1]?.split('/')[0] : undefined;
 
   useEffect(() => {
     listRows('workspaces', { limit: 100, offset: 0 })
@@ -56,7 +61,7 @@ export function WorkspacePage() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <WorkspaceTabs workspaceId={workspaceId} refreshSignal={refreshSignal} />
+        <WorkspaceTabs workspaceId={workspaceId} refreshSignal={refreshSignal} initialModel={openModel} />
         <WorkspaceChatPanel workspaceId={workspaceId} onTurnDone={() => setRefreshSignal((n) => n + 1)} />
       </div>
 
