@@ -1,4 +1,4 @@
-import { User, Role, Permission, Session, JobTitle } from '../auth/models/index.js';
+import { User, Role, Permission, Session, WorkTitle } from '../auth/models/index.js';
 import { Agent, AgentPermission, Chat, Message, Provider } from '../automation/models/index.js';
 import { AutomationDomain } from '../automation/domain.js';
 import { Workspace, WorkspaceView } from '../workspace/models/index.js';
@@ -18,7 +18,7 @@ export const BUILTIN_MODELS: ScannedModel[] = [
   { filePath: '@egig/ratchet/auth (Role)', exportName: 'Role', model: Role, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
   { filePath: '@egig/ratchet/auth (Permission)', exportName: 'Permission', model: Permission, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
   { filePath: '@egig/ratchet/auth (Session)', exportName: 'Session', model: Session, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
-  { filePath: '@egig/ratchet/auth (JobTitle)', exportName: 'JobTitle', model: JobTitle, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
+  { filePath: '@egig/ratchet/auth (WorkTitle)', exportName: 'WorkTitle', model: WorkTitle, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
   { filePath: '@egig/ratchet/automation (Provider)', exportName: 'Provider', model: Provider, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (Agent)', exportName: 'Agent', model: Agent, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (AgentPermission)', exportName: 'AgentPermission', model: AgentPermission, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },

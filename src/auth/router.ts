@@ -107,7 +107,7 @@ export function createAuthRouter(db: AnyDb): Hono {
       }
 
       const created = await insertRow(txDb, User, { email, passwordHash: await hashPasswordValue(password), roleId: role.id });
-      // root admin has no jobTitleId (there's no JobTitle yet on a fresh instance), so this is
+      // root admin has no workTitleId (there's no WorkTitle yet on a fresh instance), so this is
       // always the blank default — see `workspace/provisioning.ts`'s `createDefaultWorkspace`,
       // which this mirrors for the one user-creation path that doesn't run through a pipe().
       await insertRow(txDb, Workspace, { userId: created.id, name: DEFAULT_WORKSPACE_NAME });

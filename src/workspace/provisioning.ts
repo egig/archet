@@ -1,10 +1,10 @@
 import type { PipelineFn } from '../core/pipeline.js';
 import { fetchRow, insertRow, listRowsByField } from '../core/persistence.js';
-import { JobTitle } from '../auth/models/job-title.model.js';
+import { WorkTitle } from '../auth/models/work-title.model.js';
 import { Workspace } from './models/workspace.model.js';
 import { WorkspaceView } from './models/workspace-view.model.js';
 
-/** Name given to the `Workspace` every new `User` with no `jobTitleId` is provisioned with — see
+/** Name given to the `Workspace` every new `User` with no `workTitleId` is provisioned with — see
  * `createDefaultWorkspace` below. Kept in its own module (not `pipeline.ts`) because
  * `workspace-view.model.ts` already imports `pipeline.ts` for `requireWorkspaceOwnership` —
  * importing `WorkspaceView` back into `pipeline.ts` would make that a real import cycle. */
@@ -46,26 +46,26 @@ async function cloneWorkspaceViews(
  * `persist`, the pipeline's write boundary — core/pipeline.ts), so a failure here can't roll back
  * the user creation itself, and non-transactionally, so it can't be folded into the same insert.
  *
- * When the new user has a `jobTitleId` (`JobTitle`, `auth/models/job-title.model.ts` — every
- * `JobTitle` mandates a `workspaceTemplateId`), the provisioned `Workspace` is a clone of that
+ * When the new user has a `workTitleId` (`WorkTitle`, `auth/models/work-title.model.ts` — every
+ * `WorkTitle` mandates a `workspaceTemplateId`), the provisioned `Workspace` is a clone of that
  * template's tabs rather than a blank one, so the user lands on a view suited to their role.
- * `jobTitleId` is optional on `User` (e.g. a self-registered account has none yet), so the blank
+ * `workTitleId` is optional on `User` (e.g. a self-registered account has none yet), so the blank
  * fallback stays the common case for `/register`.
  */
 export const createDefaultWorkspace: PipelineFn = async (ctx) => {
   const userId = ctx.doc?.id;
   if (typeof userId !== 'string') return ctx;
 
-  const jobTitleId = ctx.doc?.jobTitleId;
-  const jobTitle = typeof jobTitleId === 'string' ? await fetchRow(ctx.db, JobTitle, jobTitleId) : null;
+  const workTitleId = ctx.doc?.workTitleId;
+  const workTitle = typeof workTitleId === 'string' ? await fetchRow(ctx.db, WorkTitle, workTitleId) : null;
 
   const workspace = await insertRow(ctx.db, Workspace, {
     userId,
-    name: typeof jobTitle?.name === 'string' ? jobTitle.name : DEFAULT_WORKSPACE_NAME,
+    name: typeof workTitle?.name === 'string' ? workTitle.name : DEFAULT_WORKSPACE_NAME,
   });
 
-  if (typeof jobTitle?.workspaceTemplateId === 'string') {
-    await cloneWorkspaceViews(ctx, jobTitle.workspaceTemplateId, workspace.id as string, userId);
+  if (typeof workTitle?.workspaceTemplateId === 'string') {
+    await cloneWorkspaceViews(ctx, workTitle.workspaceTemplateId, workspace.id as string, userId);
   }
 
   return ctx;

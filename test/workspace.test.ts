@@ -6,7 +6,7 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { OperationContext } from '../src/core/index.js';
 import { generateId } from '../src/core/id.js';
 import { insertRow } from '../src/core/persistence.js';
-import { JobTitle } from '../src/auth/models/job-title.model.js';
+import { WorkTitle } from '../src/auth/models/work-title.model.js';
 import { Workspace, WorkspaceView } from '../src/workspace/models/index.js';
 import { assertOwnsWorkspace, requireWorkspaceOwnership } from '../src/workspace/pipeline.js';
 import { createDefaultWorkspace, DEFAULT_WORKSPACE_NAME } from '../src/workspace/provisioning.js';
@@ -115,7 +115,7 @@ describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a l
     db = drizzle(client) as unknown as PgDatabase<any, any, any>;
     // `workspaces`/`workspace_views` are shared with `auth.test.ts` and the
     // `requireWorkspaceOwnership` suite above (see that suite's note) — not truncated/dropped
-    // here either. `job_titles` is exclusive to this file, so it's safe to reset between tests.
+    // here either. `work_titles` is exclusive to this file, so it's safe to reset between tests.
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspaces (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
@@ -129,32 +129,32 @@ describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a l
         "limit" integer NOT NULL DEFAULT 20, "order" integer NOT NULL DEFAULT 0
       )`);
     await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS job_titles (
+      CREATE TABLE IF NOT EXISTS work_titles (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
         name varchar NOT NULL, rank integer NOT NULL, workspace_template_id uuid NOT NULL
       )`);
   });
 
   beforeEach(async () => {
-    await db.execute(sql`TRUNCATE TABLE job_titles`);
+    await db.execute(sql`TRUNCATE TABLE work_titles`);
   });
 
   afterAll(async () => {
-    await db.execute(sql`DROP TABLE IF EXISTS job_titles`);
+    await db.execute(sql`DROP TABLE IF EXISTS work_titles`);
     await client.end();
   });
 
-  function ctxForNewUser(userId: string, jobTitleId?: string): OperationContext {
+  function ctxForNewUser(userId: string, workTitleId?: string): OperationContext {
     return {
       operation: 'create',
       input: {},
-      doc: jobTitleId ? { id: userId, jobTitleId } : { id: userId },
+      doc: workTitleId ? { id: userId, workTitleId } : { id: userId },
       model: Workspace,
       db,
     };
   }
 
-  it('provisions a blank "My Workspace" for a user with no jobTitleId', async () => {
+  it('provisions a blank "My Workspace" for a user with no workTitleId', async () => {
     const userId = generateId();
     await createDefaultWorkspace(ctxForNewUser(userId));
 
@@ -162,7 +162,7 @@ describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a l
     expect(workspaces).toEqual([{ name: DEFAULT_WORKSPACE_NAME, user_id: userId }]);
   });
 
-  it("clones the job title's template workspace tabs into a new workspace owned by the user", async () => {
+  it("clones the work title's template workspace tabs into a new workspace owned by the user", async () => {
     const templateOwnerId = generateId();
     const template = await insertRow(db, Workspace, { userId: templateOwnerId, name: 'Sales Template' });
     await insertRow(db, WorkspaceView, {
@@ -182,10 +182,10 @@ describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a l
       label: 'Pipeline',
       order: 1,
     });
-    const jobTitle = await insertRow(db, JobTitle, { name: 'Sales Rep', rank: 2, workspaceTemplateId: template.id });
+    const workTitle = await insertRow(db, WorkTitle, { name: 'Sales Rep', rank: 2, workspaceTemplateId: template.id });
 
     const newUserId = generateId();
-    await createDefaultWorkspace(ctxForNewUser(newUserId, jobTitle.id as string));
+    await createDefaultWorkspace(ctxForNewUser(newUserId, workTitle.id as string));
 
     const workspaces = (await db.execute(
       sql`SELECT id, name FROM workspaces WHERE user_id = ${newUserId}`,
