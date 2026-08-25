@@ -1,5 +1,6 @@
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { ConsoleDomainMeta } from '../serialize-domain.js';
+import type { FilterNode } from './FilterBar.js';
 
 // '/' (root mount) needs an empty prefix, not a literal '/', so `${MOUNT_PREFIX}/meta/models`
 // doesn't come out as '//meta/models'.
@@ -110,9 +111,9 @@ export async function listRows(
     limit: number;
     offset: number;
     include?: string[];
-    /** `[field, op, value][]` — the same shape `router/query.ts`'s `FilterClause[]` parses, sent
-     * as `?filter=<json>` (Q: WorkspaceView's saved `filters` round-trip straight through here). */
-    filters?: [string, string, unknown][];
+    /** the same shape `router/query.ts`'s `FilterNode[]` parses, sent as `?filter=<json>` (Q:
+     * WorkspaceView's saved `filters` round-trip straight through here). */
+    filters?: FilterNode[];
     /** `-field` for descending, matching `router/query.ts`'s convention. */
     sort?: string;
   },

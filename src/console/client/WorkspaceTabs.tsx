@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useModels } from './models.js';
 import { listRows, createRow, updateRow, removeRow } from './api.js';
 import { WorkspaceViewTable, type WorkspaceViewRow } from './WorkspaceViewTable.js';
+import { Dialog } from './Dialog.js';
+import { FilterBar, type FilterNode } from './FilterBar.js';
 
 export interface WorkspaceTabsProps {
   workspaceId: string;
@@ -9,16 +12,36 @@ export interface WorkspaceTabsProps {
    * agent may have opened/edited/closed tabs via its create_workspace_views/... tools during that
    * turn (agent tool calls aren't reflected live, mid-turn; see automation/tool.ts). */
   refreshSignal: number;
+  /** whether `WorkspacePage` currently renders the agent chat panel — the toggle button lives
+   * here, in the tab strip's row, rather than inside the chat panel itself, since a fully-hidden
+   * panel wouldn't have anywhere to put a re-open control. */
+  chatOpen: boolean;
+  onToggleChat: () => void;
 }
 
 /** The tab strip + active tab's content for one workspace — add/reorder/close tabs, all backed by
  * plain `workspace_views` rows through the generic (now owner-scoped) `/api/:model` router. */
-export function WorkspaceTabs({ workspaceId, refreshSignal }: WorkspaceTabsProps) {
-  const { models } = useModels();
+export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleChat }: WorkspaceTabsProps) {
   const [views, setViews] = useState<WorkspaceViewRow[] | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveIdState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [addingModel, setAddingModel] = useState('');
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  // the active tab's view id is mirrored into `?tab=` so a page refresh (or a link straight to a
+  // workspace URL) restores the same tab instead of always falling back to the first one.
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  function setActiveId(id: string | null) {
+    setActiveIdState(id);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id) next.set('tab', id);
+        else next.delete('tab');
+        return next;
+      },
+      { replace: true },
+    );
+  }
 
   async function refresh(preferActiveId?: string) {
     try {
@@ -30,10 +53,9 @@ export function WorkspaceTabs({ workspaceId, refreshSignal }: WorkspaceTabsProps
       });
       const rows = page.rows as unknown as WorkspaceViewRow[];
       setViews(rows);
-      setActiveId((current) => {
-        const wanted = preferActiveId ?? current;
-        return rows.some((v) => v.id === wanted) ? wanted! : (rows[0]?.id ?? null);
-      });
+      const wanted = preferActiveId ?? activeId ?? searchParams.get('tab');
+      const resolved = rows.some((v) => v.id === wanted) ? wanted! : (rows[0]?.id ?? null);
+      setActiveId(resolved);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'failed to load tabs');
@@ -45,19 +67,16 @@ export function WorkspaceTabs({ workspaceId, refreshSignal }: WorkspaceTabsProps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, refreshSignal]);
 
-  async function addTab() {
-    if (!addingModel) return;
-    const model = models.find((m) => m.name === addingModel);
-    if (!model) return;
+  async function addTab(input: { targetModel: string; label: string; filters: FilterNode[] }) {
     const order = (views?.reduce((max, v) => Math.max(max, v.order), -1) ?? -1) + 1;
     const created = await createRow('workspace_views', {
       workspaceId,
-      targetModel: addingModel,
-      label: model.label,
-      filters: [],
+      targetModel: input.targetModel,
+      label: input.label,
+      filters: input.filters,
       order,
     });
-    setAddingModel('');
+    setShowAddDialog(false);
     await refresh((created as unknown as WorkspaceViewRow).id);
   }
 
@@ -118,26 +137,24 @@ export function WorkspaceTabs({ workspaceId, refreshSignal }: WorkspaceTabsProps
           </div>
         ))}
 
-        <div className="ml-2 flex items-center gap-1 pb-1">
-          <select
-            value={addingModel}
-            onChange={(e) => setAddingModel(e.target.value)}
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
-          >
-            <option value="">+ Add tab…</option>
-            {models.map((m) => (
-              <option key={m.name} value={m.name}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+        <div className="ml-2 pb-1">
           <button
             type="button"
-            disabled={!addingModel}
-            onClick={() => void addTab()}
-            className="rounded bg-gray-900 px-2 py-1 text-xs text-white disabled:opacity-40"
+            onClick={() => setShowAddDialog(true)}
+            className="rounded border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
           >
-            Add
+            + Add tab
+          </button>
+        </div>
+
+        <div className="ml-auto pb-1">
+          <button
+            type="button"
+            onClick={onToggleChat}
+            title={chatOpen ? 'Hide chat' : 'Show chat'}
+            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+          >
+            {chatOpen ? 'Hide chat ›' : '‹ Show chat'}
           </button>
         </div>
       </div>
@@ -155,6 +172,92 @@ export function WorkspaceTabs({ workspaceId, refreshSignal }: WorkspaceTabsProps
           views && views.length === 0 && <p className="text-sm text-gray-400">No tabs yet — add one above.</p>
         )}
       </div>
+
+      {showAddDialog && <AddTabDialog onClose={() => setShowAddDialog(false)} onCreate={(input) => void addTab(input)} />}
     </div>
+  );
+}
+
+/** Add-tab dialog: pick a target model, then optionally scope it with a filter clause built
+ * through the same `FilterBar` used to edit an existing tab's filters — so a tab can start out
+ * already narrowed instead of always opening onto the model's full, unfiltered row set. */
+function AddTabDialog({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (input: { targetModel: string; label: string; filters: FilterNode[] }) => void;
+}) {
+  const { models, getModel } = useModels();
+  const [targetModel, setTargetModel] = useState('');
+  // tracks whether the user has typed their own label yet — until they do, it follows the
+  // selected model's label so picking a model alone is still enough to add a tab.
+  const [label, setLabel] = useState('');
+  const [labelEdited, setLabelEdited] = useState(false);
+  const [filters, setFilters] = useState<FilterNode[]>([]);
+  const model = targetModel ? getModel(targetModel) : undefined;
+
+  return (
+    <Dialog onClose={onClose}>
+      <h2 className="mb-4 text-base font-semibold text-gray-900">Add tab</h2>
+
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Model</label>
+          <select
+            value={targetModel}
+            onChange={(e) => {
+              const next = e.target.value;
+              setTargetModel(next);
+              setFilters([]);
+              if (!labelEdited) setLabel(getModel(next)?.label ?? '');
+            }}
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">Select a model…</option>
+            {models.map((m) => (
+              <option key={m.name} value={m.name}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Tab name</label>
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => {
+              setLabel(e.target.value);
+              setLabelEdited(true);
+            }}
+            placeholder="e.g. Open orders"
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          />
+        </div>
+
+        {model && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Initial filters</label>
+            <FilterBar fields={model.fields} value={filters} onChange={setFilters} />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 flex justify-end gap-2">
+        <button type="button" onClick={onClose} className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!model || !label.trim()}
+          onClick={() => model && onCreate({ targetModel: model.name, label: label.trim(), filters })}
+          className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+        >
+          Add tab
+        </button>
+      </div>
+    </Dialog>
   );
 }

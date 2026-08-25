@@ -6,7 +6,7 @@ import { PipelineError } from '../core/pipeline.js';
 import { toSnakeCase } from '../core/naming.js';
 import { deriveFileFields, normalizeTimestamps, redactSensitiveFields } from '../core/serialize.js';
 import { allColumnKeys } from './columns.js';
-import { encodeCursor, type FilterClause, type ParsedListQuery } from './query.js';
+import { encodeCursor, type FilterClause, type FilterNode, type ParsedListQuery } from './query.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
@@ -67,6 +67,17 @@ function filterClauseSql(model: ModelDefinition, clause: FilterClause): SQL {
       )})`;
     }
   }
+}
+
+function filterNodeSql(model: ModelDefinition, node: FilterNode): SQL {
+  if (!('logic' in node)) return filterClauseSql(model, node);
+  // an empty group is vacuous: AND of nothing is true, OR of nothing is false.
+  if (node.conditions.length === 0) return node.logic === 'and' ? sql`TRUE` : sql`FALSE`;
+  const joiner = node.logic === 'and' ? sql` AND ` : sql` OR `;
+  return sql`(${sql.join(
+    node.conditions.map((c) => filterClauseSql(model, c)),
+    joiner,
+  )})`;
 }
 
 function selectListSql(model: ModelDefinition, includes: IncludePlan[]): SQL {
@@ -144,7 +155,7 @@ export async function listRows(
 
   const whereParts: SQL[] = [];
   if (!query.includeDeleted) whereParts.push(sql`t.deleted_at IS NULL`);
-  for (const clause of query.filters) whereParts.push(filterClauseSql(model, clause));
+  for (const node of query.filters) whereParts.push(filterNodeSql(model, node));
 
   if (query.sortField && query.cursor) {
     const sortCol = sql`t.${sql.identifier(toSnakeCase(query.sortField))}`;

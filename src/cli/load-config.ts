@@ -34,7 +34,7 @@ export function resolveDirs(cwd: string, config: FrameworkConfig) {
     modelsDir: path.resolve(cwd, config.modelsDir ?? 'models'),
     generatedDir: path.resolve(cwd, config.generatedDir ?? '.ratchet'),
     migrationsDir: path.resolve(cwd, config.migrationsDir ?? 'drizzle/migrations'),
-    consoleEntryFile: path.resolve(cwd, config.consoleEntry ?? 'console/client/main.tsx'),
     consolePath: resolveConsolePath(config),
+    brand: config.brand ?? {},
   };
 }

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile, readFile, rename } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as esbuild from 'esbuild';
@@ -9,7 +10,7 @@ import type { resolveDirs } from './load-config.js';
 type Dirs = ReturnType<typeof resolveDirs>;
 
 export interface ConsoleClientHandle {
-  /** No-op if the console entry didn't exist and nothing was started. */
+  /** No-op in prod mode, which is a one-shot build with nothing left running to stop. */
   stop: () => Promise<void>;
 }
 
@@ -20,8 +21,24 @@ export interface BuildConsoleClientOptions {
 
 const NOOP_HANDLE: ConsoleClientHandle = { stop: async () => {} };
 
-function cssEntryFor(consoleEntryFile: string): string | null {
-  const cssFile = path.join(path.dirname(consoleEntryFile), 'styles.css');
+/** The framework-owned console client entry (`main.tsx`) and its Tailwind source (`styles.css`) —
+ * resolved relative to this module rather than a consumer path, since `ConsoleApp` has no
+ * consumer-facing extension points left to author an entry around (see ConsoleApp.tsx). Checks for
+ * `main.tsx` first (running from source under `tsx`, e.g. this repo's own `example/`) and falls
+ * back to the compiled `main.js` (running from a published `dist/`, e.g. a real consumer's
+ * `node_modules/@egig/ratchet`) — both live one directory up from this file's own location. */
+function frameworkConsoleClientDir(): string {
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'console', 'client');
+}
+
+function frameworkConsoleEntry(): string {
+  const dir = frameworkConsoleClientDir();
+  const source = path.join(dir, 'main.tsx');
+  return existsSync(source) ? source : path.join(dir, 'main.js');
+}
+
+function frameworkCssEntry(): string | null {
+  const cssFile = path.join(frameworkConsoleClientDir(), 'styles.css');
   return existsSync(cssFile) ? cssFile : null;
 }
 
@@ -51,29 +68,26 @@ async function killChild(child: ChildProcess): Promise<void> {
   });
 }
 
-/** Bundles `dirs.consoleEntryFile` (skips, logging, if it doesn't exist — apps that haven't
- * adopted the console yet must stay unaffected) with esbuild, runs Tailwind's standalone CLI
- * against a sibling `styles.css` if present, and writes `<generatedDir>/console/manifest.json`
- * mapping logical names to the actual (optionally content-hashed) asset paths. `dirs.consolePath`
- * is inlined into the bundle via esbuild's `define` (`__CONSOLE_PATH__`, declared ambiently in
- * src/console/client/env.d.ts) — the client needs it as the router `basename` and API prefix, and
- * has no other runtime config channel (it's served as a static bundle, including from a pure edge
- * CDN with no per-request server involved). Changing `consolePath` therefore requires a rebuild. */
+/** Bundles the framework's own console client entry with esbuild — every app gets the same
+ * console UI (see ConsoleApp.tsx), so this always runs, unconditionally. Runs Tailwind's
+ * standalone CLI against the framework's `styles.css`, and writes
+ * `<generatedDir>/console/manifest.json` mapping logical names to the actual (optionally
+ * content-hashed) asset paths. `dirs.consolePath` and `dirs.brand` are inlined into the bundle via
+ * esbuild's `define` (`__CONSOLE_PATH__`/`__CONSOLE_BRAND__`, declared ambiently in
+ * src/console/client/env.d.ts) — the client needs them for the router `basename`/API prefix and
+ * the sidebar heading respectively, and has no other runtime config channel (it's served as a
+ * static bundle, including from a pure edge CDN with no per-request server involved). Changing
+ * either therefore requires a rebuild. */
 export async function buildConsoleClient(dirs: Dirs, options: BuildConsoleClientOptions): Promise<ConsoleClientHandle> {
-  if (!existsSync(dirs.consoleEntryFile)) {
-    console.log(`[console] no entry at ${dirs.consoleEntryFile} — skipping console client build`);
-    return NOOP_HANDLE;
-  }
-
   const consoleDir = path.join(dirs.generatedDir, 'console');
   const assetsDir = path.join(consoleDir, 'assets');
   await mkdir(assetsDir, { recursive: true });
 
-  const cssEntry = cssEntryFor(dirs.consoleEntryFile);
+  const cssEntry = frameworkCssEntry();
   const manifest: Record<string, string> = {};
 
   const esbuildOptions: esbuild.BuildOptions = {
-    entryPoints: { main: dirs.consoleEntryFile },
+    entryPoints: { main: frameworkConsoleEntry() },
     bundle: true,
     outdir: assetsDir,
     entryNames: options.mode === 'prod' ? '[name]-[hash]' : '[name]',
@@ -84,7 +98,10 @@ export async function buildConsoleClient(dirs: Dirs, options: BuildConsoleClient
     minify: options.mode === 'prod',
     metafile: true,
     logLevel: 'info',
-    define: { __CONSOLE_PATH__: JSON.stringify(dirs.consolePath) },
+    define: {
+      __CONSOLE_PATH__: JSON.stringify(dirs.consolePath),
+      __CONSOLE_BRAND__: JSON.stringify(dirs.brand),
+    },
   };
 
   if (options.mode === 'dev') {

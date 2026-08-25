@@ -15,9 +15,8 @@ export interface ChatEmptyStateViewProps {
   onCreated: (chatId: string) => void;
 }
 
-/** The prop-driven core of the "start a new conversation" form — extracted so both the routed
- * `ChatEmptyState` (navigates to the new chat) and `WorkspaceChatPanel` (just selects it locally)
- * render the exact same thing. */
+/** The "start a new conversation" form shown by `WorkspaceChatPanel` when no chat is selected —
+ * `onCreated` just selects the new chat locally (no route involved). */
 export function ChatEmptyStateView({ workspaceId, onCreated }: ChatEmptyStateViewProps) {
   const { refresh } = useChats();
 

@@ -17,9 +17,25 @@ export default defineConfig({
 
 `consolePath` is baked into the console client bundle at build time (it's used as the client-side router's `basename`), so changing it requires re-running `ratchet build`/`ratchet dev`.
 
+## Branding
+
+The sidebar/header heading defaults to "Ratchet console". Override it with `brand` in `ratchet.config.ts`:
+
+```ts
+export default defineConfig({
+  // ...
+  brand: {
+    name: 'Acme Admin',
+    logoUrl: 'https://acme.example/logo.svg', // an absolute URL — the console is a static bundle
+  },
+});
+```
+
+Both fields are optional. Like `consolePath`, `brand` is baked into the console client bundle at build time, so changing it requires a rebuild.
+
 ## How it's built
 
-`ratchet build` (or `ratchet dev`, for local iteration) bundles `console/client/main.tsx` with esbuild + Tailwind into hashed assets plus a `manifest.json`, written under `<generatedDir>/console/`. `createConsoleRouter` serves that shell and its assets at `${consolePath}/*`, and falls back to a 503 with an instructive message if the console hasn't been built yet.
+`ratchet build` (or `ratchet dev`, for local iteration) bundles the framework's own console client entry with esbuild + Tailwind into hashed assets plus a `manifest.json`, written under `<generatedDir>/console/`. This always runs — the console client is framework-owned, with no per-app entry file to author. `createConsoleRouter` serves that shell and its assets at `${consolePath}/*`, and falls back to a 503 with an instructive message if the console hasn't been built yet.
 
 Because the SPA uses client-side routing, every path under `consolePath` (not just `consolePath` itself) serves the same HTML shell — a hard refresh on `/console/customers/:id` needs to resolve to the shell too, since routing happens in the browser after it loads.
 
@@ -109,23 +125,6 @@ import { AuthSettings } from '../models/auth/settings.domain.js';
 const settings = await getDomainSettings(ctx.db, AuthSettings); // { sessionTtlDays, requireMfa }
 ```
 
-## Extending the console
+## No per-app customization
 
-`console/client/main.tsx` lives in your app, not the framework, so it's the place to customize the console — pass `brand` and/or `pages` to `<ConsoleApp />`:
-
-```tsx
-import { createRoot } from 'react-dom/client';
-import { ConsoleApp } from '@egig/ratchet/console/client';
-import { SalesReport } from './SalesReport.js';
-
-const root = document.getElementById('root')!;
-createRoot(root).render(
-  <ConsoleApp
-    brand={{ name: 'Acme Admin', logo: <img src="/logo.svg" className="h-6 w-6" /> }}
-    pages={[{ path: 'reports/sales', label: 'Sales report', element: <SalesReport /> }]}
-  />,
-);
-```
-
-- `brand.name` / `brand.logo` replace the sidebar's default "Ratchet console" heading.
-- `pages` adds sidebar links and routes (mounted under `consolePath`, alongside the generated model pages) for arbitrary components you write yourself — each page renders inside the authenticated `Layout`, so it gets the same sidebar and session as the generated views. `path` is relative (e.g. `'reports/sales'`, not `/reports/sales`).
+`<ConsoleApp />` takes no props — every app gets the same shell (model views, settings tabs), aside from the [branding](#branding) config above. There's no custom pages or custom field renderers, and no `console/client/main.tsx` to author in your app either; the entry point that mounts `<ConsoleApp />` lives in the framework.

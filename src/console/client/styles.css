@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+/* Scans this directory for the Tailwind classes the console client's own components use — the
+   only source of classes now that ConsoleApp has no consumer-supplied pages/fields to scan. */
+@source ".";

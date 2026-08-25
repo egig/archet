@@ -28,9 +28,8 @@ export interface ChatThreadViewProps {
   onTurnDone?: () => void;
 }
 
-/** The prop-driven core of a chat thread — extracted so both the routed `ChatThread` (chatId from
- * `useParams`) and `WorkspaceChatPanel` (chatId from local state, no route involved) render the
- * exact same thing. */
+/** Renders one chat thread's messages and composer, given a `chatId` — used by `WorkspaceChatPanel`
+ * (chatId from local state, no route involved). */
 export function ChatThreadView({ chatId, workspaceId, onTurnDone }: ChatThreadViewProps) {
   const { refresh } = useChats();
 

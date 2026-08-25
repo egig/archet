@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
 import { hasPermission, listRows, removeRow, type OffsetPage } from './api.js';
 import { formatCellValue } from './format.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
+import type { FilterNode } from './FilterBar.js';
 
 const DEFAULT_LIMIT = 20;
 
 export interface RowTableQuery {
-  filters?: [string, string, unknown][];
+  filters?: FilterNode[];
   sortField?: string;
   sortDirection?: 'asc' | 'desc';
   include?: string[];
@@ -35,6 +36,7 @@ export interface RowTableProps {
 export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
   const { getModel } = useModels();
   const { user } = useAuth();
+  const { search } = useLocation();
   const base = basePath ?? `/${model.name}`;
 
   const [page, setPage] = useState<OffsetPage | null>(null);
@@ -83,7 +85,7 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-gray-900">{model.label}</h1>
         {canCreate && (
-          <Link to={`${base}/new`} className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800">
+          <Link to={{ pathname: `${base}/new`, search }} className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800">
             New
           </Link>
         )}
@@ -146,7 +148,7 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
                   {(canUpdate || canRemove) && (
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {canUpdate && (
-                        <Link to={`${base}/${id}`} className="mr-3 text-gray-600 hover:underline">
+                        <Link to={{ pathname: `${base}/${id}`, search }} className="mr-3 text-gray-600 hover:underline">
                           Edit
                         </Link>
                       )}

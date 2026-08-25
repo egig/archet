@@ -5,7 +5,15 @@ import { requireWorkspaceOwnership } from '../pipeline.js';
 
 // a bare `field.json()` defaults to an object schema (z.record) — `filters`/`include` are arrays,
 // so each needs its own explicit shape (core/validation.ts's `baseSchemaForField` can't infer one).
-const filtersSchema = z.array(z.tuple([z.string(), z.string(), z.unknown()]));
+//
+// A filter entry is either a plain `[field, op, value]` clause, or a `[logic, [clauses]]` group —
+// one level of `(a AND b)`/`(a OR b)` grouping around plain clauses, deliberately not recursive
+// (no group-of-groups): mirrors `router/query.ts`'s `FilterNode`, whose doc comment explains why
+// (keeps this a `z.union` with no `z.lazy`, which `zod-to-json-schema` — automation/tool.ts's
+// LLM tool-schema derivation — can't turn into a clean non-recursive JSON Schema).
+const filterClauseSchema = z.tuple([z.string(), z.string(), z.unknown()]);
+const filterGroupSchema = z.tuple([z.enum(['and', 'or']), z.array(filterClauseSchema)]);
+const filtersSchema = z.array(z.union([filterClauseSchema, filterGroupSchema]));
 const includeSchema = z.array(z.string());
 
 /**

@@ -16,10 +16,8 @@ export function useChats(): ChatsState {
   return ctx;
 }
 
-/** Owns the chat list (shared by `ChatSidebar`/`WorkspaceChatPanel` and, via `refresh()`,
- * `ChatEmptyStateView`/`ChatThreadView` after a turn completes) — extracted out of `ChatPage` so
- * both the full-page `/chat` route and the compact `WorkspaceChatPanel` can wrap themselves in the
- * same data layer instead of each fetching the chat list independently. */
+/** Owns the chat list for `WorkspaceChatPanel`'s "History" dropdown, refreshed (via `refresh()`)
+ * by `ChatEmptyStateView`/`ChatThreadView` after a turn completes. */
 export function ChatsProvider({ children }: { children: ReactNode }) {
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [loading, setLoading] = useState(true);

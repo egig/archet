@@ -1,14 +1,14 @@
 import { useModels } from './models.js';
 import { updateRow } from './api.js';
 import { RowTable } from './RowTable.js';
-import { FilterBar, type FilterClause } from './FilterBar.js';
+import { FilterBar, type FilterNode } from './FilterBar.js';
 
 export interface WorkspaceViewRow {
   id: string;
   workspaceId: string;
   targetModel: string;
   label: string;
-  filters: FilterClause[] | null;
+  filters: FilterNode[] | null;
   sortField: string | null;
   sortDirection: 'asc' | 'desc';
   include: string[] | null;
@@ -34,7 +34,7 @@ export function WorkspaceViewTable({ view, workspaceId, onChange }: WorkspaceVie
 
   if (!model) return <p className="text-sm text-red-600">Unknown model '{view.targetModel}'.</p>;
 
-  async function persistFilters(filters: FilterClause[]) {
+  async function persistFilters(filters: FilterNode[]) {
     const updated = await updateRow('workspace_views', view.id, { filters });
     onChange(updated as unknown as WorkspaceViewRow);
   }

@@ -3,19 +3,14 @@ import { NavLink, Outlet } from 'react-router';
 import { useAuth } from './auth.js';
 import { useModels } from './models.js';
 import { useDomains } from './domains.js';
+import { BrandMark } from './BrandMark.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { ConsoleDomainMeta } from '../serialize-domain.js';
-import type { ConsoleBrand, ConsolePage } from './ConsoleApp.js';
 
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   `block truncate rounded-md px-3 py-1.5 text-sm ${
     isActive ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
   }`;
-
-export interface LayoutProps {
-  brand?: ConsoleBrand;
-  pages?: ConsolePage[];
-}
 
 function humanizeDomain(domain: string): string {
   return domain.length === 0 ? domain : domain.charAt(0).toUpperCase() + domain.slice(1);
@@ -40,9 +35,9 @@ function groupByDomain(models: ConsoleModelMeta[]): { domain: string; models: Co
 }
 
 /** One group of nav links, with consistent spacing/borders instead of each call site hand-rolling
- * them. `title` is only meaningful for a real Domain's section (`DomainsMenu` below) — the
- * consumer's custom `pages` and domain-less ("ungrouped") models have no Domain to label a
- * section with, so they're rendered through this with no title, as a flat untitled block. */
+ * them. `title` is only meaningful for a real Domain's section (`DomainsMenu` below) — domain-less
+ * ("ungrouped") models have no Domain to label a section with, so they're rendered through this
+ * with no title, as a flat untitled block. */
 function NavSection({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <div className="px-2 py-2">
@@ -53,9 +48,9 @@ function NavSection({ title, children }: { title?: string; children: ReactNode }
 }
 
 /** Renders one `NavSection` per Domain-grouped set of models, plus that Domain's own declared
- * `consoleMenu` (`defineDomain()`) above its models — e.g. the built-in Automation Domain's Chat
- * link (`automation/domain.ts`): `chats` is `console: { hidden: true }` (chat.model.ts) so it never
- * reaches `models`/`groupByDomain`, and has no model of its own for a link to be derived from. */
+ * `consoleMenu` (`defineDomain()`) above its models — for a Domain with only hidden models and no
+ * `consoleMenu` (e.g. the built-in Automation Domain, `automation/domain.ts`), that leaves nothing
+ * to group, so it never reaches `models`/`groupByDomain` and simply doesn't appear here. */
 function DomainsMenu({
   groups,
   getDomain,
@@ -161,7 +156,7 @@ function AccountMenu({ showSettings }: { showSettings: boolean }) {
   );
 }
 
-export function Layout({ brand, pages = [] }: LayoutProps) {
+export function Layout() {
   const { models, loading, error } = useModels();
   const { domains, getDomain } = useDomains();
   const grouped = groupByDomain(models);
@@ -173,22 +168,11 @@ export function Layout({ brand, pages = [] }: LayoutProps) {
       <aside className="flex w-60 shrink-0 flex-col border-r border-gray-200 bg-white">
         {/* 1. Header */}
         <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-4">
-          {brand?.logo}
-          <p className="truncate text-sm font-semibold text-gray-900">{brand?.name ?? 'Ratchet console'}</p>
+          <BrandMark />
         </div>
 
-        {/* 2 & 3. Sections of menus */}
+        {/* 2. Sections of menus */}
         <nav className="flex-1 overflow-y-auto">
-          {pages.length > 0 && (
-            <NavSection>
-              {pages.map((page) => (
-                <NavLink key={page.path} to={`/${page.path}`} className={navLinkClassName}>
-                  {page.label}
-                </NavLink>
-              ))}
-            </NavSection>
-          )}
-
           {ungrouped.length > 0 && (
             <NavSection>
               {ungrouped.map((model) => (

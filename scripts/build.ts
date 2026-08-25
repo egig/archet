@@ -1,4 +1,4 @@
-import { readdirSync, statSync, chmodSync } from 'node:fs';
+import { readdirSync, statSync, chmodSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as esbuild from 'esbuild';
@@ -45,6 +45,14 @@ async function main(): Promise<void> {
   }
 
   chmodSync(path.join(ROOT, 'dist', 'cli', 'bin.js'), 0o755);
+
+  // esbuild's walk above only picks up .ts/.tsx — the console client's Tailwind source is plain
+  // CSS, so `buildConsoleClient` (src/cli/build-console.ts) can find it alongside the compiled
+  // main.js in a published dist/, the same way it finds main.tsx/main.js when running from source.
+  copyFileSync(
+    path.join(ROOT, 'src', 'console', 'client', 'styles.css'),
+    path.join(ROOT, 'dist', 'console', 'client', 'styles.css'),
+  );
 }
 
 main().catch((err: unknown) => {

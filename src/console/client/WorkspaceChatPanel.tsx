@@ -1,7 +1,66 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChatsProvider, useChats } from './chats-context.js';
 import { ChatThreadView } from './ChatThreadView.js';
 import { ChatEmptyStateView } from './ChatEmptyStateView.js';
+import type { ChatSummary } from './api.js';
+
+/** "History" dropdown in place of a `<select>` — lists every chat, with the active one
+ * highlighted, and closes itself on an outside click or a selection. */
+function ChatHistoryMenu({
+  chats,
+  selectedChatId,
+  onSelect,
+}: {
+  chats: ChatSummary[];
+  selectedChatId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative min-w-0 flex-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full truncate rounded border border-gray-300 px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-50"
+      >
+        History
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-10 mt-1 max-h-80 w-64 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+          {chats.length === 0 && <p className="px-3 py-2 text-xs text-gray-400">No chats yet</p>}
+          {chats.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => {
+                onSelect(c.id);
+                setOpen(false);
+              }}
+              className={`block w-full truncate px-3 py-2 text-left text-sm ${
+                c.id === selectedChatId ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {c.title || 'Untitled chat'}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function WorkspaceChatPanelInner({ workspaceId, onTurnDone }: { workspaceId: string; onTurnDone: () => void }) {
   const { chats, loading, error } = useChats();
@@ -10,22 +69,11 @@ function WorkspaceChatPanelInner({ workspaceId, onTurnDone }: { workspaceId: str
   return (
     <aside className="flex w-96 shrink-0 flex-col border-l border-gray-200 bg-white">
       <div className="flex items-center gap-2 border-b border-gray-200 p-2">
-        <select
-          value={selectedChatId ?? ''}
-          onChange={(e) => setSelectedChatId(e.target.value || null)}
-          className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
-        >
-          <option value="">New chat…</option>
-          {chats.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.title || 'Untitled chat'}
-            </option>
-          ))}
-        </select>
+        <ChatHistoryMenu chats={chats} selectedChatId={selectedChatId} onSelect={setSelectedChatId} />
         <button
           type="button"
           onClick={() => setSelectedChatId(null)}
-          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+          className="shrink-0 rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
         >
           New
         </button>
@@ -52,10 +100,12 @@ export interface WorkspaceChatPanelProps {
   onTurnDone: () => void;
 }
 
-/** Compact right-side chat — reuses the same data layer and view components as the full-page
- * `/chat` route (`ChatsProvider`, `ChatThreadView`, `ChatEmptyStateView`), just laid out narrower
- * with a `<select>` in place of `ChatSidebar`'s list, and a full chat switcher rather than a single
- * fixed thread (Q13). Wraps its own `ChatsProvider` since it isn't nested inside `ChatPage`. */
+/** The workspace screen's right-side chat panel — the only place chat is surfaced in the console
+ * (there's no standalone chat page/route). Built on `ChatsProvider`, `ChatThreadView`, and
+ * `ChatEmptyStateView` (chats-context.tsx), laid out narrow with a "History" dropdown listing every
+ * chat and a full chat switcher rather than a single fixed thread (Q13). Wraps its own
+ * `ChatsProvider` since nothing else provides one. `WorkspacePage` conditionally mounts this at
+ * all — the open/closed toggle lives in `WorkspaceTabs`'s tab strip, not in here. */
 export function WorkspaceChatPanel({ workspaceId, onTurnDone }: WorkspaceChatPanelProps) {
   return (
     <ChatsProvider>

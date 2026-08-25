@@ -4,12 +4,26 @@ import { columnKind, isFilterableOrSortable, isKnownColumn, isOperatorValidForKi
 
 export type FilterOp = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'like' | 'is';
 const VALID_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '>=', '<', '<=', 'in', 'like', 'is']);
+const GROUP_LOGICS: ReadonlySet<string> = new Set(['and', 'or']);
 
 export interface FilterClause {
   field: string;
   op: FilterOp;
   value: unknown;
 }
+
+export type FilterGroupLogic = 'and' | 'or';
+
+/** One level of `(a AND b)` / `(a OR b)` grouping around plain clauses — deliberately not
+ * recursive (no group-of-groups): keeps the wire shape a `zod` union free of `z.lazy`, which
+ * `zod-to-json-schema` (automation/tool.ts's LLM tool-schema derivation) can't turn into a clean
+ * non-recursive JSON Schema, and keeps `FilterBar`'s UI a single flat level to build by hand. */
+export interface FilterGroup {
+  logic: FilterGroupLogic;
+  conditions: FilterClause[];
+}
+
+export type FilterNode = FilterClause | FilterGroup;
 
 export interface CursorState {
   value: unknown;
@@ -26,7 +40,7 @@ export interface ParsedListQuery {
   cursor?: CursorState;
   includeDeleted: boolean;
   include: string[];
-  filters: FilterClause[];
+  filters: FilterNode[];
 }
 
 const DEFAULT_LIMIT = 20;
@@ -84,7 +98,28 @@ export function parseInclude(model: ModelDefinition, raw: string | null): string
   });
 }
 
-function parseStructuredFilters(raw: string | null): [string, string, unknown][] {
+type RawClause = [string, string, unknown];
+type RawGroup = [FilterGroupLogic, RawClause[]];
+
+function parseRawClause(entry: unknown): RawClause {
+  if (!Array.isArray(entry) || entry.length !== 3 || typeof entry[0] !== 'string' || typeof entry[1] !== 'string') {
+    throw new PipelineError({
+      code: 'VALIDATION_ERROR',
+      status: 400,
+      fields: { filter: 'each entry must be [field, operator, value] or [logic, [clauses]]' },
+    });
+  }
+  return entry as RawClause;
+}
+
+function isRawGroup(entry: unknown): entry is RawGroup {
+  return Array.isArray(entry) && entry.length === 2 && GROUP_LOGICS.has(entry[0] as string) && Array.isArray(entry[1]);
+}
+
+/** Top level stays a flat, implicitly-AND'd array (unchanged wire shape for plain filters); an
+ * entry may itself be a `[logic, [clauses]]` group of clauses OR'd/AND'd together, one level deep
+ * (see `FilterGroup`'s doc comment on why no group-of-groups). */
+function parseStructuredFilters(raw: string | null): (RawClause | RawGroup)[] {
   if (!raw) return [];
   let parsed: unknown;
   try {
@@ -95,12 +130,7 @@ function parseStructuredFilters(raw: string | null): [string, string, unknown][]
   if (!Array.isArray(parsed)) {
     throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { filter: 'must be an array of [field, operator, value] triples' } });
   }
-  return parsed.map((entry) => {
-    if (!Array.isArray(entry) || entry.length !== 3 || typeof entry[0] !== 'string' || typeof entry[1] !== 'string') {
-      throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { filter: 'each entry must be [field, operator, value]' } });
-    }
-    return entry as [string, string, unknown];
-  });
+  return parsed.map((entry) => (isRawGroup(entry) ? [entry[0], entry[1].map(parseRawClause)] : parseRawClause(entry)));
 }
 
 function assertFilterable(model: ModelDefinition, field: string): void {
@@ -140,12 +170,23 @@ export function parseListQuery(model: ModelDefinition, searchParams: URLSearchPa
     throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { cursor: 'requires ?sort=<field>' } });
   }
 
-  const filters: FilterClause[] = [];
+  const filters: FilterNode[] = [];
 
-  for (const [field, op, value] of parseStructuredFilters(searchParams.get('filter'))) {
-    assertFilterable(model, field);
-    assertValidOperator(model, field, op);
-    filters.push({ field, op: op as FilterOp, value });
+  for (const entry of parseStructuredFilters(searchParams.get('filter'))) {
+    if (isRawGroup(entry)) {
+      const [logic, clauses] = entry;
+      const conditions = clauses.map(([field, op, value]) => {
+        assertFilterable(model, field);
+        assertValidOperator(model, field, op);
+        return { field, op: op as FilterOp, value };
+      });
+      filters.push({ logic, conditions });
+    } else {
+      const [field, op, value] = entry;
+      assertFilterable(model, field);
+      assertValidOperator(model, field, op);
+      filters.push({ field, op: op as FilterOp, value });
+    }
   }
 
   for (const [key, value] of searchParams.entries()) {
