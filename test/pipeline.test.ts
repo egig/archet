@@ -3,7 +3,17 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { defineModel, field, pipe, validate, persist, PipelineError, type PipelineFn, type OperationContext } from '../src/core/index.js';
+import {
+  defineModel,
+  field,
+  pipe,
+  validate,
+  persist,
+  requireOwnsRow,
+  PipelineError,
+  type PipelineFn,
+  type OperationContext,
+} from '../src/core/index.js';
 
 const connectionString = process.env.DATABASE_URL;
 const describeIfDb = connectionString ? describe : describe.skip;
@@ -157,6 +167,81 @@ describeIfDb('pipeline primitives (against a live Postgres)', () => {
     await expect(run(baseCtx({ input: {} }))).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
       status: 400,
+    });
+  });
+
+  describe('requireOwnsRow (pairs with ApiModelOptions.ownerField, core/model.ts)', () => {
+    const OwnedWidget = defineModel('owned_widgets', {
+      fields: {
+        userId: field.string({ required: true }),
+        name: field.string({ required: true }),
+      },
+    });
+
+    beforeAll(async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS owned_widgets (
+          id uuid PRIMARY KEY,
+          created_at timestamptz NOT NULL,
+          updated_at timestamptz NOT NULL,
+          deleted_at timestamptz,
+          user_id varchar NOT NULL,
+          name varchar NOT NULL
+        )
+      `);
+    });
+
+    beforeEach(async () => {
+      await db.execute(sql`TRUNCATE TABLE owned_widgets`);
+    });
+
+    afterAll(async () => {
+      await db.execute(sql`DROP TABLE IF EXISTS owned_widgets`);
+    });
+
+    function ctxAs(userId: string, overrides: Partial<OperationContext>): OperationContext {
+      return {
+        operation: 'create',
+        input: {},
+        doc: null,
+        model: OwnedWidget,
+        db,
+        user: { id: userId },
+        ...overrides,
+      };
+    }
+
+    it("create: overwrites input[ownerField] with the requesting user's id, ignoring a spoofed value", async () => {
+      const run = pipe(requireOwnsRow('userId'), validate, persist);
+      const result = await run(ctxAs('user-a', { input: { name: 'x', userId: 'someone-else' } }));
+      expect(result.doc?.userId).toBe('user-a');
+    });
+
+    it('update: 404s when the prefetched doc belongs to a different user', async () => {
+      const created = await pipe(validate, persist)(ctxAs('user-a', { input: { name: 'x', userId: 'user-a' } }));
+      const id = created.doc!.id as string;
+
+      const run = pipe(requireOwnsRow('userId'), validate, persist);
+      await expect(run(ctxAs('user-b', { operation: 'update', id, input: { name: 'y' } }))).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        status: 404,
+      });
+    });
+
+    it('update: succeeds when the prefetched doc belongs to the requesting user', async () => {
+      const created = await pipe(validate, persist)(ctxAs('user-a', { input: { name: 'x', userId: 'user-a' } }));
+      const id = created.doc!.id as string;
+
+      const run = pipe(requireOwnsRow('userId'), validate, persist);
+      const result = await run(ctxAs('user-a', { operation: 'update', id, input: { name: 'y' } }));
+      expect(result.doc?.name).toBe('y');
+    });
+
+    it('throws INTERNAL when composed before requireAuth (ctx.user undefined)', async () => {
+      const run = pipe(requireOwnsRow('userId'), validate, persist);
+      await expect(
+        run({ operation: 'create', input: { name: 'x' }, doc: null, model: OwnedWidget, db }),
+      ).rejects.toMatchObject({ code: 'INTERNAL', status: 500 });
     });
   });
 });

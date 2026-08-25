@@ -25,7 +25,7 @@ export type { ModelDefinition, OperationsConfig, DefineModelConfig, ConsoleModel
 export { defineDomain } from './domain.js';
 export type { DomainDefinition, DefineDomainConfig, ConsoleMenuItem } from './domain.js';
 
-export { pipe, validate, persist, PipelineError } from './pipeline.js';
+export { pipe, validate, persist, requireOwnsRow, PipelineError } from './pipeline.js';
 export type { OperationContext, Operation, PipelineFn, PipelineErrorOptions } from './pipeline.js';
 
 export { buildCreateSchema, buildUpdateSchema, buildDomainSettingsSchema } from './validation.js';

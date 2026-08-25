@@ -101,6 +101,28 @@ export function pipe(...fns: PipelineFn[]): PipelineFn {
   };
 }
 
+/** Pairs with `ApiModelOptions.ownerField` (core/model.ts): on `create`, overwrites
+ * `ctx.input[ownerField]` with the requesting user's id (ignoring any client-supplied value) so a
+ * row is always created under the real requester; on `update`/`remove`, checks the already-
+ * prefetched `ctx.doc[ownerField]` against that same id and 404s on mismatch — same "don't reveal
+ * existence" behavior as `automation/pipeline.ts`'s `assertOwnsChat`. Must run after `requireAuth`
+ * (needs `ctx.user`) and, for `create`, before `validate` (so the schema sees the real owner id). */
+export function requireOwnsRow(ownerField: string): PipelineFn {
+  return async (ctx) => {
+    if (ctx.user === undefined) {
+      throw new PipelineError({ code: 'INTERNAL', status: 500, message: 'requireOwnsRow run before requireAuth' });
+    }
+    const userId = (ctx.user as { id?: string } | null)?.id;
+    if (ctx.operation === 'create') {
+      return { ...ctx, input: { ...ctx.input, [ownerField]: userId } };
+    }
+    if (ctx.doc?.[ownerField] !== userId) {
+      throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+    }
+    return ctx;
+  };
+}
+
 export const validate: PipelineFn = async (ctx) => {
   const schema = ctx.operation === 'create' ? buildCreateSchema(ctx.model) : buildUpdateSchema(ctx.model);
   const result = schema.safeParse(ctx.input);

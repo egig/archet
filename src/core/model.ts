@@ -34,6 +34,14 @@ export interface ApiModelOptions {
    * enforces that a chat and its messages are only readable by their owner. `Agent` stays generic-
    * REST-readable since it's shared config with no owner, the same as `Role`/`Permission`. */
   hidden?: boolean;
+  /** names the field that must equal the requesting user's id for a row to be readable/writable
+   * through the generic `/api/:model` router — the alternative to `hidden` for a model that *does*
+   * have a natural per-row owner and still wants generic REST access (e.g. `Workspace`,
+   * src/workspace/models). `create-router.ts`'s GET routes gate on it directly (auth + filter to
+   * the session user's own rows); write routes still need a matching `requireOwnsRow(ownerField)`
+   * step composed into the model's own `operations` pipeline (core/pipeline.ts) — this flag alone
+   * doesn't touch POST/PATCH/DELETE. */
+  ownerField?: string;
 }
 
 export interface ModelDefinition {

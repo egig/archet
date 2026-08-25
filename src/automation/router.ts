@@ -13,6 +13,8 @@ import { Agent, Chat, Message } from './models/index.js';
 import { assertOwnsChat } from './pipeline.js';
 import { runAgentTurn } from './run-turn.js';
 import type { ChatMessage } from './provider.js';
+import { Workspace, WorkspaceView } from '../workspace/models/index.js';
+import { assertOwnsWorkspace } from '../workspace/pipeline.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
@@ -51,9 +53,57 @@ async function loadHistory(db: AnyDb, chatId: string): Promise<ChatMessage[]> {
     include: [],
     filters: [{ field: 'chatId', op: '=', value: chatId }],
   });
-  // MVP only ever persists 'user'/'assistant' rows (see Message model comment) — a 'tool' row
-  // never lands here, so this cast is safe.
-  return page.rows.map((row) => ({ role: row.role as 'user' | 'assistant', content: row.content as string }));
+  // MVP only ever persists 'user'/'assistant'/'context' rows (see Message model comment) — a
+  // 'tool' row never lands here. Providers have no mid-thread system role, so a 'context' row
+  // (a workspace snapshot, see insertWorkspaceContext below) is sent as 'user' — it's only ever
+  // rendered distinctly on the way *out* (ChatThreadView), not specially understood by the model.
+  return page.rows.map((row) => ({
+    role: row.role === 'assistant' ? 'assistant' : 'user',
+    content: row.content as string,
+  }));
+}
+
+/** Fetches the requesting user's own `workspaceId` (owned check via `assertOwnsWorkspace`, same
+ * as `requireOwnedChat` above) and its `WorkspaceView` tabs, and persists a `role: 'context'`
+ * `Message` describing them — called right before the user's own turn is inserted, so it's the
+ * most recent thing the agent sees. Persisted (not just folded into the system prompt) so the
+ * console can show what the workspace looked like at each point in the transcript. */
+async function insertWorkspaceContext(
+  db: AnyDb,
+  registry: Record<string, ModelDefinition>,
+  chatId: string,
+  workspaceId: string,
+  user: UserRow,
+): Promise<void> {
+  const workspace = await fetchRow(db, Workspace, workspaceId);
+  assertOwnsWorkspace(workspace, user);
+
+  const views = await listRows(db, WorkspaceView, registry, {
+    limit: 100,
+    offset: 0,
+    sortField: 'order',
+    sortDirection: 'asc',
+    includeDeleted: false,
+    include: [],
+    filters: [{ field: 'workspaceId', op: '=', value: workspaceId }],
+  });
+
+  const snapshot = {
+    workspace: { id: workspace.id, name: workspace.name },
+    views: views.rows.map((v) => ({
+      id: v.id,
+      label: v.label,
+      targetModel: v.targetModel,
+      filters: v.filters,
+      sortField: v.sortField,
+      sortDirection: v.sortDirection,
+      include: v.include,
+      limit: v.limit,
+      order: v.order,
+    })),
+  };
+
+  await insertRow(db, Message, { chatId, role: 'context', content: JSON.stringify(snapshot) });
 }
 
 /** Streams one agent turn over SSE: persists the user's message, runs `runAgentTurn` against
@@ -65,9 +115,14 @@ function streamTurn(
   registry: Record<string, ModelDefinition>,
   chat: Record<string, unknown>,
   agent: Record<string, unknown>,
+  user: UserRow,
   userMessage: string,
+  workspaceId: string | undefined,
 ) {
   return streamSSE(c, async (stream) => {
+    if (workspaceId) {
+      await insertWorkspaceContext(db, registry, chat.id as string, workspaceId, user);
+    }
     await insertRow(db, Message, { chatId: chat.id, role: 'user', content: userMessage });
     const history = await loadHistory(db, chat.id as string);
 
@@ -159,8 +214,9 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
 
     const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim() : message.slice(0, 60);
     const chat = await insertRow(db, Chat, { userId: user.id, agentId: agent.id, title, status: 'active' });
+    const workspaceId = typeof input.workspaceId === 'string' ? input.workspaceId : undefined;
 
-    return streamTurn(c, db, registry, chat, agent, message);
+    return streamTurn(c, db, registry, chat, agent, user, message, workspaceId);
   });
 
   app.post('/chats/:id/messages', async (c) => {
@@ -169,8 +225,9 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
     const input = await readJsonBody(c);
     const message = requireMessageText(input);
     const agent = await loadActiveAgent(db, chat.agentId);
+    const workspaceId = typeof input.workspaceId === 'string' ? input.workspaceId : undefined;
 
-    return streamTurn(c, db, registry, chat, agent, message);
+    return streamTurn(c, db, registry, chat, agent, user, message, workspaceId);
   });
 
   return app;

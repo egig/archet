@@ -1,6 +1,7 @@
 import { User, Role, Permission, Session } from '../auth/models/index.js';
 import { Agent, AgentPermission, Chat, Message, Provider } from '../automation/models/index.js';
 import { AutomationDomain } from '../automation/domain.js';
+import { Workspace, WorkspaceView } from '../workspace/models/index.js';
 import type { ScannedModel } from './scan.js';
 import type { ScannedDomain } from './scan-domains.js';
 
@@ -22,6 +23,8 @@ export const BUILTIN_MODELS: ScannedModel[] = [
   { filePath: '@egig/ratchet/automation (AgentPermission)', exportName: 'AgentPermission', model: AgentPermission, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (Chat)', exportName: 'Chat', model: Chat, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (Message)', exportName: 'Message', model: Message, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
+  { filePath: '@egig/ratchet/workspace (Workspace)', exportName: 'Workspace', model: Workspace, builtinPackage: '@egig/ratchet/workspace', domain: 'workspace' },
+  { filePath: '@egig/ratchet/workspace (WorkspaceView)', exportName: 'WorkspaceView', model: WorkspaceView, builtinPackage: '@egig/ratchet/workspace', domain: 'workspace' },
 ];
 
 /**

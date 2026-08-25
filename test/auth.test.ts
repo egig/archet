@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { defineModel, field } from '../src/core/index.js';
 import { generateId } from '../src/core/id.js';
+import { insertRow } from '../src/core/persistence.js';
 import type { OperationContext } from '../src/core/pipeline.js';
 import { hashPassword, verifyPassword } from '../src/auth/password.js';
 import { hashPassword as hashPasswordPipeline } from '../src/auth/pipeline.js';
@@ -64,6 +65,18 @@ describeIfDb('auth system (against a live Postgres)', () => {
     console: { label: 'Widgets', displayField: 'name' },
   });
 
+  // ApiModelOptions.ownerField (core/model.ts) — reuses this suite's already-live users/sessions
+  // tables/registerUser helper rather than standing up a second one (vitest runs test *files* in
+  // parallel against the same live DB, so a second users/sessions lifecycle in another file races
+  // this one; see router.test.ts, which intentionally does not duplicate it).
+  const Note = defineModel('notes', {
+    fields: {
+      userId: field.reference('users', { required: true, indexed: true }),
+      text: field.string({ required: true }),
+    },
+    api: { ownerField: 'userId' },
+  });
+
   beforeAll(async () => {
     client = postgres(connectionString!);
     db = drizzle(client) as unknown as PgDatabase<any, any, any>;
@@ -88,9 +101,14 @@ describeIfDb('auth system (against a live Postgres)', () => {
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
         user_id uuid NOT NULL, token varchar NOT NULL, expires_at timestamptz NOT NULL
       )`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS notes (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        user_id uuid NOT NULL, text varchar NOT NULL
+      )`);
 
     authApp = createAuthRouter(db);
-    apiApp = createApiRouter({ roles: Role, permissions: Permission, users: User }, db);
+    apiApp = createApiRouter({ roles: Role, permissions: Permission, users: User, notes: Note }, db);
     consoleApp = createConsoleRouter(
       createNodeFsAssetSource('.ratchet-test'),
       { users: User, roles: Role, permissions: Permission, sessions: Session, widgets: Widget },
@@ -100,10 +118,11 @@ describeIfDb('auth system (against a live Postgres)', () => {
   });
 
   beforeEach(async () => {
-    await db.execute(sql`TRUNCATE TABLE sessions, permissions, users, roles`);
+    await db.execute(sql`TRUNCATE TABLE notes, sessions, permissions, users, roles`);
   });
 
   afterAll(async () => {
+    await db.execute(sql`DROP TABLE IF EXISTS notes`);
     await db.execute(sql`DROP TABLE IF EXISTS sessions`);
     await db.execute(sql`DROP TABLE IF EXISTS users`);
     await db.execute(sql`DROP TABLE IF EXISTS permissions`);
@@ -418,6 +437,37 @@ describeIfDb('auth system (against a live Postgres)', () => {
       expect(hidden.status).toBe(404);
       const unknown = await consoleApp.request('/meta/models/nope', { headers: { authorization: `Bearer ${token}` } });
       expect(unknown.status).toBe(404);
+    });
+  });
+
+  describe('ownerField scoping (ApiModelOptions.ownerField, core/model.ts + create-router.ts)', () => {
+    it('GET /:model scopes results to the requesting user, additively (cannot see other rows)', async () => {
+      const a = await registerUser('owner-a@example.com', 'pw');
+      const b = await registerUser('owner-b@example.com', 'pw');
+      await insertRow(db, Note, { userId: a.user.id, text: 'a-note' });
+      await insertRow(db, Note, { userId: b.user.id, text: 'b-note' });
+
+      const asA = await apiApp.request('/notes', { headers: { authorization: `Bearer ${a.token}` } });
+      const bodyA = (await asA.json()) as { data: { text: string }[] };
+      expect(bodyA.data.map((r) => r.text)).toEqual(['a-note']);
+
+      const asB = await apiApp.request('/notes', { headers: { authorization: `Bearer ${b.token}` } });
+      const bodyB = (await asB.json()) as { data: { text: string }[] };
+      expect(bodyB.data.map((r) => r.text)).toEqual(['b-note']);
+    });
+
+    it("GET /:model/:id 404s when the row isn't the requesting user's own", async () => {
+      const a = await registerUser('owner-c@example.com', 'pw');
+      const b = await registerUser('owner-d@example.com', 'pw');
+      const bNote = await insertRow(db, Note, { userId: b.user.id, text: 'private' });
+
+      const res = await apiApp.request(`/notes/${bNote.id}`, { headers: { authorization: `Bearer ${a.token}` } });
+      expect(res.status).toBe(404);
+    });
+
+    it('GET without a valid session 401s on an ownerField-scoped model (unlike a plain model, which has no read gate at all)', async () => {
+      const res = await apiApp.request('/notes');
+      expect(res.status).toBe(401);
     });
   });
 });

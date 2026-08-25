@@ -12,6 +12,7 @@ import { ChatPage } from './ChatPage.js';
 import { ChatEmptyState } from './ChatEmptyState.js';
 import { ChatThread } from './ChatThread.js';
 import { SettingsPage } from './SettingsPage.js';
+import { WorkspacePage } from './WorkspacePage.js';
 import { FieldRenderersProvider, type FieldRenderer } from './field-renderers.js';
 
 /** A consumer-supplied page mounted inside the authenticated console shell, alongside the
@@ -47,6 +48,7 @@ export function ConsoleApp({ brand, pages = [], fieldRenderers = {} }: ConsoleAp
             <Route path="/setup" element={<SetupPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route element={<RequireAuth />}>
+              <Route path="workspace/:workspaceId" element={<WorkspacePage />} />
               <Route element={<Layout brand={brand} pages={pages} />}>
                 <Route index element={<IndexRedirect />} />
                 <Route path="chat" element={<ChatPage />}>

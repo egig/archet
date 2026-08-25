@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const SRC_DIRS = ['core', 'cli', 'codegen', 'router', 'auth', 'automation', 'console'];
+const SRC_DIRS = ['core', 'cli', 'codegen', 'router', 'auth', 'automation', 'workspace', 'console'];
 
 function walk(dir: string, out: string[]): string[] {
   for (const entry of readdirSync(dir)) {

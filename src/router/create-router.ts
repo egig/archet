@@ -14,6 +14,7 @@ import {
   type FileStorageAdapter,
   type StoredFile,
 } from '../core/storage.js';
+import { resolveSessionUser } from '../auth/pipeline.js';
 import { toErrorResponse } from './errors.js';
 import { parseInclude, parseListQuery } from './query.js';
 import { getOneRow, listRows } from './list.js';
@@ -27,6 +28,15 @@ function resolveModel(registry: Record<string, ModelDefinition>, name: string): 
   // all for a model whose only legitimate access path is a dedicated, auth-scoped router.
   if (!model || model.api?.hidden) throw new PipelineError({ code: 'MODEL_NOT_FOUND', status: 404 });
   return model;
+}
+
+/** `ApiModelOptions.ownerField` (core/model.ts) gate for a single already-fetched row — 404s
+ * rather than 403ing on a mismatch, same "don't reveal existence" behavior as the write-side
+ * `requireOwnsRow` (core/pipeline.ts) this pairs with. */
+function assertOwnsRow(model: ModelDefinition, row: Record<string, unknown>, userId: string): void {
+  if (model.api?.ownerField && row[model.api.ownerField] !== userId) {
+    throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+  }
 }
 
 function resolveFileField(model: ModelDefinition, key: string): FileFieldDefinition {
@@ -130,6 +140,10 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
   app.get('/:model', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     const query = parseListQuery(model, new URL(c.req.url).searchParams);
+    if (model.api?.ownerField) {
+      const user = await resolveSessionUser(db, c.req.raw);
+      query.filters.push({ field: model.api.ownerField, op: '=', value: user.id });
+    }
     const page = await listRows(db, model, registry, query);
 
     // §5: `{ data, meta }` always — offset mode gets total/limit/offset, cursor mode gets nextCursor/hasMore.
@@ -147,6 +161,10 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       include: parseInclude(model, searchParams.get('include')),
     });
     if (!row) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+    if (model.api?.ownerField) {
+      const user = await resolveSessionUser(db, c.req.raw);
+      assertOwnsRow(model, row, user.id);
+    }
     return c.json({ data: row });
   });
 
@@ -160,6 +178,10 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     resolveFileField(model, c.req.param('field'));
     const row = await getOneRow(db, model, registry, c.req.param('id'), { includeDeleted: false, include: [] });
     if (!row) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+    if (model.api?.ownerField) {
+      const user = await resolveSessionUser(db, c.req.raw);
+      assertOwnsRow(model, row, user.id);
+    }
     const stored = storedFileOf(row, c.req.param('field'));
     if (!stored) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
 

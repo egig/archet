@@ -9,7 +9,10 @@ import { requireAuth, requirePermission } from '../../auth/pipeline.js';
 export const Message = defineModel('messages', {
   fields: {
     chatId: field.reference('chats', { required: true, indexed: true, displayText: 'Chat' }),
-    role: field.enum(['user', 'assistant', 'tool'], { required: true, indexed: true }),
+    // 'context' (src/automation/router.ts's insertWorkspaceContext) carries a workspace snapshot —
+    // never sent to the provider as-is (loadHistory translates it to 'user'), rendered distinctly
+    // in the console (ChatThreadView) rather than as a chat bubble.
+    role: field.enum(['user', 'assistant', 'tool', 'context'], { required: true, indexed: true }),
     content: field.text({ required: true }),
     // { usage, stopReason, model, toolCalls? } — provider response metadata, not shown to the user.
     metadata: field.json({ required: false }),

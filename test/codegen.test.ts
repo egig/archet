@@ -63,8 +63,9 @@ describe('generate() against a self-contained model fixture', () => {
   it('emits a schema with §4 conventions: timestamptz, partial unique index, CHECK, RESTRICT FK', async () => {
     const { modelCount } = await generate({ modelsDir, generatedDir });
     // 2 user models + 4 built-in auth models (User/Role/Permission/Session) + 5 built-in
-    // automation models (Agent/AgentPermission/Chat/Message/Provider) — built-ins are always present.
-    expect(modelCount).toBe(11);
+    // automation models (Agent/AgentPermission/Chat/Message/Provider) + 2 built-in workspace
+    // models (Workspace/WorkspaceView) — built-ins are always present.
+    expect(modelCount).toBe(13);
 
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
@@ -139,7 +140,22 @@ describe('generate() against a self-contained model fixture', () => {
     expect(schemaSrc).toContain("pgTable('providers'");
   });
 
-  it("assigns the built-in auth models to the 'auth' Domain and the built-in automation models to the 'automation' Domain (ADR 0001), grouping them in the console sidebar", async () => {
+  it('always includes the built-in Workspace/WorkspaceView models, imported from `@egig/ratchet/workspace`', async () => {
+    await generate({ modelsDir, generatedDir });
+    const registrySrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
+    );
+    const schemaSrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
+    );
+    for (const name of ['Workspace', 'WorkspaceView']) {
+      expect(registrySrc).toContain(`import { ${name} as _${name} } from '@egig/ratchet/workspace';`);
+    }
+    expect(schemaSrc).toContain("pgTable('workspaces'");
+    expect(schemaSrc).toContain("pgTable('workspace_views'");
+  });
+
+  it("assigns the built-in auth models to the 'auth' Domain, the built-in automation models to the 'automation' Domain, and the built-in workspace models to the 'workspace' Domain (ADR 0001), grouping them in the console sidebar", async () => {
     await generate({ modelsDir, generatedDir });
     const registrySrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
@@ -151,6 +167,10 @@ describe('generate() against a self-contained model fixture', () => {
     for (const name of ['Agent', 'AgentPermission', 'Chat', 'Message', 'Provider']) {
       expect(registrySrc).toContain(`domain: "automation"`);
       expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "automation" } };`);
+    }
+    for (const name of ['Workspace', 'WorkspaceView']) {
+      expect(registrySrc).toContain(`domain: "workspace"`);
+      expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "workspace" } };`);
     }
     // a flat, non-domain user model (customer.model.ts, invoice.model.ts) stays a plain re-export.
     expect(registrySrc).toContain('export { Customer } from');

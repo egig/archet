@@ -106,10 +106,21 @@ export interface OffsetPage {
 
 export async function listRows(
   model: string,
-  opts: { limit: number; offset: number; include?: string[] },
+  opts: {
+    limit: number;
+    offset: number;
+    include?: string[];
+    /** `[field, op, value][]` — the same shape `router/query.ts`'s `FilterClause[]` parses, sent
+     * as `?filter=<json>` (Q: WorkspaceView's saved `filters` round-trip straight through here). */
+    filters?: [string, string, unknown][];
+    /** `-field` for descending, matching `router/query.ts`'s convention. */
+    sort?: string;
+  },
 ): Promise<OffsetPage> {
   const params = new URLSearchParams({ limit: String(opts.limit), offset: String(opts.offset) });
   if (opts.include?.length) params.set('include', opts.include.join(','));
+  if (opts.filters?.length) params.set('filter', JSON.stringify(opts.filters));
+  if (opts.sort) params.set('sort', opts.sort);
   const res = await fetch(`/api/${encodeURIComponent(model)}?${params.toString()}`, {
     headers: { 'content-type': 'application/json' },
   });
@@ -185,7 +196,7 @@ export interface ChatSummary {
 export interface ChatMessageRow {
   id: string;
   chatId: string;
-  role: 'user' | 'assistant' | 'tool';
+  role: 'user' | 'assistant' | 'tool' | 'context';
   content: string;
   metadata: Record<string, unknown> | null;
   createdAt: string;
@@ -264,11 +275,22 @@ async function streamChatTurn(path: string, body: Record<string, unknown>, handl
 
 /** Creates a chat, persists the first message, and streams the reply — `onDone`'s `chatId`
  * (set server-side before streaming starts, see src/automation/router.ts) is what the caller
- * navigates to. */
-export function createChatAndSend(agentId: string, message: string, handlers: ChatTurnHandlers): Promise<void> {
-  return streamChatTurn('/api/automation/chats', { agentId, message }, handlers);
+ * navigates to. `workspaceId`, when given, has the server insert a `role: 'context'` snapshot of
+ * that workspace's tabs before this message (src/automation/router.ts's `insertWorkspaceContext`). */
+export function createChatAndSend(
+  agentId: string,
+  message: string,
+  handlers: ChatTurnHandlers,
+  workspaceId?: string,
+): Promise<void> {
+  return streamChatTurn('/api/automation/chats', { agentId, message, workspaceId }, handlers);
 }
 
-export function sendChatMessage(chatId: string, message: string, handlers: ChatTurnHandlers): Promise<void> {
-  return streamChatTurn(`/api/automation/chats/${encodeURIComponent(chatId)}/messages`, { message }, handlers);
+export function sendChatMessage(
+  chatId: string,
+  message: string,
+  handlers: ChatTurnHandlers,
+  workspaceId?: string,
+): Promise<void> {
+  return streamChatTurn(`/api/automation/chats/${encodeURIComponent(chatId)}/messages`, { message, workspaceId }, handlers);
 }
