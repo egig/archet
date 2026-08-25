@@ -99,13 +99,23 @@ function emitTable(model: ModelDefinition): string {
     `  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),`,
     `  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),`,
     `  deletedAt: timestamp('deleted_at', { withTimezone: true }),`,
+    // Q30: audit trail, not ownership — nullable (self-registration and other unauthenticated
+    // creates have no actor to stamp) and RESTRICT like every other reference() column, but never
+    // declarable via field.* and never touched by requireOwnsRow/updateRow.
+    `  createdById: uuid('created_by_id').references(() => ${tableVar('users')}.id, { onDelete: 'restrict' }),`,
     ...Object.entries(model.fields).map(([key, f]) => `  ${key}: ${columnExpr(key, f)},`),
   ];
-  // Auto-indexed unconditionally: `id`, `createdAt`, `updatedAt` are treated as implicitly
-  // sortable/filterable by the router (src/router/fields.ts) since a model author has no way to
-  // declare `indexed: true` on a column they didn't author — "sort by most recent" needs a real
-  // index to back it, not just a rule that allows the query.
-  const extra = [`  index('${model.name}_created_at_idx').on(table.createdAt),`, `  index('${model.name}_updated_at_idx').on(table.updatedAt),`, ...extraConfigLines(model)];
+  // Auto-indexed unconditionally: `id`, `createdAt`, `updatedAt`, `createdById` are treated as
+  // implicitly sortable/filterable by the router (src/router/fields.ts) since a model author has
+  // no way to declare `indexed: true` on a column they didn't author — "sort by most recent" and
+  // "show me what I created" both need a real index to back them, not just a rule that allows the
+  // query.
+  const extra = [
+    `  index('${model.name}_created_at_idx').on(table.createdAt),`,
+    `  index('${model.name}_updated_at_idx').on(table.updatedAt),`,
+    `  index('${model.name}_created_by_id_idx').on(table.createdById),`,
+    ...extraConfigLines(model),
+  ];
 
   let src = `export const ${varName} = pgTable('${model.tableName}', {\n${columnLines.join('\n')}\n}`;
   if (extra.length > 0) {

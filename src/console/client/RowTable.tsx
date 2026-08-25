@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
-import { hasPermission, listRows, removeRow, type OffsetPage } from './api.js';
+import { hasPermission, listRows, lockRow, removeRow, unlockRow, type OffsetPage } from './api.js';
 import { formatCellValue } from './format.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { FilterNode } from './FilterBar.js';
@@ -72,12 +72,29 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
   const canCreate = hasPermission(user?.permissions ?? [], model.name, 'create');
   const canUpdate = hasPermission(user?.permissions ?? [], model.name, 'update');
   const canRemove = hasPermission(user?.permissions ?? [], model.name, 'remove');
+  // e.g. `Workspace` — generic (not hardcoded to one model) so any model that grows a `locked`
+  // field gets the same "frozen row" treatment for free.
+  const hasLockedField = model.fields.some((f) => f.key === 'locked');
+
+  async function refetch() {
+    const sort = query.sortField ? `${query.sortDirection === 'desc' ? '-' : ''}${query.sortField}` : undefined;
+    setPage(await listRows(model.name, { limit, offset, include: includes, filters: query.filters, sort }));
+  }
 
   async function handleDelete(id: string) {
     if (!window.confirm(`Delete this ${model.label.replace(/s$/, '')}?`)) return;
     await removeRow(model.name, id);
-    const sort = query.sortField ? `${query.sortDirection === 'desc' ? '-' : ''}${query.sortField}` : undefined;
-    setPage(await listRows(model.name, { limit, offset, include: includes, filters: query.filters, sort }));
+    await refetch();
+  }
+
+  async function handleLock(id: string) {
+    await lockRow(model.name, id);
+    await refetch();
+  }
+
+  async function handleUnlock(id: string) {
+    await unlockRow(model.name, id);
+    await refetch();
   }
 
   return (
@@ -147,15 +164,33 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
                   })}
                   {(canUpdate || canRemove) && (
                     <td className="px-3 py-2 text-right whitespace-nowrap">
-                      {canUpdate && (
-                        <Link to={{ pathname: `${base}/${id}`, search }} className="mr-3 text-gray-600 hover:underline">
-                          Edit
-                        </Link>
-                      )}
-                      {canRemove && (
-                        <button type="button" onClick={() => void handleDelete(id)} className="text-red-600 hover:underline">
-                          Delete
-                        </button>
+                      {hasLockedField && Boolean(row.locked) ? (
+                        <>
+                          <span className="mr-3 text-gray-400">Locked</span>
+                          {canUpdate && (
+                            <button type="button" onClick={() => void handleUnlock(id)} className="text-gray-600 hover:underline">
+                              Unlock
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {canUpdate && (
+                            <Link to={{ pathname: `${base}/${id}`, search }} className="mr-3 text-gray-600 hover:underline">
+                              Edit
+                            </Link>
+                          )}
+                          {hasLockedField && canUpdate && (
+                            <button type="button" onClick={() => void handleLock(id)} className="mr-3 text-gray-600 hover:underline">
+                              Lock
+                            </button>
+                          )}
+                          {canRemove && (
+                            <button type="button" onClick={() => void handleDelete(id)} className="text-red-600 hover:underline">
+                              Delete
+                            </button>
+                          )}
+                        </>
                       )}
                     </td>
                   )}

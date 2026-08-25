@@ -21,18 +21,23 @@ async function cloneWorkspaceViews(
 ): Promise<void> {
   const templateViews = await listRowsByField(ctx.db, WorkspaceView, 'workspaceId', templateWorkspaceId);
   for (const view of templateViews) {
-    await insertRow(ctx.db, WorkspaceView, {
+    await insertRow(
+      ctx.db,
+      WorkspaceView,
+      {
+        userId,
+        workspaceId: targetWorkspaceId,
+        targetModel: view.targetModel,
+        label: view.label,
+        filters: view.filters,
+        sortField: view.sortField,
+        sortDirection: view.sortDirection,
+        include: view.include,
+        limit: view.limit,
+        order: view.order,
+      },
       userId,
-      workspaceId: targetWorkspaceId,
-      targetModel: view.targetModel,
-      label: view.label,
-      filters: view.filters,
-      sortField: view.sortField,
-      sortDirection: view.sortDirection,
-      include: view.include,
-      limit: view.limit,
-      order: view.order,
-    });
+    );
   }
 }
 
@@ -59,10 +64,12 @@ export const createDefaultWorkspace: PipelineFn = async (ctx) => {
   const workTitleId = ctx.doc?.workTitleId;
   const workTitle = typeof workTitleId === 'string' ? await fetchRow(ctx.db, WorkTitle, workTitleId) : null;
 
-  const workspace = await insertRow(ctx.db, Workspace, {
+  const workspace = await insertRow(
+    ctx.db,
+    Workspace,
+    { userId, name: typeof workTitle?.name === 'string' ? workTitle.name : DEFAULT_WORKSPACE_NAME },
     userId,
-    name: typeof workTitle?.name === 'string' ? workTitle.name : DEFAULT_WORKSPACE_NAME,
-  });
+  );
 
   if (typeof workTitle?.workspaceTemplateId === 'string') {
     await cloneWorkspaceViews(ctx, workTitle.workspaceTemplateId, workspace.id as string, userId);

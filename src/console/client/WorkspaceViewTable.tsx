@@ -22,13 +22,17 @@ export interface WorkspaceViewTableProps {
   /** called with the server's own copy of the row after a persisted edit (filters, for now) —
    * lets the owning `WorkspaceTabs` keep its tab list in sync without a full refetch. */
   onChange: (next: WorkspaceViewRow) => void;
+  /** the parent workspace's `locked` flag — while true, the `FilterBar` (editing this View's own
+   * query) is hidden; the underlying `RowTable` (the target model's actual rows) stays fully
+   * interactive, since row data isn't part of what locking freezes. */
+  locked: boolean;
 }
 
 /** One workspace tab's content: the saved query rendered through the shared `RowTable`, plus a
  * `FilterBar` (RowTable's `toolbar` slot) for editing its filters by hand — edits persist back to
  * the `workspace_views` row immediately, the same row an agent's `update_workspace_views` tool
  * call would edit. */
-export function WorkspaceViewTable({ view, workspaceId, onChange }: WorkspaceViewTableProps) {
+export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: WorkspaceViewTableProps) {
   const { getModel } = useModels();
   const model = getModel(view.targetModel);
 
@@ -50,7 +54,9 @@ export function WorkspaceViewTable({ view, workspaceId, onChange }: WorkspaceVie
         limit: view.limit,
       }}
       basePath={`/workspace/${workspaceId}/${model.name}`}
-      toolbar={<FilterBar fields={model.fields} value={view.filters ?? []} onChange={(filters) => void persistFilters(filters)} />}
+      toolbar={
+        !locked && <FilterBar fields={model.fields} value={view.filters ?? []} onChange={(filters) => void persistFilters(filters)} />
+      }
     />
   );
 }

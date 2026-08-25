@@ -2,12 +2,13 @@ import type { FieldDefinition } from '../core/field.js';
 import type { ModelDefinition } from '../core/model.js';
 
 /**
- * `id`, `createdAt`, `updatedAt` aren't declarable via `field.*` (they're auto-injected, §4),
- * so a model author has no way to mark them `indexed: true` even though "sort by most recent"
- * is close to a universal query need. Treated as implicitly indexed for the filter/sort gate;
- * schema-gen backs this by always adding a plain index on created_at/updated_at (see schema-gen.ts).
+ * `id`, `createdAt`, `updatedAt`, `createdById` aren't declarable via `field.*` (they're
+ * auto-injected, §4), so a model author has no way to mark them `indexed: true` even though "sort
+ * by most recent" and "show me what I created" are close to universal query needs. Treated as
+ * implicitly indexed for the filter/sort gate; schema-gen backs this by always adding a plain
+ * index on created_at/updated_at/created_by_id (see schema-gen.ts).
  */
-const IMPLICIT_INDEXED_COLUMNS = new Set(['id', 'createdAt', 'updatedAt']);
+const IMPLICIT_INDEXED_COLUMNS = new Set(['id', 'createdAt', 'updatedAt', 'createdById']);
 
 export type ColumnKind = FieldDefinition['kind'] | 'uuid' | 'datetime';
 
@@ -18,6 +19,7 @@ export function isKnownColumn(model: ModelDefinition, key: string): boolean {
 export function columnKind(model: ModelDefinition, key: string): ColumnKind {
   if (key === 'id') return 'uuid';
   if (key === 'createdAt' || key === 'updatedAt') return 'datetime';
+  if (key === 'createdById') return 'reference';
   const f = model.fields[key];
   if (!f) throw new Error(`columnKind: '${key}' is not a field on model '${model.name}'`);
   return f.kind;

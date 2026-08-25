@@ -83,27 +83,27 @@ describeIfDb('auth system (against a live Postgres)', () => {
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS roles (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         name varchar NOT NULL, description text
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS permissions (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         role_id uuid NOT NULL, resource varchar NOT NULL, action varchar NOT NULL
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS users (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         email varchar NOT NULL, password_hash varchar NOT NULL, role_id uuid, work_title_id uuid, active boolean NOT NULL DEFAULT true
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS sessions (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         user_id uuid NOT NULL, token varchar NOT NULL, expires_at timestamptz NOT NULL
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS notes (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         user_id uuid NOT NULL, text varchar NOT NULL
       )`);
     // register/setup/admin-created-user all provision a default `Workspace` (see
@@ -116,8 +116,8 @@ describeIfDb('auth system (against a live Postgres)', () => {
     // id regardless.
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspaces (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
-        user_id uuid NOT NULL, name varchar NOT NULL
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false
       )`);
 
     authApp = createAuthRouter(db);

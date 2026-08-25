@@ -34,12 +34,12 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
     db = drizzle(client) as unknown as PgDatabase<any, any, any>;
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS authors (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         name varchar NOT NULL
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS books (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         author_id uuid NOT NULL, title varchar NOT NULL, price numeric(10,2) NOT NULL, status varchar NOT NULL DEFAULT 'draft'
       )`);
     app = createApiRouter({ authors: Author, books: Book }, db);

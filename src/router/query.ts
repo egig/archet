@@ -89,6 +89,9 @@ export function parseInclude(model: ModelDefinition, raw: string | null): string
       // Q20: multi-hop/dot-chained include is rejected outright, not silently truncated.
       throw new PipelineError({ code: 'INVALID_INCLUDE', status: 400, fields: { include: `nested include '${trimmed}' is not supported` } });
     }
+    // `createdBy` is the one relation name that isn't a declared `field.reference()` — it maps to
+    // the auto-injected `createdById` column (core/model.ts, schema-gen.ts) instead of a model field.
+    if (trimmed === 'createdBy') return trimmed;
     const fieldKey = `${trimmed}Id`;
     const field = model.fields[fieldKey];
     if (!field || field.kind !== 'reference') {

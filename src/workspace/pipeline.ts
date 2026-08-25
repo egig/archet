@@ -19,11 +19,19 @@ export function assertOwnsWorkspace(
  * ownership — it says nothing about whether the `workspaceId` it claims to belong to is actually
  * one of the requesting user's own workspaces. This is what stops a create/update from attaching a
  * view to (or moving it into) someone else's workspace. Must run after `validate` so
- * `ctx.input.workspaceId` is a validated string. */
+ * `ctx.input.workspaceId` is a validated string.
+ *
+ * Also enforces the parent workspace's `locked` flag on this write — a locked workspace's views
+ * can't be created/updated/removed. This check lives here, not in `assertOwnsWorkspace`, because
+ * that helper is also used read-only by `automation/router.ts`'s chat-context injection, which must
+ * keep working against a locked workspace. */
 export const requireWorkspaceOwnership: PipelineFn = async (ctx) => {
   const workspaceId = (ctx.input as { workspaceId?: string }).workspaceId ?? (ctx.doc?.workspaceId as string | undefined);
   if (!workspaceId) return ctx;
   const workspace = await fetchRow(ctx.db, Workspace, workspaceId);
   assertOwnsWorkspace(workspace, ctx.user as unknown as UserRow);
+  if (workspace.locked) {
+    throw new PipelineError({ code: 'FORBIDDEN', status: 403 });
+  }
   return ctx;
 };

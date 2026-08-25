@@ -17,11 +17,15 @@ export interface WorkspaceTabsProps {
    * panel wouldn't have anywhere to put a re-open control. */
   chatOpen: boolean;
   onToggleChat: () => void;
+  /** the active workspace's `locked` flag — while true, tabs are frozen (no add/reorder/close) and
+   * the active tab's `FilterBar` is hidden; the rows a tab shows stay fully interactive, only the
+   * set of tabs and their queries are frozen. */
+  locked: boolean;
 }
 
 /** The tab strip + active tab's content for one workspace — add/reorder/close tabs, all backed by
  * plain `workspace_views` rows through the generic (now owner-scoped) `/api/:model` router. */
-export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleChat }: WorkspaceTabsProps) {
+export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleChat, locked }: WorkspaceTabsProps) {
   const [views, setViews] = useState<WorkspaceViewRow[] | null>(null);
   const [activeId, setActiveIdState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -115,37 +119,43 @@ export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleCh
             <button type="button" onClick={() => setActiveId(v.id)}>
               {v.label}
             </button>
-            <button
-              type="button"
-              disabled={i === 0}
-              onClick={() => void move(v.id, -1)}
-              className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              disabled={i === views.length - 1}
-              onClick={() => void move(v.id, 1)}
-              className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
-            >
-              ›
-            </button>
-            <button type="button" onClick={() => void closeTab(v.id)} className="ml-1 text-gray-400 hover:text-red-600">
-              ×
-            </button>
+            {!locked && (
+              <>
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => void move(v.id, -1)}
+                  className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  disabled={i === views.length - 1}
+                  onClick={() => void move(v.id, 1)}
+                  className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                >
+                  ›
+                </button>
+                <button type="button" onClick={() => void closeTab(v.id)} className="ml-1 text-gray-400 hover:text-red-600">
+                  ×
+                </button>
+              </>
+            )}
           </div>
         ))}
 
-        <div className="ml-2 pb-1">
-          <button
-            type="button"
-            onClick={() => setShowAddDialog(true)}
-            className="rounded border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
-          >
-            + Add tab
-          </button>
-        </div>
+        {!locked && (
+          <div className="ml-2 pb-1">
+            <button
+              type="button"
+              onClick={() => setShowAddDialog(true)}
+              className="rounded border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+            >
+              + Add tab
+            </button>
+          </div>
+        )}
 
         <div className="ml-auto pb-1">
           <button
@@ -166,6 +176,7 @@ export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleCh
           <WorkspaceViewTable
             view={active}
             workspaceId={workspaceId}
+            locked={locked}
             onChange={(next) => setViews((prev) => prev?.map((v) => (v.id === next.id ? next : v)) ?? prev)}
           />
         ) : (

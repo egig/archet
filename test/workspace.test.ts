@@ -7,7 +7,7 @@ import type { OperationContext } from '../src/core/index.js';
 import { generateId } from '../src/core/id.js';
 import { insertRow } from '../src/core/persistence.js';
 import { WorkTitle } from '../src/auth/models/work-title.model.js';
-import { Workspace, WorkspaceView } from '../src/workspace/models/index.js';
+import { Workspace, WorkspaceView, requireNotLocked, setLocked } from '../src/workspace/models/index.js';
 import { assertOwnsWorkspace, requireWorkspaceOwnership } from '../src/workspace/pipeline.js';
 import { createDefaultWorkspace, DEFAULT_WORKSPACE_NAME } from '../src/workspace/provisioning.js';
 
@@ -32,6 +32,32 @@ describe('assertOwnsWorkspace (src/workspace/pipeline.ts)', () => {
   });
 });
 
+describe('requireNotLocked (src/workspace/models/workspace.model.ts)', () => {
+  it('passes when the doc is not locked', () => {
+    const ctx = { doc: { locked: false } } as never;
+    expect(requireNotLocked(ctx)).toBe(ctx);
+  });
+
+  it('passes when the doc has no locked field at all', () => {
+    const ctx = { doc: {} } as never;
+    expect(requireNotLocked(ctx)).toBe(ctx);
+  });
+
+  it('throws FORBIDDEN when the doc is locked', () => {
+    expect(() => requireNotLocked({ doc: { locked: true } } as never)).toThrow(
+      expect.objectContaining({ code: 'FORBIDDEN', status: 403 }),
+    );
+  });
+});
+
+describe('setLocked (src/workspace/models/workspace.model.ts)', () => {
+  it('forces ctx.input to just { locked: value }, discarding any existing input', () => {
+    const ctx = { input: { name: 'Sneaky rename' } } as never;
+    expect(setLocked(true)(ctx)).toMatchObject({ input: { locked: true } });
+    expect(setLocked(false)(ctx)).toMatchObject({ input: { locked: false } });
+  });
+});
+
 describeIfDb('requireWorkspaceOwnership (against a live Postgres)', () => {
   let client: postgres.Sql;
   let db: PgDatabase<any, any, any>;
@@ -47,12 +73,12 @@ describeIfDb('requireWorkspaceOwnership (against a live Postgres)', () => {
     db = drizzle(client) as unknown as PgDatabase<any, any, any>;
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspaces (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
-        user_id uuid NOT NULL, name varchar NOT NULL
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspace_views (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         user_id uuid NOT NULL, workspace_id uuid NOT NULL, target_model varchar NOT NULL, label varchar NOT NULL,
         filters jsonb, sort_field varchar, sort_direction varchar NOT NULL DEFAULT 'asc', include jsonb,
         "limit" integer NOT NULL DEFAULT 20, "order" integer NOT NULL DEFAULT 0
@@ -104,6 +130,16 @@ describeIfDb('requireWorkspaceOwnership (against a live Postgres)', () => {
     const ctx = ctxFor(userA, undefined);
     await expect(requireWorkspaceOwnership(ctx)).resolves.toBe(ctx);
   });
+
+  it("403s (not 404) when the workspace is locked, even though the requester owns it — blocks a WorkspaceView write against a locked workspace", async () => {
+    const userA = generateId();
+    const workspace = await insertRow(db, Workspace, { userId: userA, name: 'Locked', locked: true });
+
+    await expect(requireWorkspaceOwnership(ctxFor(userA, workspace.id as string))).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+    });
+  });
 });
 
 describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a live Postgres)', () => {
@@ -118,19 +154,19 @@ describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a l
     // here either. `work_titles` is exclusive to this file, so it's safe to reset between tests.
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspaces (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
-        user_id uuid NOT NULL, name varchar NOT NULL
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspace_views (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         user_id uuid NOT NULL, workspace_id uuid NOT NULL, target_model varchar NOT NULL, label varchar NOT NULL,
         filters jsonb, sort_field varchar, sort_direction varchar NOT NULL DEFAULT 'asc', include jsonb,
         "limit" integer NOT NULL DEFAULT 20, "order" integer NOT NULL DEFAULT 0
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS work_titles (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         name varchar NOT NULL, rank integer NOT NULL, workspace_template_id uuid NOT NULL
       )`);
   });

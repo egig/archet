@@ -103,7 +103,7 @@ async function insertWorkspaceContext(
     })),
   };
 
-  await insertRow(db, Message, { chatId, role: 'context', content: JSON.stringify(snapshot) });
+  await insertRow(db, Message, { chatId, role: 'context', content: JSON.stringify(snapshot) }, user.id);
 }
 
 /** Streams one agent turn over SSE: persists the user's message, runs `runAgentTurn` against
@@ -123,7 +123,7 @@ function streamTurn(
     if (workspaceId) {
       await insertWorkspaceContext(db, registry, chat.id as string, workspaceId, user);
     }
-    await insertRow(db, Message, { chatId: chat.id, role: 'user', content: userMessage });
+    await insertRow(db, Message, { chatId: chat.id, role: 'user', content: userMessage }, user.id);
     const history = await loadHistory(db, chat.id as string);
 
     let assistantText = '';
@@ -213,7 +213,7 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
     const message = requireMessageText(input);
 
     const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim() : message.slice(0, 60);
-    const chat = await insertRow(db, Chat, { userId: user.id, agentId: agent.id, title, status: 'active' });
+    const chat = await insertRow(db, Chat, { userId: user.id, agentId: agent.id, title, status: 'active' }, user.id);
     const workspaceId = typeof input.workspaceId === 'string' ? input.workspaceId : undefined;
 
     return streamTurn(c, db, registry, chat, agent, user, message, workspaceId);

@@ -261,6 +261,43 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     return c.json({ data: result.doc && toResponseRow(model, result.doc) });
   });
 
+  // `POST /:model/:id/lock` and `/unlock` — the only routes for a model's non-CRUD operations
+  // (core/model.ts's `OperationsConfig.lock`/`.unlock`, e.g. `Workspace`). 404s for any model that
+  // doesn't define one, the same "unknown route" shape as an unsupported model name.
+  app.post('/:model/:id/lock', async (c) => {
+    const model = resolveModel(registry, c.req.param('model'));
+    if (!model.operations.lock) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+    const ctx: OperationContext = {
+      operation: 'lock',
+      id: c.req.param('id'),
+      input: {},
+      doc: null,
+      model,
+      db,
+      request: c.req.raw,
+      registry,
+    };
+    const result = await model.operations.lock(ctx);
+    return c.json({ data: result.doc && toResponseRow(model, result.doc) });
+  });
+
+  app.post('/:model/:id/unlock', async (c) => {
+    const model = resolveModel(registry, c.req.param('model'));
+    if (!model.operations.unlock) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+    const ctx: OperationContext = {
+      operation: 'unlock',
+      id: c.req.param('id'),
+      input: {},
+      doc: null,
+      model,
+      db,
+      request: c.req.raw,
+      registry,
+    };
+    const result = await model.operations.unlock(ctx);
+    return c.json({ data: result.doc && toResponseRow(model, result.doc) });
+  });
+
   app.delete('/:model/:id', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     const ctx: OperationContext = {

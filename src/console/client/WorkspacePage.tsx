@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
-import { listRows, type AuthUser } from './api.js';
+import { listRows, lockRow, unlockRow, type AuthUser } from './api.js';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
 import { WorkspaceTabs } from './WorkspaceTabs.js';
@@ -11,6 +11,7 @@ import { BrandMark } from './BrandMark.js';
 interface WorkspaceOption {
   id: string;
   name: string;
+  locked: boolean;
 }
 
 // shared across every workspace — the chat panel's open/closed state is a UI preference, not
@@ -100,13 +101,28 @@ export function WorkspacePage() {
   // mirrors the server's `hasRootAdmin` check (src/auth/lookup.ts): a `*:*` permission.
   const isRoot = user?.permissions.some((p) => p.resource === '*' && p.action === '*') ?? false;
 
+  // the generic `/api/workspaces` GET is always owner-scoped (`api.ownerField`, create-router.ts),
+  // so every row here is one the current user owns — no extra ownership check before showing the
+  // lock/unlock control below.
+  async function refreshWorkspaces() {
+    const page = await listRows('workspaces', { limit: 100, offset: 0 });
+    setWorkspaces(page.rows as unknown as WorkspaceOption[]);
+  }
+
   useEffect(() => {
-    listRows('workspaces', { limit: 100, offset: 0 })
-      .then((page) => setWorkspaces(page.rows as unknown as WorkspaceOption[]))
-      .catch(() => setWorkspaces([]));
+    void refreshWorkspaces().catch(() => setWorkspaces([]));
   }, []);
 
   if (!workspaceId) return null;
+
+  const activeWorkspace = workspaces?.find((w) => w.id === workspaceId) ?? null;
+
+  async function toggleLock() {
+    if (!activeWorkspace) return;
+    if (activeWorkspace.locked) await unlockRow('workspaces', activeWorkspace.id);
+    else await lockRow('workspaces', activeWorkspace.id);
+    await refreshWorkspaces();
+  }
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-gray-50">
@@ -128,6 +144,15 @@ export function WorkspacePage() {
         </select>
 
         <div className="ml-auto flex shrink-0 items-center gap-3">
+          {activeWorkspace && (
+            <button
+              type="button"
+              onClick={() => void toggleLock()}
+              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+            >
+              {activeWorkspace.locked ? 'Unlock workspace' : 'Lock workspace'}
+            </button>
+          )}
           {isRoot && (
             <Link to={consolePath} className="text-sm text-gray-500 hover:text-gray-900">
               Console
@@ -143,6 +168,7 @@ export function WorkspacePage() {
           refreshSignal={refreshSignal}
           chatOpen={chatOpen}
           onToggleChat={() => setChatOpen((v) => !v)}
+          locked={activeWorkspace?.locked ?? false}
         />
         {chatOpen && <WorkspaceChatPanel workspaceId={workspaceId} onTurnDone={() => setRefreshSignal((n) => n + 1)} />}
       </div>

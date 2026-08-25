@@ -22,6 +22,14 @@ function buildIncludePlans(
   includeNames: string[],
 ): IncludePlan[] {
   return includeNames.map((relationName) => {
+    // `createdBy` -> the auto-injected `createdById` column, always targeting `users` (see
+    // parseInclude in router/query.ts) — not a declared `field.reference()`, so it has no entry
+    // in `model.fields` to read a `targetModel` off of.
+    if (relationName === 'createdBy') {
+      const targetModel = registry['users'];
+      if (!targetModel) throw new Error(`include 'createdBy': 'users' is not in the registry`);
+      return { relationName, fkField: 'createdById', targetModel };
+    }
     const fkField = `${relationName}Id`;
     const fieldDef = model.fields[fkField] as ReferenceFieldDefinition;
     const targetModel = registry[fieldDef.targetModel];

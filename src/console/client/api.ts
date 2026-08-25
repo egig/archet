@@ -152,6 +152,16 @@ export function removeRow(model: string, id: string): Promise<Record<string, unk
   return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+/** `POST /api/:model/:id/lock` and `/unlock` — only defined for models that declare a `lock`/
+ * `unlock` operation (currently just `Workspace`); calling either on any other model 404s. */
+export function lockRow(model: string, id: string): Promise<Record<string, unknown>> {
+  return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}/lock`, { method: 'POST' });
+}
+
+export function unlockRow(model: string, id: string): Promise<Record<string, unknown>> {
+  return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}/unlock`, { method: 'POST' });
+}
+
 export interface UploadedFile {
   key: string;
   filename: string;

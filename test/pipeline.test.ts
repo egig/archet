@@ -38,6 +38,7 @@ describeIfDb('pipeline primitives (against a live Postgres)', () => {
         created_at timestamptz NOT NULL,
         updated_at timestamptz NOT NULL,
         deleted_at timestamptz,
+        created_by_id uuid,
         name varchar NOT NULL,
         qty integer
       )
@@ -185,6 +186,7 @@ describeIfDb('pipeline primitives (against a live Postgres)', () => {
           created_at timestamptz NOT NULL,
           updated_at timestamptz NOT NULL,
           deleted_at timestamptz,
+          created_by_id varchar,
           user_id varchar NOT NULL,
           name varchar NOT NULL
         )

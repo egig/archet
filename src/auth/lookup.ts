@@ -35,8 +35,8 @@ export async function findSessionByToken(db: AnyDb, token: string): Promise<Sess
 export async function insertSession(db: AnyDb, id: string, userId: string, token: string, expiresAt: Date, now: Date): Promise<SessionRow> {
   const rows = await execRows(
     db,
-    sql`INSERT INTO sessions (id, user_id, token, expires_at, created_at, updated_at)
-        VALUES (${id}, ${userId}, ${token}, ${expiresAt.toISOString()}, ${now.toISOString()}, ${now.toISOString()})
+    sql`INSERT INTO sessions (id, user_id, token, expires_at, created_at, updated_at, created_by_id)
+        VALUES (${id}, ${userId}, ${token}, ${expiresAt.toISOString()}, ${now.toISOString()}, ${now.toISOString()}, ${userId})
         RETURNING id, user_id, token, expires_at`,
   );
   const row = rows[0];

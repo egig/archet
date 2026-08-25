@@ -67,12 +67,17 @@ export async function insertRow(
   db: AnyDb,
   model: ModelDefinition,
   input: Record<string, unknown>,
+  createdById?: string | null,
 ): Promise<Record<string, unknown>> {
   const id = generateId();
   const now = new Date();
 
   const columns: Chunk[] = [sql.identifier('id'), sql.identifier('created_at'), sql.identifier('updated_at')];
   const values: Chunk[] = [sql`${id}`, sql`${now.toISOString()}`, sql`${now.toISOString()}`];
+  if (createdById != null) {
+    columns.push(sql.identifier('created_by_id'));
+    values.push(sql`${createdById}`);
+  }
 
   for (const [key, fieldDef] of Object.entries(model.fields)) {
     const value = key in input ? input[key] : fieldDef.default;

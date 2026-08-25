@@ -3,7 +3,7 @@ import type { ModelDefinition } from './model.js';
 import { buildCreateSchema, buildUpdateSchema } from './validation.js';
 import { fetchRow, hardRemoveRow, insertRow, softRemoveRow, updateRow } from './persistence.js';
 
-export type Operation = 'create' | 'update' | 'remove';
+export type Operation = 'create' | 'update' | 'remove' | 'lock' | 'unlock';
 
 type AnyDb = PgDatabase<any, any, any>;
 
@@ -145,7 +145,8 @@ interface PersistFn {
 
 const persistWrite: PipelineFn = async (ctx) => {
   if (ctx.operation === 'create') {
-    const doc = await insertRow(ctx.db, ctx.model, ctx.input);
+    const createdById = (ctx.user as { id?: string } | null | undefined)?.id ?? null;
+    const doc = await insertRow(ctx.db, ctx.model, ctx.input, createdById);
     return { ...ctx, doc };
   }
   if (!ctx.id) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
