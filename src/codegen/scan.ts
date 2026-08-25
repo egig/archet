@@ -9,9 +9,10 @@ export interface ScannedModel {
   filePath: string;
   exportName: string;
   model: ModelDefinition;
-  /** true for the framework's own User/Role/Permission/Session models (src/auth/builtins.ts) —
-   * codegen imports these from the `@egig/ratchet/auth` package specifier rather than a relative path. */
-  builtin?: boolean;
+  /** set for the framework's own built-in models (src/codegen/builtins.ts) — e.g. `'@egig/ratchet/auth'`
+   * for User/Role/Permission/Session, `'@egig/ratchet/automation'` for Agent/Chat/Message. When set,
+   * codegen imports the model from this package specifier instead of a relative filesystem path. */
+  builtinPackage?: string;
   /** this model's Domain (ADR 0001), inferred from the top-level `modelsDir` subdirectory its file
    * lives in; undefined for a model declared directly under `modelsDir`. Builtins set this
    * explicitly (see builtins.ts) since they aren't reachable by this scan. */

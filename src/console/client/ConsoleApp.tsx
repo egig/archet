@@ -8,6 +8,9 @@ import { SetupPage } from './SetupPage.js';
 import { IndexRedirect } from './IndexRedirect.js';
 import { ModelListPage } from './ModelListPage.js';
 import { ModelFormPage } from './ModelFormPage.js';
+import { ChatPage } from './ChatPage.js';
+import { ChatEmptyState } from './ChatEmptyState.js';
+import { ChatThread } from './ChatThread.js';
 import { DomainSettingsPage } from './DomainSettingsPage.js';
 import { FieldRenderersProvider, type FieldRenderer } from './field-renderers.js';
 
@@ -46,6 +49,10 @@ export function ConsoleApp({ brand, pages = [], fieldRenderers = {} }: ConsoleAp
             <Route element={<RequireAuth />}>
               <Route element={<Layout brand={brand} pages={pages} />}>
                 <Route index element={<IndexRedirect />} />
+                <Route path="chat" element={<ChatPage />}>
+                  <Route index element={<ChatEmptyState />} />
+                  <Route path=":chatId" element={<ChatThread />} />
+                </Route>
                 {pages.map((page) => (
                   <Route key={page.path} path={page.path} element={page.element} />
                 ))}

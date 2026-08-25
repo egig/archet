@@ -171,3 +171,104 @@ export async function uploadFile(model: string, field: string, file: File): Prom
 export function hasPermission(permissions: AuthUser['permissions'], resource: string, action: string): boolean {
   return permissions.some((p) => (p.resource === resource || p.resource === '*') && (p.action === action || p.action === '*'));
 }
+
+export interface ChatSummary {
+  id: string;
+  userId: string;
+  agentId: string;
+  title: string | null;
+  status: 'active' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessageRow {
+  id: string;
+  chatId: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export function listChats(): Promise<ChatSummary[]> {
+  return request('/api/automation/chats');
+}
+
+export function listChatMessages(chatId: string): Promise<ChatMessageRow[]> {
+  return request(`/api/automation/chats/${encodeURIComponent(chatId)}/messages`);
+}
+
+export interface ChatTurnHandlers {
+  onTextDelta: (text: string) => void;
+  onThinkingDelta: (text: string) => void;
+  onDone: (info: { chatId: string; messageId: string; stopReason: string }) => void;
+  onError: (message: string) => void;
+}
+
+/** POST-and-stream — `EventSource` can't send a request body, so this reads the response's SSE
+ * body by hand: split on blank-line frame boundaries, parse `event:`/`data:` lines, dispatch. */
+async function streamChatTurn(path: string, body: Record<string, unknown>, handlers: ChatTurnHandlers): Promise<void> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok || !res.body) {
+    let message = `request failed (${res.status})`;
+    try {
+      const errBody = (await res.json()) as ApiErrorBody;
+      message = errBody.error.message ?? errBody.error.code;
+    } catch {
+      // no JSON body — keep the generic message
+    }
+    handlers.onError(message);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let boundary: number;
+    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+
+      let event = 'message';
+      const dataLines: string[] = [];
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+      }
+      if (dataLines.length === 0) continue;
+      const data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
+
+      if (event === 'delta') {
+        if (data.kind === 'thinking') handlers.onThinkingDelta(data.text as string);
+        else handlers.onTextDelta(data.text as string);
+      } else if (event === 'done') {
+        handlers.onDone({ chatId: data.chatId as string, messageId: data.messageId as string, stopReason: data.stopReason as string });
+      } else if (event === 'error') {
+        handlers.onError(data.message as string);
+      }
+    }
+  }
+}
+
+/** Creates a chat, persists the first message, and streams the reply — `onDone`'s `chatId`
+ * (set server-side before streaming starts, see src/automation/router.ts) is what the caller
+ * navigates to. */
+export function createChatAndSend(agentId: string, message: string, handlers: ChatTurnHandlers): Promise<void> {
+  return streamChatTurn('/api/automation/chats', { agentId, message }, handlers);
+}
+
+export function sendChatMessage(chatId: string, message: string, handlers: ChatTurnHandlers): Promise<void> {
+  return streamChatTurn(`/api/automation/chats/${encodeURIComponent(chatId)}/messages`, { message }, handlers);
+}

@@ -24,6 +24,18 @@ export interface ConsoleModelOptions {
   domain?: string;
 }
 
+export interface ApiModelOptions {
+  /** excluded from the generic `/api/:model` router entirely (every verb 404s, same as an
+   * unknown model name) — for a model whose only legitimate access path is a dedicated,
+   * auth-scoped router. `console.hidden` alone doesn't do this: it only hides a model from the
+   * console sidebar/`/meta/models`, the model stays reachable at `/api/:model` regardless. Set on
+   * `Chat`/`Message` (src/automation/models) because the generic router has no per-row ownership
+   * check — only `Chat`/`Message`'s own `/api/automation/chats/*` router (src/automation/router.ts)
+   * enforces that a chat and its messages are only readable by their owner. `Agent` stays generic-
+   * REST-readable since it's shared config with no owner, the same as `Role`/`Permission`. */
+  hidden?: boolean;
+}
+
 export interface ModelDefinition {
   /** also the table name and the REST route segment (§5 — no auto-pluralization) */
   name: string;
@@ -31,12 +43,14 @@ export interface ModelDefinition {
   fields: Record<string, FieldDefinition>;
   operations: OperationsConfig;
   console?: ConsoleModelOptions;
+  api?: ApiModelOptions;
 }
 
 export interface DefineModelConfig {
   fields: Record<string, FieldDefinition>;
   operations?: Partial<OperationsConfig>;
   console?: ConsoleModelOptions;
+  api?: ApiModelOptions;
 }
 
 function isReferenceField(f: FieldDefinition): f is ReferenceFieldDefinition {
@@ -61,5 +75,5 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
     remove: config.operations?.remove ?? pipe(persist.remove),
   };
 
-  return { name, tableName: name, fields: config.fields, operations, console: config.console };
+  return { name, tableName: name, fields: config.fields, operations, console: config.console, api: config.api };
 }

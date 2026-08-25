@@ -54,6 +54,10 @@ export function Layout({ brand, pages = [] }: LayoutProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2">
+          <NavLink to="/chat" className={navLinkClassName}>
+            Chat
+          </NavLink>
+          <div className="my-2 border-t border-gray-100" />
           {pages.length > 0 && (
             <div className="mb-2 border-b border-gray-200 pb-2">
               {pages.map((page) => (
