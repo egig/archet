@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import type { DomainSettingsDefinition } from './domain.js';
+import type { DomainDefinition } from './domain.js';
 import { buildDomainSettingsSchema } from './validation.js';
 import { PipelineError } from './pipeline.js';
 
@@ -8,9 +8,9 @@ type AnyDb = PgDatabase<any, any, any>;
 
 const TABLE = 'ratchet_domain_settings';
 
-function defaultsFor(def: DomainSettingsDefinition): Record<string, unknown> {
+function defaultsFor(def: DomainDefinition): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [key, f] of Object.entries(def.fields)) {
+  for (const [key, f] of Object.entries(def.settingFields ?? {})) {
     if (f.default !== undefined) out[key] = f.default;
   }
   return out;
@@ -18,10 +18,10 @@ function defaultsFor(def: DomainSettingsDefinition): Record<string, unknown> {
 
 /** Reads one Domain's settings, its declared `field.*` defaults filling in whatever the stored
  * row doesn't cover yet (including "no row at all" — a Domain has settings from the moment its
- * `defineDomainSettings()` is declared, not from whenever someone first saves a value). */
-export async function getDomainSettings(db: AnyDb, def: DomainSettingsDefinition): Promise<Record<string, unknown>> {
+ * `defineDomain()` declares `settings`, not from whenever someone first saves a value). */
+export async function getDomainSettings(db: AnyDb, def: DomainDefinition): Promise<Record<string, unknown>> {
   const rows = await db.execute(
-    sql`SELECT ${sql.identifier('values')} FROM ${sql.identifier(TABLE)} WHERE ${sql.identifier('domain')} = ${def.domain} LIMIT 1`,
+    sql`SELECT ${sql.identifier('values')} FROM ${sql.identifier(TABLE)} WHERE ${sql.identifier('domain')} = ${def.name} LIMIT 1`,
   );
   const row = (rows as unknown as { values: Record<string, unknown> }[])[0];
   return { ...defaultsFor(def), ...(row?.values ?? {}) };
@@ -31,7 +31,7 @@ export async function getDomainSettings(db: AnyDb, def: DomainSettingsDefinition
  * the Domain's current settings, into the shared `ratchet_domain_settings` table. */
 export async function updateDomainSettings(
   db: AnyDb,
-  def: DomainSettingsDefinition,
+  def: DomainDefinition,
   input: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const result = buildDomainSettingsSchema(def).safeParse(input);
@@ -50,7 +50,7 @@ export async function updateDomainSettings(
 
   await db.execute(sql`
     INSERT INTO ${sql.identifier(TABLE)} (${sql.identifier('domain')}, ${sql.identifier('values')}, ${sql.identifier('updated_at')})
-    VALUES (${def.domain}, ${JSON.stringify(merged)}, ${now})
+    VALUES (${def.name}, ${JSON.stringify(merged)}, ${now})
     ON CONFLICT (${sql.identifier('domain')})
     DO UPDATE SET ${sql.identifier('values')} = EXCLUDED.${sql.identifier('values')}, ${sql.identifier('updated_at')} = EXCLUDED.${sql.identifier('updated_at')}
   `);

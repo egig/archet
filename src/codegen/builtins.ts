@@ -1,6 +1,8 @@
 import { User, Role, Permission, Session } from '../auth/models/index.js';
 import { Agent, Chat, Message } from '../automation/models/index.js';
+import { AutomationDomain } from '../automation/domain.js';
 import type { ScannedModel } from './scan.js';
+import type { ScannedDomain } from './scan-domains.js';
 
 /**
  * The framework's own built-in models — always part of the model graph `generate()` builds
@@ -18,4 +20,17 @@ export const BUILTIN_MODELS: ScannedModel[] = [
   { filePath: '@egig/ratchet/automation (Agent)', exportName: 'Agent', model: Agent, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (Chat)', exportName: 'Chat', model: Chat, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (Message)', exportName: 'Message', model: Message, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
+];
+
+/**
+ * The framework's own built-in Domains — same reasoning as `BUILTIN_MODELS` above: the Automation
+ * Domain's `consoleMenu` (its Chat link) has no on-disk `*.domain.ts` file to be scanned from.
+ */
+export const BUILTIN_DOMAINS: ScannedDomain[] = [
+  {
+    filePath: '@egig/ratchet/automation (AutomationDomain)',
+    exportName: 'AutomationDomain',
+    domain: AutomationDomain,
+    builtinPackage: '@egig/ratchet/automation',
+  },
 ];

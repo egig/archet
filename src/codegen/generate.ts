@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { assertNoDuplicateNames, assertReferencesResolve, scanModels } from './scan.js';
 import { assertDomainMatchesFolder, assertNoDuplicateDomainNames, scanDomains } from './scan-domains.js';
-import { BUILTIN_MODELS } from './builtins.js';
+import { BUILTIN_DOMAINS, BUILTIN_MODELS } from './builtins.js';
 import { generateSchemaSource } from './schema-gen.js';
 import { generateValidatorsSource } from './validators-gen.js';
 import { generateRegistrySource } from './registry-gen.js';
@@ -24,7 +24,7 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
   assertNoDuplicateNames(scanned);
   assertReferencesResolve(scanned);
 
-  const scannedDomains = await scanDomains(opts.modelsDir);
+  const scannedDomains = [...BUILTIN_DOMAINS, ...(await scanDomains(opts.modelsDir))];
   assertNoDuplicateDomainNames(scannedDomains);
   assertDomainMatchesFolder(opts.modelsDir, scannedDomains);
 

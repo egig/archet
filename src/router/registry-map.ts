@@ -1,5 +1,5 @@
 import type { ModelDefinition } from '../core/model.js';
-import type { DomainSettingsDefinition } from '../core/domain.js';
+import type { DomainDefinition } from '../core/domain.js';
 
 function isModelDefinition(value: unknown): value is ModelDefinition {
   return (
@@ -22,24 +22,17 @@ export function buildRegistryMap(registryModule: Record<string, unknown>): Recor
   return map;
 }
 
-function isDomainSettingsDefinition(value: unknown): value is DomainSettingsDefinition {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as DomainSettingsDefinition).domain === 'string' &&
-    typeof (value as DomainSettingsDefinition).fields === 'object'
-  );
+function isDomainDefinition(value: unknown): value is DomainDefinition {
+  return typeof value === 'object' && value !== null && typeof (value as DomainDefinition).name === 'string';
 }
 
-/** Turns the generated `domains.ts` module's named exports into a domain -> DomainSettingsDefinition
- * lookup, keyed by the declared `domain` name — mirrors `buildRegistryMap` above. */
-export function buildDomainSettingsRegistryMap(
-  domainsModule: Record<string, unknown>,
-): Record<string, DomainSettingsDefinition> {
-  const map: Record<string, DomainSettingsDefinition> = {};
+/** Turns the generated `domains.ts` module's named exports into a name -> DomainDefinition lookup,
+ * keyed by the declared `name` — mirrors `buildRegistryMap` above. */
+export function buildDomainSettingsRegistryMap(domainsModule: Record<string, unknown>): Record<string, DomainDefinition> {
+  const map: Record<string, DomainDefinition> = {};
   for (const value of Object.values(domainsModule)) {
-    if (isDomainSettingsDefinition(value)) {
-      map[value.domain] = value;
+    if (isDomainDefinition(value)) {
+      map[value.name] = value;
     }
   }
   return map;

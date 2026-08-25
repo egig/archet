@@ -10,9 +10,9 @@ interface DomainsState {
 
 const DomainsContext = createContext<DomainsState | null>(null);
 
-/** One fetch of `/meta/domains` — every Domain that has a declared `defineDomainSettings()` —
- * covers both the sidebar's per-Domain "Settings" link and the settings form itself. Mirrors
- * `ModelsProvider` (models.tsx). */
+/** One fetch of `/meta/domains` — every Domain that has a declared `defineDomain()` — covers the
+ * sidebar's per-Domain "Settings" link, its declared `consoleMenu`, and the settings form itself.
+ * Mirrors `ModelsProvider` (models.tsx). */
 export function DomainsProvider({ children }: { children: ReactNode }) {
   const [domains, setDomains] = useState<ConsoleDomainMeta[]>([]);
   const [loading, setLoading] = useState(true);

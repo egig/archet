@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { defineDomainSettings, field } from '../src/core/index.js';
+import { defineDomain, field } from '../src/core/index.js';
 import { getDomainSettings, updateDomainSettings } from '../src/core/domain-settings-persistence.js';
 import { createConsoleRouter } from '../src/console/router.js';
 import { createNodeFsAssetSource } from '../src/console/node-assets.js';
@@ -11,9 +11,9 @@ import { createNodeFsAssetSource } from '../src/console/node-assets.js';
 const connectionString = process.env.DATABASE_URL;
 const describeIfDb = connectionString ? describe : describe.skip;
 
-const AuthSettings = defineDomainSettings('auth', {
+const AuthSettings = defineDomain('auth', {
   label: 'Authentication',
-  fields: {
+  settings: {
     sessionTtlDays: field.integer({ default: 7 }),
     requireMfa: field.boolean({ default: false }),
   },

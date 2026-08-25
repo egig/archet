@@ -186,16 +186,17 @@ describe('generate() against a self-contained model fixture', () => {
   it('emits Domain Settings (a *.domain.ts under a matching modelsDir subdirectory) to domains.ts', async () => {
     const domainModelsDir = await writeModelsDir({
       'auth/settings.domain.ts': `
-        import { defineDomainSettings, field } from '${CORE_IMPORT}';
-        export const AuthSettings = defineDomainSettings('auth', {
+        import { defineDomain, field } from '${CORE_IMPORT}';
+        export const AuthSettings = defineDomain('auth', {
           label: 'Authentication',
-          fields: { sessionTtlDays: field.integer({ default: 7 }) },
+          settings: { sessionTtlDays: field.integer({ default: 7 }) },
         });
       `,
     });
     try {
       const { domainCount } = await generate({ modelsDir: domainModelsDir, generatedDir });
-      expect(domainCount).toBe(1);
+      // 1 user Domain + 1 built-in Automation Domain (always present, see below).
+      expect(domainCount).toBe(2);
       const domainsSrc = await import('node:fs/promises').then((fs) =>
         fs.readFile(path.join(generatedDir, 'domains.ts'), 'utf8'),
       );
@@ -205,11 +206,20 @@ describe('generate() against a self-contained model fixture', () => {
     }
   });
 
+  it('always includes the built-in Automation Domain (Chat console menu), imported from `@egig/ratchet/automation`', async () => {
+    const { domainCount } = await generate({ modelsDir, generatedDir });
+    expect(domainCount).toBe(1);
+    const domainsSrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'domains.ts'), 'utf8'),
+    );
+    expect(domainsSrc).toContain(`export { AutomationDomain } from '@egig/ratchet/automation';`);
+  });
+
   it("rejects Domain Settings declared under a folder that doesn't match their own domain name", async () => {
     const badDomainModelsDir = await writeModelsDir({
       'billing/settings.domain.ts': `
-        import { defineDomainSettings, field } from '${CORE_IMPORT}';
-        export const AuthSettings = defineDomainSettings('auth', { fields: { x: field.boolean() } });
+        import { defineDomain, field } from '${CORE_IMPORT}';
+        export const AuthSettings = defineDomain('auth', { settings: { x: field.boolean() } });
       `,
     });
     try {

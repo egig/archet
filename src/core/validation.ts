@@ -1,7 +1,7 @@
 import { z, type ZodTypeAny } from 'zod';
 import type { FieldDefinition } from './field.js';
 import type { ModelDefinition } from './model.js';
-import type { DomainSettingsDefinition } from './domain.js';
+import type { DomainDefinition } from './domain.js';
 
 function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
   switch (f.kind) {
@@ -72,9 +72,9 @@ export function buildUpdateSchema(model: ModelDefinition): ZodTypeAny {
 /** Domain Settings are always patch-shaped (ADR 0002) — there's no create, only ever an update
  * against the one row a Domain has — so every field is optional here regardless of `required`,
  * same as `buildUpdateSchema`. */
-export function buildDomainSettingsSchema(def: DomainSettingsDefinition): ZodTypeAny {
+export function buildDomainSettingsSchema(def: DomainDefinition): ZodTypeAny {
   const shape: Record<string, ZodTypeAny> = {};
-  for (const [key, f] of Object.entries(def.fields)) {
+  for (const [key, f] of Object.entries(def.settingFields ?? {})) {
     shape[key] = baseSchemaForField(f).optional();
   }
   return z.object(shape);

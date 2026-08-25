@@ -1,4 +1,5 @@
 export { Agent, Chat, Message } from './models/index.js';
+export { AutomationDomain } from './domain.js';
 export { createAutomationRouter } from './router.js';
 export { defineAgentTool, getAgentTool, resolveToolSpecs } from './tool.js';
 export type { AgentTool, AgentToolContext } from './tool.js';

@@ -12,7 +12,8 @@ const tabClassName = ({ isActive }: { isActive: boolean }) =>
  * (optional) picks the active tab and is deep-linkable; omitted, it redirects to the first Domain. */
 export function SettingsPage() {
   const { domain: domainName } = useParams<{ domain: string }>();
-  const { domains, loading, getDomain } = useDomains();
+  const { domains: allDomains, loading, getDomain } = useDomains();
+  const domains = allDomains.filter((d) => d.fields.length > 0);
 
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
   if (domains.length === 0) return <p className="text-sm text-gray-500">No Domain settings registered.</p>;
@@ -20,7 +21,7 @@ export function SettingsPage() {
   if (!domainName) return <Navigate to={`/settings/${domains[0]!.name}`} replace />;
 
   const active = getDomain(domainName);
-  if (!active) return <p className="text-sm text-red-600">Unknown domain.</p>;
+  if (!active || active.fields.length === 0) return <p className="text-sm text-red-600">Unknown domain.</p>;
 
   return (
     <div>

@@ -35,7 +35,7 @@ The console SPA discovers models and renders CRUD views from a small metadata AP
 | `GET` | `${consolePath}/meta/domains/:name/settings` | one Domain's current settings values |
 | `PATCH` | `${consolePath}/meta/domains/:name/settings` | update one Domain's settings values |
 
-All require an authenticated session (see [Auth](/guide/auth)) and are driven by each model's `fields`/`console` options or a Domain's `defineDomainSettings()` — there's no separate console schema to maintain.
+All require an authenticated session (see [Auth](/guide/auth)) and are driven by each model's `fields`/`console` options or a Domain's `defineDomain()` — there's no separate console schema to maintain.
 
 ## Controlling what shows up
 
@@ -74,24 +74,31 @@ models/
 
 The console sidebar groups a Domain's models under one labeled section, instead of listing every model flat. A model declared directly under `modelsDir`, with no subdirectory, has no Domain and stays outside any section.
 
-### Domain Settings
+### Domains
 
-A Domain can also declare typed, DB-backed, console-editable settings — read by that Domain's pipeline functions at request time. Add a `*.domain.ts` file under the same subdirectory as the Domain's models:
+A Domain can also declare a display label, typed, DB-backed, console-editable settings, and extra console sidebar links, with `defineDomain()`. Add a `*.domain.ts` file under the same subdirectory as the Domain's models:
 
 ```ts
 // models/auth/settings.domain.ts
-import { defineDomainSettings, field } from '@egig/ratchet/core';
+import { defineDomain, field } from '@egig/ratchet/core';
 
-export const AuthSettings = defineDomainSettings('auth', {
+export const AuthSettings = defineDomain('auth', {
   label: 'Authentication',           // settings-page heading; defaults to a capitalized domain name
-  fields: {
+  settings: {
     sessionTtlDays: field.integer({ default: 7 }),
     requireMfa: field.boolean({ default: false }),
   },
+  consoleMenu: [
+    // extra sidebar links rendered above this Domain's models — for a page with no model of its
+    // own to derive a link from.
+    { label: 'Audit log', to: '/auth/audit-log' },
+  ],
 });
 ```
 
-The `domain` argument must match the folder it's declared in (`ratchet generate` rejects a mismatch). The sidebar shows one "Settings" link (only once at least one Domain declares settings) opening `${consolePath}/settings`, a single page that tabs across every Domain that has settings — `${consolePath}/settings/:domain` selects a tab directly, and `/settings` itself redirects to the first one. Each tab is a form generated from that Domain's `fields` the same way a model's form is.
+The `name` argument (`'auth'` above) must match the folder it's declared in (`ratchet generate` rejects a mismatch). `settings` and `consoleMenu` are both optional — declare either, both, or (rarely) neither.
+
+The sidebar shows one "Settings" link (only once at least one Domain declares `settings`) opening `${consolePath}/settings`, a single page that tabs across every Domain that has settings — `${consolePath}/settings/:domain` selects a tab directly, and `/settings` itself redirects to the first one. Each tab is a form generated from that Domain's `settings` the same way a model's form is.
 
 Read a Domain's current settings from a pipeline function:
 
