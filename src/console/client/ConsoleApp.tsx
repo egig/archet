@@ -11,7 +11,7 @@ import { ModelFormPage } from './ModelFormPage.js';
 import { ChatPage } from './ChatPage.js';
 import { ChatEmptyState } from './ChatEmptyState.js';
 import { ChatThread } from './ChatThread.js';
-import { DomainSettingsPage } from './DomainSettingsPage.js';
+import { SettingsPage } from './SettingsPage.js';
 import { FieldRenderersProvider, type FieldRenderer } from './field-renderers.js';
 
 /** A consumer-supplied page mounted inside the authenticated console shell, alongside the
@@ -56,7 +56,8 @@ export function ConsoleApp({ brand, pages = [], fieldRenderers = {} }: ConsoleAp
                 {pages.map((page) => (
                   <Route key={page.path} path={page.path} element={page.element} />
                 ))}
-                <Route path="domains/:domain/settings" element={<DomainSettingsPage />} />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route path="settings/:domain" element={<SettingsPage />} />
                 <Route path=":model" element={<ModelListPage />} />
                 <Route path=":model/new" element={<ModelFormPage />} />
                 <Route path=":model/:id" element={<ModelFormPage />} />

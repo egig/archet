@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useParams } from 'react-router';
 import type { ConsoleFieldMeta } from '../serialize-model.js';
-import { useDomains } from './domains.js';
+import type { ConsoleDomainMeta } from '../serialize-domain.js';
 import { ApiRequestError, getDomainSettings, updateDomainSettings } from './api.js';
 import { FieldInput, type FileFieldValue } from './fields.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
@@ -65,11 +64,10 @@ function toPayload(fields: ConsoleFieldMeta[], values: FormValues): Record<strin
   return payload;
 }
 
-export function DomainSettingsPage() {
-  const { domain: domainName } = useParams<{ domain: string }>();
-  const { getDomain, loading: domainsLoading } = useDomains();
-  const domain = domainName ? getDomain(domainName) : undefined;
-
+/** The settings form for one Domain — rendered by `SettingsPage` for whichever Domain tab is
+ * active. Split out of what used to be `DomainSettingsPage` so the tab container can remount this
+ * per Domain (via `key`) instead of every field needing to reset itself on tab switch. */
+export function DomainSettingsForm({ domain }: { domain: ConsoleDomainMeta }) {
   const [values, setValues] = useState<FormValues>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -78,7 +76,6 @@ export function DomainSettingsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (!domain) return;
     let cancelled = false;
     setLoading(true);
     getDomainSettings(domain.name)
@@ -89,10 +86,9 @@ export function DomainSettingsPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [domain?.name]);
+  }, [domain.name]);
 
-  if (domainsLoading || loading) return <p className="text-sm text-gray-500">Loading…</p>;
-  if (!domain) return <p className="text-sm text-red-600">Unknown domain.</p>;
+  if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
   function handleChange(key: string, value: unknown) {
     setValues((prev) => ({ ...prev, [key]: value as string | boolean | FileFieldValue }));
@@ -106,9 +102,9 @@ export function DomainSettingsPage() {
     setFieldErrors({});
     setSaved(false);
     try {
-      const payload = toPayload(domain!.fields, values);
-      const data = await updateDomainSettings(domain!.name, payload);
-      setValues(toFormValues(domain!.fields, data));
+      const payload = toPayload(domain.fields, values);
+      const data = await updateDomainSettings(domain.name, payload);
+      setValues(toFormValues(domain.fields, data));
       setSaved(true);
     } catch (err) {
       if (err instanceof SyntaxError) {
@@ -126,8 +122,6 @@ export function DomainSettingsPage() {
 
   return (
     <div className="max-w-xl">
-      <h1 className="mb-4 text-lg font-semibold text-gray-900">{domain.label} settings</h1>
-
       {formError && <p className="mb-4 text-sm text-red-600">{formError}</p>}
       {saved && <p className="mb-4 text-sm text-green-600">Saved.</p>}
 

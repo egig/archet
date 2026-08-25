@@ -91,7 +91,7 @@ export const AuthSettings = defineDomainSettings('auth', {
 });
 ```
 
-The `domain` argument must match the folder it's declared in (`ratchet generate` rejects a mismatch). A Domain with settings gets a "Settings" link in its sidebar section, opening a form generated from `fields` the same way a model's form is.
+The `domain` argument must match the folder it's declared in (`ratchet generate` rejects a mismatch). The sidebar shows one "Settings" link (only once at least one Domain declares settings) opening `${consolePath}/settings`, a single page that tabs across every Domain that has settings — `${consolePath}/settings/:domain` selects a tab directly, and `/settings` itself redirects to the first one. Each tab is a form generated from that Domain's `fields` the same way a model's form is.
 
 Read a Domain's current settings from a pipeline function:
 

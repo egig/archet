@@ -38,7 +38,7 @@ function groupByDomain(models: ConsoleModelMeta[]): { domain: string; models: Co
 export function Layout({ brand, pages = [] }: LayoutProps) {
   const { user, logout } = useAuth();
   const { models, loading, error } = useModels();
-  const { getDomain } = useDomains();
+  const { domains, getDomain } = useDomains();
   const grouped = groupByDomain(models);
   const ungrouped = models.filter((model) => !model.domain);
 
@@ -57,6 +57,11 @@ export function Layout({ brand, pages = [] }: LayoutProps) {
           <NavLink to="/chat" className={navLinkClassName}>
             Chat
           </NavLink>
+          {domains.length > 0 && (
+            <NavLink to="/settings" className={navLinkClassName}>
+              Settings
+            </NavLink>
+          )}
           <div className="my-2 border-t border-gray-100" />
           {pages.length > 0 && (
             <div className="mb-2 border-b border-gray-200 pb-2">
@@ -69,26 +74,18 @@ export function Layout({ brand, pages = [] }: LayoutProps) {
           )}
           {loading && <p className="px-4 py-2 text-xs text-gray-400">Loading models…</p>}
           {error && <p className="px-4 py-2 text-xs text-red-600">{error}</p>}
-          {grouped.map(({ domain, models: domainModels }) => {
-            const domainMeta = getDomain(domain);
-            return (
-              <div key={domain} className="mb-2 border-b border-gray-200 pb-2">
-                <p className="px-4 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                  {domainMeta?.label ?? humanizeDomain(domain)}
-                </p>
-                {domainModels.map((model) => (
-                  <NavLink key={model.name} to={`/${model.name}`} className={navLinkClassName}>
-                    {model.label}
-                  </NavLink>
-                ))}
-                {domainMeta && (
-                  <NavLink to={`/domains/${domain}/settings`} className={navLinkClassName}>
-                    Settings
-                  </NavLink>
-                )}
-              </div>
-            );
-          })}
+          {grouped.map(({ domain, models: domainModels }) => (
+            <div key={domain} className="mb-2 border-b border-gray-200 pb-2">
+              <p className="px-4 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {getDomain(domain)?.label ?? humanizeDomain(domain)}
+              </p>
+              {domainModels.map((model) => (
+                <NavLink key={model.name} to={`/${model.name}`} className={navLinkClassName}>
+                  {model.label}
+                </NavLink>
+              ))}
+            </div>
+          ))}
           {ungrouped.map((model) => (
             <NavLink key={model.name} to={`/${model.name}`} className={navLinkClassName}>
               {model.label}
