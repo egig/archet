@@ -8,6 +8,7 @@ import { generateId } from '../core/id.js';
 import { insertRow } from '../core/persistence.js';
 import { toErrorResponse } from '../router/errors.js';
 import { readJsonBody } from '../router/create-router.js';
+import { Workspace, DEFAULT_WORKSPACE_NAME } from '../workspace/index.js';
 import { User, Role, Permission, registerPipeline } from './models/index.js';
 import { resolveSessionUser } from './pipeline.js';
 import {
@@ -105,7 +106,12 @@ export function createAuthRouter(db: AnyDb): Hono {
         await insertRow(txDb, Permission, { roleId: role.id, resource: '*', action: '*' });
       }
 
-      return insertRow(txDb, User, { email, passwordHash: await hashPasswordValue(password), roleId: role.id });
+      const created = await insertRow(txDb, User, { email, passwordHash: await hashPasswordValue(password), roleId: role.id });
+      // root admin has no jobTitleId (there's no JobTitle yet on a fresh instance), so this is
+      // always the blank default — see `workspace/provisioning.ts`'s `createDefaultWorkspace`,
+      // which this mirrors for the one user-creation path that doesn't run through a pipe().
+      await insertRow(txDb, Workspace, { userId: created.id, name: DEFAULT_WORKSPACE_NAME });
+      return created;
     });
 
     const token = await issueSession(db, user.id as string);

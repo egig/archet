@@ -94,7 +94,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS users (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
-        email varchar NOT NULL, password_hash varchar NOT NULL, role_id uuid, active boolean NOT NULL DEFAULT true
+        email varchar NOT NULL, password_hash varchar NOT NULL, role_id uuid, job_title_id uuid, active boolean NOT NULL DEFAULT true
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -105,6 +105,19 @@ describeIfDb('auth system (against a live Postgres)', () => {
       CREATE TABLE IF NOT EXISTS notes (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
         user_id uuid NOT NULL, text varchar NOT NULL
+      )`);
+    // register/setup/admin-created-user all provision a default `Workspace` (see
+    // `workspace/provisioning.ts`'s `createDefaultWorkspace`) — needed for those flows to work,
+    // even though this suite otherwise has nothing to do with the workspace domain. No
+    // `job_title_id` is ever set here, so `workspace_views`/`job_titles` are never touched. Never
+    // truncated/dropped below: `workspace.test.ts` also writes to `workspaces` and runs
+    // concurrently — vitest parallelizes test files against the same live DB — so this suite only
+    // creates it and otherwise leaves it alone; every assertion here is scoped to its own user's
+    // id regardless.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz,
+        user_id uuid NOT NULL, name varchar NOT NULL
       )`);
 
     authApp = createAuthRouter(db);
@@ -118,6 +131,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
   });
 
   beforeEach(async () => {
+    // `workspaces` is deliberately not truncated here — see the beforeAll note above.
     await db.execute(sql`TRUNCATE TABLE notes, sessions, permissions, users, roles`);
   });
 
@@ -224,6 +238,15 @@ describeIfDb('auth system (against a live Postgres)', () => {
     expect(user.email).toBe('ada@example.com');
     expect(user.passwordHash).toBeUndefined();
     expect(typeof token).toBe('string');
+  });
+
+  it('register also provisions a blank default Workspace (workspace/provisioning.ts) — a fresh account has no jobTitleId yet', async () => {
+    const { user } = await registerUser('workspace-on-register@example.com', 'hunter2');
+
+    const rows = (await db.execute(
+      sql`SELECT name FROM workspaces WHERE user_id = ${user.id}`,
+    )) as unknown as { name: string }[];
+    expect(rows).toEqual([{ name: 'My Workspace' }]);
   });
 
   it('login succeeds with the right password and fails with the wrong one', async () => {
