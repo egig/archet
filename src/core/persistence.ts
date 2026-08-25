@@ -46,6 +46,23 @@ export async function fetchRow(
   return rows[0] ? normalizeTimestamps(model, rowToCamelCase(rows[0])) : null;
 }
 
+/** Every row in `model` whose `fieldKey` column equals `value` (soft-deleted rows excluded) —
+ * e.g. every `WorkspaceView` belonging to one `workspaceId`. `fieldKey` must be a real field on
+ * `model`; callers pass a fixed, code-authored key (never raw user input) since there's no
+ * `isKnownColumn`-style check here the way `router/query.ts` has for request-driven filters. */
+export async function listRowsByField(
+  db: AnyDb,
+  model: ModelDefinition,
+  fieldKey: string,
+  value: unknown,
+): Promise<Record<string, unknown>[]> {
+  const rows = await execRows(
+    db,
+    sql`SELECT * FROM ${tableIdent(model)} WHERE ${sql.identifier(toSnakeCase(fieldKey))} = ${value} AND ${sql.identifier('deleted_at')} IS NULL`,
+  );
+  return rows.map((row) => normalizeTimestamps(model, rowToCamelCase(row)));
+}
+
 export async function insertRow(
   db: AnyDb,
   model: ModelDefinition,

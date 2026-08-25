@@ -1,0 +1,33 @@
+import { defineModel, field, pipe, validate, persist } from '../../core/index.js';
+import { requireAuth, requirePermission } from '../pipeline.js';
+
+/**
+ * A named, ranked position a `User` (`user.model.ts`'s `workTitleId`) can hold — at most one per
+ * user. `rank` orders titles by seniority (lower = more senior) without committing to a tree
+ * shape (no `parentWorkTitleId`); nothing in the framework enforces or reads an ordering from it
+ * yet, it's there for consumer apps/console display to sort/compare on.
+ *
+ * `workspaceTemplateId` is a `Workspace` (`workspace/models/workspace.model.ts`) built normally
+ * through the console — its `WorkspaceView` tabs describe the view a user in this work title
+ * should land on. It's required ("mandatory"): every `WorkTitle` must name one, so
+ * `workspace/provisioning.ts`'s `createDefaultWorkspace` never has to decide what a
+ * work-title-having user without a template should get — see that file for the
+ * clone-on-user-create logic this feeds.
+ */
+export const WorkTitle = defineModel('work_titles', {
+  fields: {
+    name: field.string({ required: true, unique: true, indexed: true, maxLength: 100 }),
+    rank: field.integer({ required: true, displayText: 'Rank' }),
+    workspaceTemplateId: field.reference('workspaces', {
+      required: true,
+      indexed: true,
+      displayText: 'Mandatory Workspace Template',
+    }),
+  },
+  operations: {
+    create: pipe(requireAuth, requirePermission('work_titles', 'create'), validate, persist),
+    update: pipe(requireAuth, requirePermission('work_titles', 'update'), validate, persist),
+    remove: pipe(requireAuth, requirePermission('work_titles', 'remove'), persist.remove),
+  },
+  console: { label: 'Work Titles', displayField: 'name' },
+});
