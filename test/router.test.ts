@@ -90,6 +90,26 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
     expect(await res.json()).toEqual({ error: { code: 'MODEL_NOT_FOUND' } });
   });
 
+  it('a model declared with `api: { hidden: true }` 404s on every verb, same as an unknown model', async () => {
+    // no table needed — `resolveModel` 404s before any query runs (see create-router.ts).
+    const Secret = defineModel('secrets', {
+      fields: { value: field.string({ required: true }) },
+      api: { hidden: true },
+    });
+    const hiddenApp = createApiRouter({ authors: Author, secrets: Secret }, db);
+
+    const list = await hiddenApp.request('/secrets');
+    expect(list.status).toBe(404);
+    expect(await list.json()).toEqual({ error: { code: 'MODEL_NOT_FOUND' } });
+
+    const create = await hiddenApp.request('/secrets', {
+      method: 'POST',
+      body: JSON.stringify({ value: 'x' }),
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(create.status).toBe(404);
+  });
+
   it('list envelope is { data, meta: { total, limit, offset } } by default', async () => {
     await createAuthor('A');
     await createAuthor('B');

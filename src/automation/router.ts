@@ -109,9 +109,10 @@ export function createAutomationRouter(db: AnyDb): Hono {
     return c.json(body, status as never);
   });
 
-  // mounted at `/api/chats` (src/cli/commands/serve.ts) — routes here are relative to that,
-  // so '/' is `/api/chats` itself and '/:id/messages' is `/api/chats/:id/messages`.
-  app.get('/', async (c) => {
+  // mounted at `/api/automation` (src/cli/commands/serve.ts) — routes here are relative to
+  // that, so '/chats' is `/api/automation/chats` and '/chats/:id/messages' is
+  // `/api/automation/chats/:id/messages`.
+  app.get('/chats', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
     const page = await listRows(db, Chat, {}, {
       limit: 100,
@@ -125,7 +126,7 @@ export function createAutomationRouter(db: AnyDb): Hono {
     return c.json({ data: page.rows });
   });
 
-  app.get('/:id/messages', async (c) => {
+  app.get('/chats/:id/messages', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
     await requireOwnedChat(db, c.req.param('id'), user);
     const history = await listRows(db, Message, {}, {
@@ -142,7 +143,7 @@ export function createAutomationRouter(db: AnyDb): Hono {
 
   // creates the chat, persists the first message, and streams the reply — one call covers the
   // "type a message with no chat open yet" flow the console's empty state needs.
-  app.post('/', async (c) => {
+  app.post('/chats', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
     const input = await readJsonBody(c);
     const agent = await loadActiveAgent(db, input.agentId);
@@ -154,7 +155,7 @@ export function createAutomationRouter(db: AnyDb): Hono {
     return streamTurn(c, db, user, chat, agent, message);
   });
 
-  app.post('/:id/messages', async (c) => {
+  app.post('/chats/:id/messages', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
     const chat = await requireOwnedChat(db, c.req.param('id'), user);
     const input = await readJsonBody(c);

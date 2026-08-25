@@ -2,8 +2,9 @@ import { defineModel, field, pipe, validate, persist } from '../../core/index.js
 import { requireAuth, requirePermission } from '../../auth/pipeline.js';
 
 /**
- * One turn in a `Chat` — written only by `/api/chats/*` routes (src/automation/router.ts),
- * never through generic REST (see `Chat`'s comment for why `operations` still exist here).
+ * One turn in a `Chat` — written only by `/api/automation/chats/*` routes
+ * (src/automation/router.ts), never through generic REST (see `Chat`'s comment for why
+ * `api: { hidden: true }` is what actually enforces that, not just `operations`/permissions).
  */
 export const Message = defineModel('messages', {
   fields: {
@@ -19,4 +20,5 @@ export const Message = defineModel('messages', {
     remove: pipe(requireAuth, requirePermission('messages', 'remove'), persist.remove),
   },
   console: { hidden: true },
+  api: { hidden: true },
 });

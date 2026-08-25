@@ -48,12 +48,12 @@ export async function runServe(cwd: string): Promise<ServerType> {
   const storage = createNodeFsStorageAdapter(path.join(generatedDir, 'storage'));
 
   const app = new Hono();
-  // more specific prefix first: `/api/auth/*` and `/api/chats/*` must win over the generic
+  // more specific prefix first: `/api/auth/*` and `/api/automation/*` must win over the generic
   // `/api/:model` pattern, and all three must win over the console router — which is registered
   // last since `consolePath` can be '/' (root mount), where its own catch-all would otherwise
   // swallow every path.
   app.route('/api/auth', createAuthRouter(db));
-  app.route('/api/chats', createAutomationRouter(db));
+  app.route('/api/automation', createAutomationRouter(db));
   app.route('/api', createApiRouter(registry, db, storage));
   app.route(
     dirs.consolePath,

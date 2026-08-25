@@ -192,11 +192,11 @@ export interface ChatMessageRow {
 }
 
 export function listChats(): Promise<ChatSummary[]> {
-  return request('/api/chats');
+  return request('/api/automation/chats');
 }
 
 export function listChatMessages(chatId: string): Promise<ChatMessageRow[]> {
-  return request(`/api/chats/${encodeURIComponent(chatId)}/messages`);
+  return request(`/api/automation/chats/${encodeURIComponent(chatId)}/messages`);
 }
 
 export interface ChatTurnHandlers {
@@ -266,9 +266,9 @@ async function streamChatTurn(path: string, body: Record<string, unknown>, handl
  * (set server-side before streaming starts, see src/automation/router.ts) is what the caller
  * navigates to. */
 export function createChatAndSend(agentId: string, message: string, handlers: ChatTurnHandlers): Promise<void> {
-  return streamChatTurn('/api/chats', { agentId, message }, handlers);
+  return streamChatTurn('/api/automation/chats', { agentId, message }, handlers);
 }
 
 export function sendChatMessage(chatId: string, message: string, handlers: ChatTurnHandlers): Promise<void> {
-  return streamChatTurn(`/api/chats/${encodeURIComponent(chatId)}/messages`, { message }, handlers);
+  return streamChatTurn(`/api/automation/chats/${encodeURIComponent(chatId)}/messages`, { message }, handlers);
 }
