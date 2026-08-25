@@ -62,9 +62,9 @@ describe('generate() against a self-contained model fixture', () => {
 
   it('emits a schema with §4 conventions: timestamptz, partial unique index, CHECK, RESTRICT FK', async () => {
     const { modelCount } = await generate({ modelsDir, generatedDir });
-    // 2 user models + 4 built-in auth models (User/Role/Permission/Session) + 3 built-in
-    // automation models (Agent/Chat/Message) — built-ins are always present.
-    expect(modelCount).toBe(9);
+    // 2 user models + 4 built-in auth models (User/Role/Permission/Session) + 5 built-in
+    // automation models (Agent/AgentPermission/Chat/Message/Provider) — built-ins are always present.
+    expect(modelCount).toBe(11);
 
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
@@ -121,7 +121,7 @@ describe('generate() against a self-contained model fixture', () => {
     expect(schemaSrc).toContain("pgTable('sessions'");
   });
 
-  it('always includes the built-in Agent/Chat/Message models, imported from `@egig/ratchet/automation`', async () => {
+  it('always includes the built-in Agent/AgentPermission/Chat/Message/Provider models, imported from `@egig/ratchet/automation`', async () => {
     await generate({ modelsDir, generatedDir });
     const registrySrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
@@ -129,12 +129,14 @@ describe('generate() against a self-contained model fixture', () => {
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
     );
-    for (const name of ['Agent', 'Chat', 'Message']) {
+    for (const name of ['Agent', 'AgentPermission', 'Chat', 'Message', 'Provider']) {
       expect(registrySrc).toContain(`import { ${name} as _${name} } from '@egig/ratchet/automation';`);
     }
     expect(schemaSrc).toContain("pgTable('agents'");
+    expect(schemaSrc).toContain("pgTable('agent_permissions'");
     expect(schemaSrc).toContain("pgTable('chats'");
     expect(schemaSrc).toContain("pgTable('messages'");
+    expect(schemaSrc).toContain("pgTable('providers'");
   });
 
   it("assigns the built-in auth models to the 'auth' Domain and the built-in automation models to the 'automation' Domain (ADR 0001), grouping them in the console sidebar", async () => {
@@ -146,7 +148,7 @@ describe('generate() against a self-contained model fixture', () => {
       expect(registrySrc).toContain(`domain: "auth"`);
       expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "auth" } };`);
     }
-    for (const name of ['Agent', 'Chat', 'Message']) {
+    for (const name of ['Agent', 'AgentPermission', 'Chat', 'Message', 'Provider']) {
       expect(registrySrc).toContain(`domain: "automation"`);
       expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "automation" } };`);
     }

@@ -53,7 +53,7 @@ export async function runServe(cwd: string): Promise<ServerType> {
   // last since `consolePath` can be '/' (root mount), where its own catch-all would otherwise
   // swallow every path.
   app.route('/api/auth', createAuthRouter(db));
-  app.route('/api/automation', createAutomationRouter(db));
+  app.route('/api/automation', createAutomationRouter(db, registry));
   app.route('/api', createApiRouter(registry, db, storage));
   app.route(
     dirs.consolePath,

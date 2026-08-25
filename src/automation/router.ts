@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { ModelDefinition } from '../core/model.js';
 import { PipelineError } from '../core/pipeline.js';
 import { fetchRow, insertRow, updateRow } from '../core/persistence.js';
 import { listRows } from '../router/list.js';
@@ -58,7 +59,14 @@ async function loadHistory(db: AnyDb, chatId: string): Promise<ChatMessage[]> {
 /** Streams one agent turn over SSE: persists the user's message, runs `runAgentTurn` against
  * the full history, forwards every delta/tool-call as it happens, then persists the assistant's
  * final message and bumps `chat.updatedAt` so the console sidebar sorts by recent activity. */
-function streamTurn(c: Context, db: AnyDb, user: UserRow, chat: Record<string, unknown>, agent: Record<string, unknown>, userMessage: string) {
+function streamTurn(
+  c: Context,
+  db: AnyDb,
+  registry: Record<string, ModelDefinition>,
+  chat: Record<string, unknown>,
+  agent: Record<string, unknown>,
+  userMessage: string,
+) {
   return streamSSE(c, async (stream) => {
     await insertRow(db, Message, { chatId: chat.id, role: 'user', content: userMessage });
     const history = await loadHistory(db, chat.id as string);
@@ -68,7 +76,7 @@ function streamTurn(c: Context, db: AnyDb, user: UserRow, chat: Record<string, u
     let finalUsage = { inputTokens: 0, outputTokens: 0 };
 
     try {
-      for await (const event of runAgentTurn({ agent, history, db, user })) {
+      for await (const event of runAgentTurn({ agent, history, db, request: c.req.raw, registry })) {
         if (event.type === 'text-delta') {
           assistantText += event.text;
           await stream.writeSSE({ event: 'delta', data: JSON.stringify({ kind: 'text', text: event.text }) });
@@ -101,7 +109,7 @@ function streamTurn(c: Context, db: AnyDb, user: UserRow, chat: Record<string, u
   });
 }
 
-export function createAutomationRouter(db: AnyDb): Hono {
+export function createAutomationRouter(db: AnyDb, registry: Record<string, ModelDefinition>): Hono {
   const app = new Hono();
 
   app.onError((err, c) => {
@@ -152,7 +160,7 @@ export function createAutomationRouter(db: AnyDb): Hono {
     const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim() : message.slice(0, 60);
     const chat = await insertRow(db, Chat, { userId: user.id, agentId: agent.id, title, status: 'active' });
 
-    return streamTurn(c, db, user, chat, agent, message);
+    return streamTurn(c, db, registry, chat, agent, message);
   });
 
   app.post('/chats/:id/messages', async (c) => {
@@ -162,7 +170,7 @@ export function createAutomationRouter(db: AnyDb): Hono {
     const message = requireMessageText(input);
     const agent = await loadActiveAgent(db, chat.agentId);
 
-    return streamTurn(c, db, user, chat, agent, message);
+    return streamTurn(c, db, registry, chat, agent, message);
   });
 
   return app;

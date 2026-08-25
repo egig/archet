@@ -1,7 +1,9 @@
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import type { UserRow } from '../auth/lookup.js';
+import type { ModelDefinition } from '../core/index.js';
+import { fetchRow } from '../core/persistence.js';
 import { resolveProvider } from './providers/index.js';
-import { getAgentTool, resolveToolSpecs } from './tool.js';
+import { resolveAgentTools, executeModelOperationTool, type ModelOperationTool } from './tool.js';
+import { Provider } from './models/index.js';
 import type { ChatEvent, ChatMessage, ChatStopReason, ChatToolCall, ChatToolResult, ChatUsage } from './provider.js';
 
 type AnyDb = PgDatabase<any, any, any>;
@@ -10,21 +12,30 @@ const MAX_TOOL_ITERATIONS = 8;
 
 /**
  * Runs one user turn against an `Agent` row to completion, including any tool-use rounds —
- * a plain async generator over `ChatEvent`, deliberately independent of HTTP/SSE so it can be
- * consumed identically by the streaming router (src/automation/router.ts) today and, later, by
- * a background/scheduled runner without duplicating the provider-call-and-tool-loop logic.
+ * a plain async generator over `ChatEvent`. `request` is the chat's own HTTP request, forwarded
+ * unchanged into every granted tool call (src/automation/tool.ts) so each one re-authenticates
+ * and re-checks permissions as the same user who's chatting, exactly like a direct `/api/:model`
+ * call would — a tool call can never do more than that user could already do over the REST API.
  */
 export async function* runAgentTurn(opts: {
   agent: Record<string, unknown>;
   history: ChatMessage[];
   db: AnyDb;
-  user: UserRow;
+  request: Request | undefined;
+  registry: Record<string, ModelDefinition>;
 }): AsyncGenerator<ChatEvent> {
   const { agent } = opts;
   const provider = resolveProvider(agent.provider as string);
-  const tools = resolveToolSpecs(agent.allowedTools);
-  const apiKeyEnvVar = agent.apiKeyEnvVar as string | undefined;
-  const apiKey = apiKeyEnvVar ? process.env[apiKeyEnvVar] : undefined;
+  const agentTools = await resolveAgentTools(opts.db, opts.registry, agent.id as string);
+  const toolsByName = new Map(agentTools.map((t) => [t.spec.name, t] as const));
+  const tools = agentTools.map((t) => t.spec);
+
+  const providerRow = await fetchRow(opts.db, Provider, agent.providerId as string);
+  if (!providerRow) {
+    throw new Error(`agent '${agent.name}' references a provider that no longer exists`);
+  }
+  const apiKey = providerRow.apiKey as string;
+  const baseUrl = (providerRow.url as string | null) ?? undefined;
 
   let messages = opts.history;
 
@@ -41,7 +52,7 @@ export async function* runAgentTurn(opts: {
       tools,
       extra: (agent.config as Record<string, unknown> | null) ?? undefined,
       apiKey,
-      baseUrl: (agent.baseUrl as string | null) ?? undefined,
+      baseUrl,
     })) {
       if (event.type === 'text-delta') {
         assistantText += event.text;
@@ -64,14 +75,21 @@ export async function* runAgentTurn(opts: {
 
     const results: ChatToolResult[] = [];
     for (const call of calls) {
-      const tool = getAgentTool(call.name);
+      const tool: ModelOperationTool | undefined = toolsByName.get(call.name);
       if (!tool) {
         results.push({ toolCallId: call.id, content: `unknown tool '${call.name}'`, isError: true });
         continue;
       }
+      if (typeof call.input !== 'object' || call.input === null) {
+        results.push({ toolCallId: call.id, content: `'${call.name}' input must be an object`, isError: true });
+        continue;
+      }
       try {
-        const input = tool.schema.parse(call.input) as unknown;
-        const output = await tool.execute(input, { db: opts.db, user: opts.user });
+        const output = await executeModelOperationTool(tool, call.input as Record<string, unknown>, {
+          db: opts.db,
+          request: opts.request,
+          registry: opts.registry,
+        });
         results.push({ toolCallId: call.id, content: typeof output === 'string' ? output : JSON.stringify(output) });
       } catch (err) {
         results.push({ toolCallId: call.id, content: err instanceof Error ? err.message : String(err), isError: true });

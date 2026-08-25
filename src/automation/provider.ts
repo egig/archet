@@ -52,7 +52,8 @@ export interface ChatRequest {
   tools?: ToolSpec[];
   /** provider-specific passthrough (e.g. Anthropic's `effort`) — adapters ignore keys they don't understand. */
   extra?: Record<string, unknown>;
-  /** resolved from `Agent.apiKeyEnvVar` by the caller — never read from the DB row directly. */
+  /** resolved from `Agent.providerId`'s `Provider` row by the caller — never read from the
+   * `Agent` row directly. */
   apiKey?: string;
   /** only meaningful to the openai-compatible adapter. */
   baseUrl?: string;

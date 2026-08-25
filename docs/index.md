@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Ratchet
   text: Models in, App out.
-  tagline: RATher arCHEType, you can build something out of.
+  tagline: RATher an arCHEType, you can build something out of.
   actions:
     - theme: brand
       text: Get Started
