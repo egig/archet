@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { useModels } from './models.js';
 import { ApiRequestError, createRow, getRow, updateRow } from './api.js';
@@ -92,9 +92,14 @@ function buildPayload(model: ConsoleModelMeta, values: FormValues, mode: 'create
   return payload;
 }
 
-export function ModelFormPage() {
+export interface ModelFormPageProps {
+  /** called after a successful save, or when Cancel is clicked — the caller decides what "done"
+   * means (e.g. `ModelFormDialog` navigates back to the page the dialog is layered over). */
+  onDone: () => void;
+}
+
+export function ModelFormPage({ onDone }: ModelFormPageProps) {
   const { model: modelName, id } = useParams<{ model: string; id?: string }>();
-  const navigate = useNavigate();
   const { getModel, loading: modelsLoading } = useModels();
   const model = modelName ? getModel(modelName) : undefined;
   const mode: 'create' | 'update' = id ? 'update' : 'create';
@@ -142,7 +147,7 @@ export function ModelFormPage() {
       } else {
         await updateRow(model!.name, id!, payload);
       }
-      navigate(`/${model!.name}`);
+      onDone();
     } catch (err) {
       if (err instanceof SyntaxError) {
         setFormError('One of the JSON fields is not valid JSON.');
@@ -158,7 +163,7 @@ export function ModelFormPage() {
   }
 
   return (
-    <div className="max-w-xl">
+    <div>
       <h1 className="mb-4 text-lg font-semibold text-gray-900">
         {mode === 'create' ? `New ${model.label.replace(/s$/, '')}` : `Edit ${model.label.replace(/s$/, '')}`}
       </h1>
@@ -199,7 +204,7 @@ export function ModelFormPage() {
           </button>
           <button
             type="button"
-            onClick={() => navigate(`/${model.name}`)}
+            onClick={onDone}
             className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
           >
             Cancel
