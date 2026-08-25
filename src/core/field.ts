@@ -25,6 +25,11 @@ interface BaseFieldDefinition {
   sensitive: boolean;
   writeAs?: string;
   displayText?: string;
+  /** set by `field.custom()` — a name the console client's `fieldRenderers` registry (see
+   * `console/client/field-renderers.tsx`) can key a custom form editor off of. Storage and
+   * validation are untouched: the field keeps its wrapped base kind's column type and Zod schema,
+   * `customType` is metadata only, read by `console/serialize-model.ts`. */
+  customType?: string;
 }
 
 export interface StringFieldDefinition extends BaseFieldDefinition {
@@ -90,6 +95,21 @@ export interface ActionRefFieldDefinition extends BaseFieldDefinition {
   allowWildcard: boolean;
 }
 
+/** Stores a reference to a blob held by a `FileStorageAdapter` (see `core/storage.ts`), not the
+ * bytes themselves — the column is `{ key, filename, mimeType, size }` (jsonb). `accept` is a
+ * comma-separated list of mime patterns (`'image/png'`, `'image/*'`) checked against the
+ * *sniffed* bytes of an upload, never the client-declared Content-Type — a mislabeled upload
+ * would otherwise bypass it. `preview: 'image'` is what turns on thumbnail rendering in the
+ * console (list + form) and — when `accept` is omitted — defaults `accept` to `'image/*'` so the
+ * common case is just `field.file({ preview: 'image' })`. `maxSize` (bytes) overrides
+ * `DEFAULT_MAX_FILE_SIZE` (core/storage.ts) for this field only. */
+export interface FileFieldDefinition extends BaseFieldDefinition {
+  kind: 'file';
+  accept?: string;
+  preview?: 'image';
+  maxSize?: number;
+}
+
 export type FieldDefinition =
   | StringFieldDefinition
   | TextFieldDefinition
@@ -101,7 +121,8 @@ export type FieldDefinition =
   | JsonFieldDefinition
   | ReferenceFieldDefinition
   | ModelRefFieldDefinition
-  | ActionRefFieldDefinition;
+  | ActionRefFieldDefinition
+  | FileFieldDefinition;
 
 function assertNoRequiredDefaultConflict(opts: FieldCommonOptions): void {
   if (opts.required && opts.default !== undefined) {
@@ -173,5 +194,26 @@ export const field = {
 
   actionRef(opts: { allowWildcard?: boolean } & FieldCommonOptions<string> = {}): ActionRefFieldDefinition {
     return { ...base(opts), kind: 'actionRef', allowWildcard: opts.allowWildcard ?? false };
+  },
+
+  file(
+    opts: { accept?: string; preview?: 'image'; maxSize?: number } & FieldCommonOptions = {},
+  ): FileFieldDefinition {
+    return {
+      ...base(opts),
+      kind: 'file',
+      accept: opts.accept ?? (opts.preview === 'image' ? 'image/*' : undefined),
+      preview: opts.preview,
+      maxSize: opts.maxSize,
+    };
+  },
+
+  /** Tags an existing field definition with a `name` the console client can key a custom form
+   * editor off of (see `console/client/field-renderers.tsx`), without introducing a new storage
+   * kind — `base`'s Postgres column and Zod validation apply unchanged, e.g.
+   * `field.custom('html', field.text())` stores and validates exactly like `field.text()`, it
+   * just renders differently in the console. */
+  custom<F extends FieldDefinition>(name: string, base: F): F {
+    return { ...base, customType: name };
   },
 };

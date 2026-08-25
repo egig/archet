@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -36,7 +36,9 @@ export const Invoice = defineModel('invoices', {
 async function writeModelsDir(files: Record<string, string>): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ratchet-models-'));
   for (const [name, contents] of Object.entries(files)) {
-    await writeFile(path.join(dir, name), contents, 'utf8');
+    const filePath = path.join(dir, name);
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, contents, 'utf8');
   }
   return dir;
 }
@@ -107,13 +109,95 @@ describe('generate() against a self-contained model fixture', () => {
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
     );
+    // built-ins are wrapped, not plain re-exports, since they're assigned the 'auth' Domain
+    // explicitly (builtins.ts) — see the 'auth' Domain assertions below.
     for (const name of ['User', 'Role', 'Permission', 'Session']) {
-      expect(registrySrc).toContain(`export { ${name} } from '@egig/ratchet/auth';`);
+      expect(registrySrc).toContain(`import { ${name} as _${name} } from '@egig/ratchet/auth';`);
     }
     expect(schemaSrc).toContain("pgTable('users'");
     expect(schemaSrc).toContain("pgTable('roles'");
     expect(schemaSrc).toContain("pgTable('permissions'");
     expect(schemaSrc).toContain("pgTable('sessions'");
+  });
+
+  it("assigns the built-in auth models to the 'auth' Domain (ADR 0001), grouping them in the console sidebar", async () => {
+    await generate({ modelsDir, generatedDir });
+    const registrySrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
+    );
+    for (const name of ['User', 'Role', 'Permission', 'Session']) {
+      expect(registrySrc).toContain(`domain: "auth"`);
+      expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "auth" } };`);
+    }
+    // a flat, non-domain user model (customer.model.ts, invoice.model.ts) stays a plain re-export.
+    expect(registrySrc).toContain('export { Customer } from');
+    expect(registrySrc).toContain('export { Invoice } from');
+  });
+
+  it('a model declared under a modelsDir subdirectory is assigned that folder name as its Domain', async () => {
+    const domainModelsDir = await writeModelsDir({
+      'billing/invoice.model.ts': `
+        import { defineModel, field } from '${CORE_IMPORT}';
+        export const Invoice = defineModel('invoices', {
+          fields: { amount: field.decimal({ precision: 10, scale: 2, required: true }) },
+        });
+      `,
+    });
+    try {
+      await generate({ modelsDir: domainModelsDir, generatedDir });
+      const registrySrc = await import('node:fs/promises').then((fs) =>
+        fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
+      );
+      expect(registrySrc).toContain(`console: { ..._Invoice.console, domain: "billing" } };`);
+    } finally {
+      await rm(domainModelsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('emits the shared ratchet_domain_settings table unconditionally', async () => {
+    await generate({ modelsDir, generatedDir });
+    const schemaSrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
+    );
+    expect(schemaSrc).toContain("pgTable('ratchet_domain_settings'");
+  });
+
+  it('emits Domain Settings (a *.domain.ts under a matching modelsDir subdirectory) to domains.ts', async () => {
+    const domainModelsDir = await writeModelsDir({
+      'auth/settings.domain.ts': `
+        import { defineDomainSettings, field } from '${CORE_IMPORT}';
+        export const AuthSettings = defineDomainSettings('auth', {
+          label: 'Authentication',
+          fields: { sessionTtlDays: field.integer({ default: 7 }) },
+        });
+      `,
+    });
+    try {
+      const { domainCount } = await generate({ modelsDir: domainModelsDir, generatedDir });
+      expect(domainCount).toBe(1);
+      const domainsSrc = await import('node:fs/promises').then((fs) =>
+        fs.readFile(path.join(generatedDir, 'domains.ts'), 'utf8'),
+      );
+      expect(domainsSrc).toContain('export { AuthSettings }');
+    } finally {
+      await rm(domainModelsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects Domain Settings declared under a folder that doesn't match their own domain name", async () => {
+    const badDomainModelsDir = await writeModelsDir({
+      'billing/settings.domain.ts': `
+        import { defineDomainSettings, field } from '${CORE_IMPORT}';
+        export const AuthSettings = defineDomainSettings('auth', { fields: { x: field.boolean() } });
+      `,
+    });
+    try {
+      await expect(generate({ modelsDir: badDomainModelsDir, generatedDir })).rejects.toThrow(
+        /must live under 'models\/auth\/'/,
+      );
+    } finally {
+      await rm(badDomainModelsDir, { recursive: true, force: true });
+    }
   });
 
   it('rejects a dangling field.reference target before writing any files', async () => {

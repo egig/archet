@@ -44,6 +44,10 @@ const OPERATORS_BY_KIND: Record<ColumnKind, ReadonlySet<string>> = {
   actionRef: new Set(['=', '!=', 'in', 'is']),
   uuid: new Set(['=', '!=', 'in', 'is']),
   json: new Set([]),
+  // Q13: a `file` field's value is an object — equality/ordering/text-search on it are
+  // meaningless. `is` (null-check only, see router/list.ts's filterClauseSql) is the one
+  // operator that's actually useful: "records with/without a file in this field."
+  file: new Set(['is']),
 };
 
 /** Q19: operator-vs-field-type is validated before the DB ever sees the query. */

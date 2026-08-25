@@ -37,6 +37,7 @@ function columnExpr(key: string, f: FieldDefinition): string {
       expr = `varchar('${col}')`;
       break;
     case 'json':
+    case 'file':
       expr = `jsonb('${col}')`;
       break;
     case 'reference':
@@ -114,6 +115,23 @@ function emitTable(model: ModelDefinition): string {
   return src;
 }
 
+/** One shared, fixed-shape table backing every Domain's Domain Settings (ADR 0002) — a single
+ * row per Domain, `values` a jsonb blob validated at the application layer against that Domain's
+ * declared `field.*` schema (`core/validation.ts`'s `buildDomainSettingsSchema`), never against
+ * per-domain Postgres columns. Emitted unconditionally, the same way the built-in auth tables
+ * always exist regardless of whether a consuming app declares any Domain Settings of its own —
+ * this keeps the table's own shape stable across `ratchet generate` runs even as domains are
+ * added, renamed, or have fields added to their settings. */
+function emitDomainSettingsTable(): string {
+  return [
+    `export const ratchetDomainSettingsTable = pgTable('ratchet_domain_settings', {`,
+    `  domain: varchar('domain').primaryKey(),`,
+    `  values: jsonb('values').notNull().default({}),`,
+    `  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),`,
+    `});\n`,
+  ].join('\n');
+}
+
 export function generateSchemaSource(scanned: ScannedModel[]): string {
   const imports = [
     `import {`,
@@ -136,5 +154,5 @@ export function generateSchemaSource(scanned: ScannedModel[]): string {
 
   const tables = scanned.map(({ model }) => emitTable(model)).join('\n');
 
-  return HEADER + imports + '\n' + tables;
+  return HEADER + imports + '\n' + tables + '\n' + emitDomainSettingsTable();
 }

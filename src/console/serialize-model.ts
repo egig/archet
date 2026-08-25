@@ -20,6 +20,14 @@ export interface ConsoleFieldMeta {
   values?: readonly string[];
   targetModel?: string;
   allowWildcard?: boolean;
+  accept?: string;
+  preview?: 'image';
+  maxSize?: number;
+  /** set when the field was declared with `field.custom(name, base)` — see `core/field.ts`. Keys
+   * the console client's `fieldRenderers` registry (`console/client/field-renderers.tsx`) so a
+   * consumer app can swap in a custom form editor for this field, e.g. a rich-text editor for an
+   * otherwise plain `text` field. */
+  customType?: string;
 }
 
 export interface ConsoleModelMeta {
@@ -31,9 +39,12 @@ export interface ConsoleModelMeta {
    * create/update/remove today) — read by an `actionRef` field's dropdown so it lists actual
    * operations instead of a hardcoded set (see `console/client/fields.tsx`). */
   operationNames: string[];
+  /** this model's Domain (see CONTEXT.md), when it has one — the console sidebar
+   * (`console/client/Layout.tsx`) groups models sharing a `domain` under one labeled section. */
+  domain?: string;
 }
 
-function humanize(name: string): string {
+export function humanize(name: string): string {
   return name.length === 0 ? name : name.charAt(0).toUpperCase() + name.slice(1);
 }
 
@@ -45,7 +56,7 @@ function humanizeFieldKey(key: string): string {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
-function serializeField(key: string, f: ModelDefinition['fields'][string]): ConsoleFieldMeta {
+export function serializeField(key: string, f: ModelDefinition['fields'][string]): ConsoleFieldMeta {
   const meta: ConsoleFieldMeta = {
     key,
     label: f.displayText ?? humanizeFieldKey(key),
@@ -57,6 +68,7 @@ function serializeField(key: string, f: ModelDefinition['fields'][string]): Cons
   };
   if (f.default !== undefined) meta.default = f.default;
   if (f.writeAs) meta.writeAs = f.writeAs;
+  if (f.customType) meta.customType = f.customType;
   if (f.kind === 'string') meta.maxLength = f.maxLength;
   if (f.kind === 'decimal') {
     meta.precision = f.precision;
@@ -65,6 +77,11 @@ function serializeField(key: string, f: ModelDefinition['fields'][string]): Cons
   if (f.kind === 'enum') meta.values = f.values;
   if (f.kind === 'reference') meta.targetModel = f.targetModel;
   if (f.kind === 'modelRef' || f.kind === 'actionRef') meta.allowWildcard = f.allowWildcard;
+  if (f.kind === 'file') {
+    meta.accept = f.accept;
+    meta.preview = f.preview;
+    meta.maxSize = f.maxSize;
+  }
   return meta;
 }
 
@@ -81,11 +98,13 @@ function inferDisplayField(model: ModelDefinition): string {
  * declared field shape) — served by `GET /meta/models[/:name]` for the console SPA's sidebar
  * and dynamically-generated list/form views. */
 export function serializeModelMeta(model: ModelDefinition): ConsoleModelMeta {
-  return {
+  const meta: ConsoleModelMeta = {
     name: model.name,
     label: model.console?.label ?? humanize(model.name),
     displayField: model.console?.displayField ?? inferDisplayField(model),
     fields: Object.entries(model.fields).map(([key, f]) => serializeField(key, f)),
     operationNames: Object.keys(model.operations),
   };
+  if (model.console?.domain) meta.domain = model.console.domain;
+  return meta;
 }

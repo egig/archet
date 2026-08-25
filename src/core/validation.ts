@@ -1,6 +1,7 @@
 import { z, type ZodTypeAny } from 'zod';
 import type { FieldDefinition } from './field.js';
 import type { ModelDefinition } from './model.js';
+import type { DomainSettingsDefinition } from './domain.js';
 
 function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
   switch (f.kind) {
@@ -31,6 +32,16 @@ function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
       // model's static field definitions are built. The real check is
       // `requireValidPermissionTarget` (ratchet/auth), which runs per-request with `ctx.registry`.
       return z.string();
+    case 'file':
+      // the shape returned by the upload endpoint (see `router/create-router.ts`) and stored
+      // as-is in the jsonb column — accept/maxSize/mime-sniffing are enforced at upload time,
+      // not re-validated here.
+      return z.object({
+        key: z.string(),
+        filename: z.string(),
+        mimeType: z.string(),
+        size: z.number().int().nonnegative(),
+      });
   }
 }
 
@@ -53,6 +64,17 @@ export function buildUpdateSchema(model: ModelDefinition): ZodTypeAny {
   // Q2: update is PATCH-shaped — every field is optional, regardless of `required`.
   const shape: Record<string, ZodTypeAny> = {};
   for (const [key, f] of Object.entries(model.fields)) {
+    shape[key] = baseSchemaForField(f).optional();
+  }
+  return z.object(shape);
+}
+
+/** Domain Settings are always patch-shaped (ADR 0002) — there's no create, only ever an update
+ * against the one row a Domain has — so every field is optional here regardless of `required`,
+ * same as `buildUpdateSchema`. */
+export function buildDomainSettingsSchema(def: DomainSettingsDefinition): ZodTypeAny {
+  const shape: Record<string, ZodTypeAny> = {};
+  for (const [key, f] of Object.entries(def.fields)) {
     shape[key] = baseSchemaForField(f).optional();
   }
   return z.object(shape);

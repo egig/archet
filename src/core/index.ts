@@ -13,19 +13,28 @@ export type {
   ReferenceFieldDefinition,
   ModelRefFieldDefinition,
   ActionRefFieldDefinition,
+  FileFieldDefinition,
 } from './field.js';
+
+export { DEFAULT_MAX_FILE_SIZE, sniffMimeType, matchesAccept } from './storage.js';
+export type { FileStorageAdapter, StoredFile } from './storage.js';
 
 export { defineModel } from './model.js';
 export type { ModelDefinition, OperationsConfig, DefineModelConfig, ConsoleModelOptions } from './model.js';
 
+export { defineDomainSettings } from './domain.js';
+export type { DomainSettingsDefinition, DefineDomainSettingsConfig } from './domain.js';
+
 export { pipe, validate, persist, PipelineError } from './pipeline.js';
 export type { OperationContext, Operation, PipelineFn, PipelineErrorOptions } from './pipeline.js';
 
-export { buildCreateSchema, buildUpdateSchema } from './validation.js';
+export { buildCreateSchema, buildUpdateSchema, buildDomainSettingsSchema } from './validation.js';
+
+export { getDomainSettings, updateDomainSettings } from './domain-settings-persistence.js';
 
 export { generateId } from './id.js';
 
-export { normalizeTimestamps, redactSensitiveFields } from './serialize.js';
+export { normalizeTimestamps, redactSensitiveFields, deriveFileFields } from './serialize.js';
 
 export { defineConfig } from './config.js';
 export type { FrameworkConfig } from './config.js';

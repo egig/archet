@@ -39,3 +39,23 @@ export function redactSensitiveFields(model: ModelDefinition, row: Record<string
   }
   return out;
 }
+
+/** A `file` field's column stores `{ key, filename, mimeType, size }` (`StoredFile`, see
+ * `core/storage.ts`) — `key` addresses the blob in the storage adapter and must never reach a
+ * client (Q12): it would let a caller bypass the gated read route entirely if the adapter or
+ * bucket isn't itself locked down. Every row that crosses into an HTTP response is rewritten
+ * here, replacing `key` with a `url` pointing at the gated per-field read route
+ * (`GET /api/:model/:id/:field`, `router/create-router.ts`) — applied alongside
+ * `redactSensitiveFields` at every response boundary. `row.id` must already be set (auto-assigned
+ * on insert, always present by the time a row is serialized). */
+export function deriveFileFields(model: ModelDefinition, row: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...row };
+  for (const [key, f] of Object.entries(model.fields)) {
+    if (f.kind !== 'file') continue;
+    const value = out[key];
+    if (value === null || value === undefined || typeof value !== 'object') continue;
+    const { filename, mimeType, size } = value as { filename: unknown; mimeType: unknown; size: unknown };
+    out[key] = { url: `/api/${model.name}/${String(out.id)}/${key}`, filename, mimeType, size };
+  }
+  return out;
+}

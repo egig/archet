@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Ratchet
-  text: Models in, API out.
-  tagline: Rather archetype, you can build something out of.
+  text: Models in, App out.
+  tagline: RATher arCHEType, you can build something out of.
   actions:
     - theme: brand
       text: Get Started

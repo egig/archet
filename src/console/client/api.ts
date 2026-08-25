@@ -1,4 +1,5 @@
 import type { ConsoleModelMeta } from '../serialize-model.js';
+import type { ConsoleDomainMeta } from '../serialize-domain.js';
 
 // '/' (root mount) needs an empty prefix, not a literal '/', so `${MOUNT_PREFIX}/meta/models`
 // doesn't come out as '//meta/models'.
@@ -80,6 +81,21 @@ export function listModels(): Promise<ConsoleModelMeta[]> {
   return request(`${MOUNT_PREFIX}/meta/models`);
 }
 
+export function listDomains(): Promise<ConsoleDomainMeta[]> {
+  return request(`${MOUNT_PREFIX}/meta/domains`);
+}
+
+export function getDomainSettings(domain: string): Promise<Record<string, unknown>> {
+  return request(`${MOUNT_PREFIX}/meta/domains/${encodeURIComponent(domain)}/settings`);
+}
+
+export function updateDomainSettings(domain: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return request(`${MOUNT_PREFIX}/meta/domains/${encodeURIComponent(domain)}/settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
 export interface OffsetPage {
   mode: 'offset';
   rows: Record<string, unknown>[];
@@ -122,6 +138,34 @@ export function updateRow(model: string, id: string, input: Record<string, unkno
 
 export function removeRow(model: string, id: string): Promise<Record<string, unknown>> {
   return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export interface UploadedFile {
+  key: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+/** `POST /api/:model/:field/upload` (Q3's two-step upload) — the caller sends the returned
+ * `UploadedFile` as the field's own create/update value. Bypasses `request()`: a multipart body
+ * must not carry a manually-set `content-type` (the browser sets the boundary itself). */
+export async function uploadFile(model: string, field: string, file: File): Promise<UploadedFile> {
+  const body = new FormData();
+  body.append('file', file);
+  const res = await fetch(`/api/${encodeURIComponent(model)}/${encodeURIComponent(field)}/upload`, { method: 'POST', body });
+
+  let json: unknown = null;
+  try {
+    json = await res.json();
+  } catch {
+    // no/invalid JSON body — fall through, handled below per status
+  }
+  if (!res.ok) {
+    const errorBody = (json as Partial<ApiErrorBody> | null)?.error ? (json as ApiErrorBody) : { error: { code: 'UNKNOWN_ERROR' } };
+    throw new ApiRequestError(res.status, errorBody);
+  }
+  return (json as { data: UploadedFile }).data;
 }
 
 export function hasPermission(permissions: AuthUser['permissions'], resource: string, action: string): boolean {

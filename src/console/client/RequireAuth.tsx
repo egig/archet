@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from 'react-router';
 import { useAuth } from './auth.js';
 import { ModelsProvider } from './models.js';
+import { DomainsProvider } from './domains.js';
 
 export function RequireAuth() {
   const { user, loading, setupRequired } = useAuth();
@@ -11,7 +12,9 @@ export function RequireAuth() {
 
   return (
     <ModelsProvider>
-      <Outlet />
+      <DomainsProvider>
+        <Outlet />
+      </DomainsProvider>
     </ModelsProvider>
   );
 }

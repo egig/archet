@@ -97,6 +97,20 @@ export function ModelListPage() {
                         </td>
                       );
                     }
+                    if (f.kind === 'file') {
+                      const stored = row[f.key] as { url?: string; filename?: string } | null | undefined;
+                      return (
+                        <td key={f.key} className="px-3 py-2">
+                          {!stored ? (
+                            formatCellValue(null)
+                          ) : f.preview === 'image' && stored.url ? (
+                            <img src={stored.url} alt={stored.filename ?? ''} className="h-8 w-8 rounded object-cover" />
+                          ) : (
+                            <span className="text-xs text-gray-600">{stored.filename ?? '—'}</span>
+                          )}
+                        </td>
+                      );
+                    }
                     return (
                       <td key={f.key} className="px-3 py-2">
                         {formatCellValue(row[f.key])}
