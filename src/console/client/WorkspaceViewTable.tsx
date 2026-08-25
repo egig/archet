@@ -18,6 +18,7 @@ export interface WorkspaceViewRow {
 
 export interface WorkspaceViewTableProps {
   view: WorkspaceViewRow;
+  workspaceId: string;
   /** called with the server's own copy of the row after a persisted edit (filters, for now) —
    * lets the owning `WorkspaceTabs` keep its tab list in sync without a full refetch. */
   onChange: (next: WorkspaceViewRow) => void;
@@ -27,7 +28,7 @@ export interface WorkspaceViewTableProps {
  * `FilterBar` (RowTable's `toolbar` slot) for editing its filters by hand — edits persist back to
  * the `workspace_views` row immediately, the same row an agent's `update_workspace_views` tool
  * call would edit. */
-export function WorkspaceViewTable({ view, onChange }: WorkspaceViewTableProps) {
+export function WorkspaceViewTable({ view, workspaceId, onChange }: WorkspaceViewTableProps) {
   const { getModel } = useModels();
   const model = getModel(view.targetModel);
 
@@ -48,6 +49,7 @@ export function WorkspaceViewTable({ view, onChange }: WorkspaceViewTableProps) 
         include: view.include ?? undefined,
         limit: view.limit,
       }}
+      basePath={`/workspace/${workspaceId}/${model.name}`}
       toolbar={<FilterBar fields={model.fields} value={view.filters ?? []} onChange={(filters) => void persistFilters(filters)} />}
     />
   );

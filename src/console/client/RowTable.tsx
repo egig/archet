@@ -22,14 +22,20 @@ export interface RowTableProps {
   /** rendered between the New-button header and the table itself — `WorkspaceViewTable` uses
    * this slot for its `FilterBar`; `ModelListPage` leaves it unset. */
   toolbar?: ReactNode;
+  /** where the New/Edit links point, as a prefix for `/new` and `/:id` — defaults to
+   * `/${model.name}` (`ModelListPage`'s own route). `WorkspaceViewTable` overrides this to
+   * `/workspace/:workspaceId/${model.name}` so the form dialog opens (and stays) nested under the
+   * active workspace's route instead of navigating out of it. */
+  basePath?: string;
 }
 
 /** The table/pagination/New-Edit-Delete rendering shared by `ModelListPage` (plain "browse this
  * model", no filters, default sort) and `WorkspaceViewTable` (a saved filter/sort/columns
  * configuration) — same rendering logic, different `query`. */
-export function RowTable({ model, query, toolbar }: RowTableProps) {
+export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
   const { getModel } = useModels();
   const { user } = useAuth();
+  const base = basePath ?? `/${model.name}`;
 
   const [page, setPage] = useState<OffsetPage | null>(null);
   const [offset, setOffset] = useState(0);
@@ -77,7 +83,7 @@ export function RowTable({ model, query, toolbar }: RowTableProps) {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-gray-900">{model.label}</h1>
         {canCreate && (
-          <Link to={`/${model.name}/new`} className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800">
+          <Link to={`${base}/new`} className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800">
             New
           </Link>
         )}
@@ -140,7 +146,7 @@ export function RowTable({ model, query, toolbar }: RowTableProps) {
                   {(canUpdate || canRemove) && (
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {canUpdate && (
-                        <Link to={`/${model.name}/${id}`} className="mr-3 text-gray-600 hover:underline">
+                        <Link to={`${base}/${id}`} className="mr-3 text-gray-600 hover:underline">
                           Edit
                         </Link>
                       )}

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, Route, Routes, useNavigate, useParams } from 'react-router';
 import { listRows } from './api.js';
 import { useModels } from './models.js';
 import { WorkspaceTabs } from './WorkspaceTabs.js';
 import { WorkspaceChatPanel } from './WorkspaceChatPanel.js';
+import { ModelFormDialog } from './ModelFormDialog.js';
 
 interface WorkspaceOption {
   id: string;
@@ -12,7 +13,11 @@ interface WorkspaceOption {
 
 /** The workspace screen — deliberately outside `Layout` (no left sidebar): just a thin header
  * (a link back to the console, a workspace switcher) over the tabs + chat two-pane layout. Reads
- * `:workspaceId` from the route (see ConsoleApp.tsx's sibling route alongside the Layout route). */
+ * `:workspaceId` from the route (see ConsoleApp.tsx's sibling route alongside the Layout route).
+ *
+ * Matched against `workspace/:workspaceId/*` so its own `:model/new`/`:model/:id` sub-routes
+ * render the row-create/edit form as a dialog on top of this screen instead of navigating away
+ * from it — the tab strip, active tab, and chat panel all stay mounted underneath. */
 export function WorkspacePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
@@ -54,6 +59,11 @@ export function WorkspacePage() {
         <WorkspaceTabs workspaceId={workspaceId} refreshSignal={refreshSignal} />
         <WorkspaceChatPanel workspaceId={workspaceId} onTurnDone={() => setRefreshSignal((n) => n + 1)} />
       </div>
+
+      <Routes>
+        <Route path=":model/new" element={<ModelFormDialog returnTo={`/workspace/${workspaceId}`} />} />
+        <Route path=":model/:id" element={<ModelFormDialog returnTo={`/workspace/${workspaceId}`} />} />
+      </Routes>
     </div>
   );
 }

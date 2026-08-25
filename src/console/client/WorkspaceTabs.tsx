@@ -148,6 +148,7 @@ export function WorkspaceTabs({ workspaceId, refreshSignal }: WorkspaceTabsProps
         {active ? (
           <WorkspaceViewTable
             view={active}
+            workspaceId={workspaceId}
             onChange={(next) => setViews((prev) => prev?.map((v) => (v.id === next.id ? next : v)) ?? prev)}
           />
         ) : (

@@ -7,7 +7,6 @@ import { LoginPage } from './LoginPage.js';
 import { SetupPage } from './SetupPage.js';
 import { IndexRedirect } from './IndexRedirect.js';
 import { ModelListPage } from './ModelListPage.js';
-import { ModelFormPage } from './ModelFormPage.js';
 import { ChatPage } from './ChatPage.js';
 import { ChatEmptyState } from './ChatEmptyState.js';
 import { ChatThread } from './ChatThread.js';
@@ -48,7 +47,7 @@ export function ConsoleApp({ brand, pages = [], fieldRenderers = {} }: ConsoleAp
             <Route path="/setup" element={<SetupPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route element={<RequireAuth />}>
-              <Route path="workspace/:workspaceId" element={<WorkspacePage />} />
+              <Route path="workspace/:workspaceId/*" element={<WorkspacePage />} />
               <Route element={<Layout brand={brand} pages={pages} />}>
                 <Route index element={<IndexRedirect />} />
                 <Route path="chat" element={<ChatPage />}>
@@ -60,9 +59,7 @@ export function ConsoleApp({ brand, pages = [], fieldRenderers = {} }: ConsoleAp
                 ))}
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="settings/:domain" element={<SettingsPage />} />
-                <Route path=":model" element={<ModelListPage />} />
-                <Route path=":model/new" element={<ModelFormPage />} />
-                <Route path=":model/:id" element={<ModelFormPage />} />
+                <Route path=":model/*" element={<ModelListPage />} />
               </Route>
             </Route>
           </Routes>
