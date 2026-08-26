@@ -9,7 +9,7 @@ import { WorkspaceTabs } from './WorkspaceTabs.js';
 import { WorkspaceChatPanel } from './WorkspaceChatPanel.js';
 import { ModelFormDialog } from './ModelFormDialog.js';
 import { BrandMark } from './BrandMark.js';
-import { LockClosedIcon, LockOpenIcon, LogOutIcon } from './icons.js';
+import { ConsoleIcon, LockClosedIcon, LockOpenIcon, LogOutIcon, ProfileIcon } from './icons.js';
 
 interface WorkspaceOption {
   id: string;
@@ -22,10 +22,21 @@ interface WorkspaceOption {
 // something scoped per workspace.
 const CHAT_OPEN_STORAGE_KEY = 'ratchet:workspace-chat-open';
 
-/** Avatar-only account control for the workspace header — click opens a dropdown (email + Log
- * out) instead of showing the email inline, mirroring `Layout`'s sidebar `AccountMenu` but
- * anchored under the avatar rather than above a fixed sidebar footer. */
-function UserMenu({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
+/** Avatar-only account control for the workspace header — click opens a dropdown that collapses
+ * everything account-scoped (email, Edit profile, the link back to the console for root admins,
+ * Log out) so the header strip itself stays down to the workspace switcher + lock toggle.
+ * Mirrors `Layout`'s sidebar `AccountMenu`, anchored under the avatar rather than a sidebar footer. */
+function UserMenu({
+  user,
+  isRoot,
+  consolePath,
+  onLogout,
+}: {
+  user: AuthUser;
+  isRoot: boolean;
+  consolePath: string;
+  onLogout: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,6 +48,8 @@ function UserMenu({ user, onLogout }: { user: AuthUser; onLogout: () => void }) 
     document.addEventListener('mousedown', onPointerDown);
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [open]);
+
+  const itemClass = 'flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50';
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -52,13 +65,23 @@ function UserMenu({ user, onLogout }: { user: AuthUser; onLogout: () => void }) 
       {open && (
         <div className="absolute right-0 top-full z-10 mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
           <p className="truncate px-3 py-1.5 text-xs text-gray-500">{user.email}</p>
+          <Link to="/profile" onClick={() => setOpen(false)} className={itemClass}>
+            <ProfileIcon className="h-4 w-4 text-gray-400" />
+            Edit profile
+          </Link>
+          {isRoot && (
+            <Link to={consolePath} onClick={() => setOpen(false)} className={itemClass}>
+              <ConsoleIcon className="h-4 w-4 text-gray-400" />
+              Console
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => {
               setOpen(false);
               onLogout();
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            className={itemClass}
           >
             <LogOutIcon className="h-4 w-4 text-gray-400" />
             Log out
@@ -70,9 +93,10 @@ function UserMenu({ user, onLogout }: { user: AuthUser; onLogout: () => void }) 
 }
 
 /** The workspace screen — deliberately outside `Layout` (no left sidebar): just a thin header
- * (a workspace switcher, and — for root admins only — a link back to the console, next to the
- * logged-in user) over the tabs + chat two-pane layout. Reads `:workspaceId` from the
- * route (see ConsoleApp.tsx's sibling route alongside the Layout route).
+ * (a workspace switcher + lock toggle, with account actions — Edit profile, the console link for
+ * root admins, Log out — collapsed into the avatar's `UserMenu`) over the tabs + chat two-pane
+ * layout. Reads `:workspaceId` from the route (see ConsoleApp.tsx's sibling route alongside the
+ * Layout route).
  *
  * Matched against `workspace/:workspaceId/*` so its own `:model/new`/`:model/:id` sub-routes
  * render the row-create/edit form as a dialog on top of this screen instead of navigating away
@@ -177,12 +201,9 @@ export function WorkspacePage() {
               )}
             </button>
           )}
-          {isRoot && (
-            <Link to={consolePath} className="text-sm text-gray-500 hover:text-gray-900">
-              Console
-            </Link>
+          {user && (
+            <UserMenu user={user} isRoot={isRoot} consolePath={consolePath} onLogout={() => void logout()} />
           )}
-          {user && <UserMenu user={user} onLogout={() => void logout()} />}
         </div>
       </header>
 

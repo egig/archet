@@ -31,4 +31,6 @@ export {
   Cog6ToothIcon as SettingsIcon,
   ArrowLeftStartOnRectangleIcon as LogOutIcon,
   RectangleStackIcon as WorkspaceIcon,
+  UserCircleIcon as ProfileIcon,
+  Squares2X2Icon as ConsoleIcon,
 } from '@heroicons/react/20/solid';

@@ -169,5 +169,43 @@ export function createAuthRouter(db: AnyDb): Hono {
     return c.json({ data: await userWithPermissions(db, user) });
   });
 
+  /** Self-service profile edit — lets any authenticated user change their own `email`/`password`
+   * without the `users:update` permission that gates admin-driven edits through the generic
+   * `PATCH /api/users/:id`. Only those two keys are honoured (a client can't lift its own role or
+   * reactivate itself here); the write itself still runs through `User.operations.update`, so
+   * `hashPassword` + `validate` apply exactly as they would for an admin edit. */
+  app.patch('/me', async (c) => {
+    const current = await resolveSessionUser(db, c.req.raw);
+    const body = await readJsonBody(c);
+
+    const input: Record<string, unknown> = {};
+    if (typeof body.email === 'string' && body.email.length > 0) input.email = body.email;
+    if (typeof body.password === 'string' && body.password.length > 0) input.password = body.password;
+    if (Object.keys(input).length === 0) {
+      throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, message: 'nothing to update' });
+    }
+
+    // Friendly duplicate-email check — the partial unique index on `users.email` would otherwise
+    // surface as a raw 500 (no unique-violation mapping anywhere in the framework yet).
+    if (typeof input.email === 'string' && input.email !== current.email) {
+      const existing = await findUserByEmail(db, input.email);
+      if (existing && existing.id !== current.id) {
+        throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { email: 'already in use' } });
+      }
+    }
+
+    const ctx: OperationContext = {
+      operation: 'update',
+      id: current.id,
+      input,
+      doc: null,
+      model: User,
+      db,
+      request: c.req.raw,
+    };
+    const result = await User.operations.update(ctx);
+    return c.json({ data: await userWithPermissions(db, result.doc as unknown as UserRow) });
+  });
+
   return app;
 }

@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import type { ConsoleFieldMeta } from '../serialize-model.js';
+import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { listRows, uploadFile } from './api.js';
 import { useModels } from './models.js';
 import { useFieldRenderers } from './field-renderers.js';
@@ -54,6 +54,19 @@ export interface FieldInputProps {
   mode: 'create' | 'update';
   /** only needed by `kind: 'file'`, to build its upload URL (`POST /api/:modelName/:field/upload`). */
   modelName?: string;
+  /** the whole form's current values + its model meta. Lets an `actionRef` sub-field scope its
+   * option list to the sibling `modelRef` ("resource") chosen elsewhere on the same form (its
+   * parent form also uses these to hide `actionRef`/`fieldRef` until a resource is picked).
+   * Absent for forms with no such cross-field dependency (operation params, domain settings). */
+  formValues?: Record<string, unknown>;
+  formModel?: ConsoleModelMeta;
+}
+
+/** The key of the form's `modelRef` field (`resource` on `Permission`/`AgentPermission`,
+ * `targetModel` on `WorkspaceView`) — the field an `actionRef`/`fieldRef` sub-selector depends
+ * on. `undefined` when the form has no `modelRef` field at all. */
+export function resourceFieldKey(model: ConsoleModelMeta | undefined): string | undefined {
+  return model?.fields.find((f) => f.kind === 'modelRef')?.key;
 }
 
 export function FieldInput(props: FieldInputProps) {
@@ -76,6 +89,14 @@ export function FieldInput(props: FieldInputProps) {
 
   const customRenderer = field.customType ? fieldRenderers[field.customType] : undefined;
   if (customRenderer) return customRenderer(props);
+
+  // the sibling `modelRef` value, for scoping an `actionRef` dropdown — '' (nothing picked) or
+  // '*' both fall back to the registry-wide union.
+  const resourceKey = resourceFieldKey(props.formModel);
+  const selectedResource =
+    resourceKey && typeof props.formValues?.[resourceKey] === 'string'
+      ? (props.formValues[resourceKey] as string)
+      : '';
 
   switch (field.kind) {
     case 'text':
@@ -183,7 +204,7 @@ export function FieldInput(props: FieldInputProps) {
           onChange={(e) => onChange(inputKey, e.target.value)}
           className={inputClass}
         >
-          {!required && <option value="">—</option>}
+          <option value="">{required ? '— select —' : '—'}</option>
           {field.allowWildcard && <option value="*">* (all resources)</option>}
           {modelRefOptions.map((m) => (
             <option key={m.name} value={m.name}>
@@ -194,7 +215,15 @@ export function FieldInput(props: FieldInputProps) {
       );
 
     case 'actionRef': {
-      const actionOptions = [...new Set(modelRefOptions.flatMap((m) => m.operationNames))].sort();
+      // when a concrete resource is chosen, only offer *its* operations; otherwise ('' or '*')
+      // fall back to the registry-wide union, matching `requireValidPermissionTarget`'s check.
+      const scopedModel =
+        selectedResource && selectedResource !== '*'
+          ? modelRefOptions.find((m) => m.name === selectedResource)
+          : undefined;
+      const actionOptions = scopedModel
+        ? [...scopedModel.operationNames].sort()
+        : [...new Set(modelRefOptions.flatMap((m) => m.operationNames))].sort();
       return wrap(
         <select
           required={required}
@@ -202,7 +231,7 @@ export function FieldInput(props: FieldInputProps) {
           onChange={(e) => onChange(inputKey, e.target.value)}
           className={inputClass}
         >
-          {!required && <option value="">—</option>}
+          <option value="">{required ? '— select —' : '—'}</option>
           {field.allowWildcard && <option value="*">* (all actions)</option>}
           {actionOptions.map((name) => (
             <option key={name} value={name}>

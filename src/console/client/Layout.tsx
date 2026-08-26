@@ -4,7 +4,7 @@ import { useAuth } from './auth.js';
 import { useModels } from './models.js';
 import { useDomains } from './domains.js';
 import { BrandMark } from './BrandMark.js';
-import { ChevronDownIcon, LogOutIcon, SettingsIcon, WorkspaceIcon } from './icons.js';
+import { ChevronDownIcon, LogOutIcon, ProfileIcon, SettingsIcon, WorkspaceIcon } from './icons.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { ConsoleDomainMeta } from '../serialize-domain.js';
 
@@ -83,11 +83,11 @@ function initials(email: string): string {
   return email.slice(0, 2).toUpperCase();
 }
 
-/** Bottom-of-sidebar account control: collapses the signed-in user, the Settings link (only
- * shown once any Domain has settings — same condition the old standalone sidebar link used), and
- * Log out into one popup menu, so the sidebar's main nav only ever lists content, never account
- * actions. */
-function AccountMenu({ showSettings }: { showSettings: boolean }) {
+/** Bottom-of-sidebar account control: collapses the signed-in user, their Workspace, Edit
+ * profile, and Log out into one popup menu, so the sidebar's main nav only ever lists content,
+ * never account actions. Settings sits just above this as its own footer link (see `Layout`) —
+ * it's app configuration, not an account action. */
+function AccountMenu() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -104,7 +104,7 @@ function AccountMenu({ showSettings }: { showSettings: boolean }) {
   if (!user) return null;
 
   return (
-    <div ref={ref} className="relative border-t border-gray-200 p-2">
+    <div ref={ref} className="relative p-2">
       {open && (
         <div className="absolute bottom-full left-2 right-2 mb-1 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
           {/* `/` is `IndexRedirect`, which navigates to the signed-in user's own Workspace
@@ -117,18 +117,16 @@ function AccountMenu({ showSettings }: { showSettings: boolean }) {
             <WorkspaceIcon className="h-4 w-4 text-gray-400" />
             Workspace
           </NavLink>
-          {showSettings && (
-            <NavLink
-              to="/settings"
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-2 text-sm ${isActive ? 'font-medium text-gray-900' : 'text-gray-700'} hover:bg-gray-50`
-              }
-            >
-              <SettingsIcon className="h-4 w-4 text-gray-400" />
-              Settings
-            </NavLink>
-          )}
+          <NavLink
+            to="/profile"
+            onClick={() => setOpen(false)}
+            className={({ isActive }) =>
+              `flex items-center gap-2 px-3 py-2 text-sm ${isActive ? 'font-medium text-gray-900' : 'text-gray-700'} hover:bg-gray-50`
+            }
+          >
+            <ProfileIcon className="h-4 w-4 text-gray-400" />
+            Edit profile
+          </NavLink>
           <button
             type="button"
             onClick={() => {
@@ -198,8 +196,28 @@ export function Layout() {
           )}
         </nav>
 
-        {/* 4. Bottom bar */}
-        <AccountMenu showSettings={domains.some((d) => d.fields.length > 0)} />
+        {/* 4. Bottom bar — Settings (app config, only once a Domain declares settings) sits above
+            the account menu; the two share one top border. */}
+        <div className="border-t border-gray-200">
+          {domains.some((d) => d.fields.length > 0) && (
+            <div className="px-2 pt-2">
+              <NavLink
+                to="/settings"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+                    isActive
+                      ? 'bg-gray-100 font-medium text-gray-900'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`
+                }
+              >
+                <SettingsIcon className="h-4 w-4 text-gray-400" />
+                Settings
+              </NavLink>
+            </div>
+          )}
+          <AccountMenu />
+        </div>
       </aside>
 
       <main className="min-w-0 flex-1 overflow-x-auto p-6">

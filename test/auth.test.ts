@@ -338,6 +338,108 @@ describeIfDb('auth system (against a live Postgres)', () => {
     expect(body.data.permissions).toEqual([{ resource: 'invoices', action: 'list', field: null }]);
   });
 
+  describe('PATCH /me (self-service profile edit, src/auth/router.ts)', () => {
+    it('requires a valid session', async () => {
+      const res = await authApp.request('/me', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'x@example.com' }),
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('updates the caller\'s own email and returns the fresh user (no passwordHash)', async () => {
+      const { token } = await registerUser('before@example.com', 'pw');
+
+      const res = await authApp.request('/me', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email: 'after@example.com' }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: { email: string; passwordHash?: string; permissions: unknown[] } };
+      expect(body.data.email).toBe('after@example.com');
+      expect(body.data.passwordHash).toBeUndefined();
+      expect(Array.isArray(body.data.permissions)).toBe(true);
+
+      const me = await authApp.request('/me', { headers: { authorization: `Bearer ${token}` } });
+      expect(((await me.json()) as { data: { email: string } }).data.email).toBe('after@example.com');
+    });
+
+    it('changes the password (new one logs in, old one stops working) and keeps the current session', async () => {
+      const { token } = await registerUser('pwchange@example.com', 'old-pw');
+
+      const res = await authApp.request('/me', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ password: 'new-pw' }),
+      });
+      expect(res.status).toBe(200);
+
+      // existing session still valid — token-based, not password-derived
+      const stillMe = await authApp.request('/me', { headers: { authorization: `Bearer ${token}` } });
+      expect(stillMe.status).toBe(200);
+
+      const withNew = await authApp.request('/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'pwchange@example.com', password: 'new-pw' }),
+      });
+      expect(withNew.status).toBe(200);
+
+      const withOld = await authApp.request('/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'pwchange@example.com', password: 'old-pw' }),
+      });
+      expect(withOld.status).toBe(401);
+    });
+
+    it('rejects an empty patch', async () => {
+      const { token } = await registerUser('empty@example.com', 'pw');
+      const res = await authApp.request('/me', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('ignores privilege fields — roleId/active can\'t be changed through this route', async () => {
+      const { token, user } = await registerUser('noescalate@example.com', 'pw');
+
+      const roleId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, 'admin')`);
+
+      const res = await authApp.request('/me', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email: 'noescalate2@example.com', roleId, active: false }),
+      });
+      expect(res.status).toBe(200);
+
+      const row = (await db.execute(
+        sql`SELECT role_id, active FROM users WHERE id = ${user.id}`,
+      )) as unknown as { role_id: string | null; active: boolean }[];
+      expect(row[0]).toEqual({ role_id: null, active: true });
+    });
+
+    it('rejects an email already taken by another user with a field error', async () => {
+      await registerUser('taken@example.com', 'pw');
+      const { token } = await registerUser('mover@example.com', 'pw');
+
+      const res = await authApp.request('/me', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email: 'taken@example.com' }),
+      });
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: { code: string; fields?: Record<string, string> } };
+      expect(body.error.fields?.email).toBeTruthy();
+    });
+  });
+
   describe('cookie-based session (admin SPA transport)', () => {
     function cookieFromSetHeader(res: Response): string {
       const raw = res.headers.get('set-cookie');

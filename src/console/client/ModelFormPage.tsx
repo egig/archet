@@ -5,7 +5,7 @@ import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
 import { ApiRequestError, createRow, getRow, hasPermission, updateRow } from './api.js';
-import { FieldInput, type FileFieldValue } from './fields.js';
+import { FieldInput, resourceFieldKey, type FileFieldValue } from './fields.js';
 import { OperationButton } from './OperationButton.js';
 import { queryKeys } from './query-keys.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
@@ -160,8 +160,20 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
   if (modelsLoading || loading) return <p className="text-sm text-gray-500">Loading…</p>;
   if (!model) return <p className="text-sm text-red-600">Unknown model.</p>;
 
+  const resourceKey = resourceFieldKey(model);
+
   function handleChange(key: string, value: unknown) {
-    setValues((prev) => ({ ...prev, [key]: value as string | boolean | FileFieldValue }));
+    setValues((prev) => {
+      const next = { ...prev, [key]: value as string | boolean | FileFieldValue };
+      // the chosen resource decides which actions/fields are valid — switching it must not
+      // leave a stale `action`/`field` from the previous resource behind.
+      if (key === resourceKey) {
+        for (const f of model!.fields) {
+          if (f.kind === 'actionRef' || f.kind === 'fieldRef') next[f.key] = '';
+        }
+      }
+      return next;
+    });
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -211,6 +223,14 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
       <form onSubmit={handleSubmit} className="space-y-4">
         {model.fields
           .filter((f) => !f.sensitive || f.writeAs)
+          .filter((f) => {
+            // `actionRef`/`fieldRef` are sub-selectors of the `modelRef` ("resource") field —
+            // hide them until a resource is picked (choosing '*' counts and reveals them).
+            if ((f.kind === 'actionRef' || f.kind === 'fieldRef') && resourceKey) {
+              return Boolean(values[resourceKey]);
+            }
+            return true;
+          })
           .map((f) => {
             const key = inputKeyFor(f);
             return (
@@ -227,6 +247,8 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
                   error={fieldErrors[key] ?? (f.writeAs ? fieldErrors[f.key] : undefined)}
                   mode={mode}
                   modelName={model.name}
+                  formValues={values}
+                  formModel={model}
                 />
               </label>
             );

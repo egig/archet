@@ -8,6 +8,7 @@ import { SetupPage } from './SetupPage.js';
 import { IndexRedirect } from './IndexRedirect.js';
 import { ModelListPage } from './ModelListPage.js';
 import { SettingsPage } from './SettingsPage.js';
+import { ProfilePage } from './ProfilePage.js';
 import { WorkspacePage } from './WorkspacePage.js';
 
 // One client for the whole SPA lifetime — `ConsoleApp` is mounted once by `main.tsx`, so this
@@ -31,6 +32,7 @@ export function ConsoleApp() {
             <Route path="/login" element={<LoginPage />} />
             <Route element={<RequireAuth />}>
               <Route path="workspace/:workspaceId/*" element={<WorkspacePage />} />
+              <Route path="profile" element={<ProfilePage />} />
               <Route element={<Layout />}>
                 <Route index element={<IndexRedirect />} />
                 <Route path="settings" element={<SettingsPage />} />

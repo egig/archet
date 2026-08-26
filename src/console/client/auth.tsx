@@ -7,6 +7,7 @@ import {
   me as apiMe,
   setup as apiSetup,
   setupStatus as apiSetupStatus,
+  updateProfile as apiUpdateProfile,
   type AuthUser,
 } from './api.js';
 import { queryKeys } from './query-keys.js';
@@ -19,6 +20,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   completeSetup: (email: string, password: string) => Promise<void>;
+  updateProfile: (input: { email?: string; password?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -74,6 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: (input: { email?: string; password?: string }) => apiUpdateProfile(input),
+    onSuccess: (user) => queryClient.setQueryData(queryKeys.me, user),
+  });
+
   const login = useCallback(
     async (email: string, password: string) => {
       await loginMutation.mutateAsync({ email, password });
@@ -92,6 +99,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [setupMutation],
   );
 
+  const updateProfile = useCallback(
+    async (input: { email?: string; password?: string }) => {
+      await updateProfileMutation.mutateAsync(input);
+    },
+    [updateProfileMutation],
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -101,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         completeSetup,
+        updateProfile,
       }}
     >
       {children}

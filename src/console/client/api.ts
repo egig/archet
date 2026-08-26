@@ -78,6 +78,12 @@ export function me(): Promise<AuthUser> {
   return request('/api/auth/me');
 }
 
+/** Self-service profile edit (`PATCH /api/auth/me`) — only `email`/`password` are accepted
+ * server-side. Returns the same `{ id, email, roleId, active, permissions }` shape `me()` does. */
+export function updateProfile(input: { email?: string; password?: string }): Promise<AuthUser> {
+  return request('/api/auth/me', { method: 'PATCH', body: JSON.stringify(input) });
+}
+
 export function listModels(): Promise<ConsoleModelMeta[]> {
   return request(`${MOUNT_PREFIX}/meta/models`);
 }

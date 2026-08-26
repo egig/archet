@@ -12,8 +12,11 @@
 | `POST` | `/api/auth/login` | verify credentials, issue a session |
 | `POST` | `/api/auth/logout` | invalidate the current session |
 | `GET` | `/api/auth/me` | current user + their permissions |
+| `PATCH` | `/api/auth/me` | update your own `email` / `password` |
 
 `setup`, `register`, and `login` all return `{ data: { user, token } }` (setup's `GET` returns `{ data: { required } }` instead) and set an `HttpOnly` session cookie (`Secure` when the request is HTTPS). The console SPA relies on the cookie; non-browser clients can instead send `Authorization: Bearer <token>`.
+
+`PATCH /api/auth/me` is self-service: any signed-in user can change their own `email` and `password` without the `users:update` permission that gates admin-driven edits through `PATCH /api/users/:id`. Only those two keys are honoured — `roleId`, `active`, and everything else are ignored — and the write still runs through the `User` model's own `update` pipeline (`hashPassword` + `validate`). It returns the same `{ data: <user + permissions> }` shape as `GET /me`. The console exposes it as the **Edit profile** page (`/profile`), linked from the account menu in both the sidebar and the workspace header.
 
 ## Root admin onboarding
 
