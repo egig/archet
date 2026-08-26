@@ -2,10 +2,14 @@ import { defineConfig } from 'vitepress';
 
 export default defineConfig({
   title: 'Ratchet',
-  description: 'RATher an arCHEType, you can build something out of. TypeScript models -> Postgres schema, codegen, and composable pipelines.',
+  description: 'RATher an arCHEType, you build something out of. TypeScript models -> Postgres schema, codegen, and composable pipelines.',
   base: '/ratchet/',
   cleanUrls: true,
+  head: [
+    ['link', { rel: 'icon', type: 'image/png', href: '/ratchet/favicon.png' }],
+  ],
   themeConfig: {
+    logo: { light: '/logo.png', dark: '/logo-dark.png', alt: 'Ratchet' },
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'GitHub', link: 'https://github.com/egig/ratchet' },
