@@ -12,6 +12,7 @@ interface WorkspaceOption {
   id: string;
   name: string;
   locked: boolean;
+  chatEnabled: boolean;
 }
 
 // shared across every workspace — the chat panel's open/closed state is a UI preference, not
@@ -116,6 +117,9 @@ export function WorkspacePage() {
   if (!workspaceId) return null;
 
   const activeWorkspace = workspaces?.find((w) => w.id === workspaceId) ?? null;
+  // a persistent per-workspace setting (workspace.model.ts's `chatEnabled`), distinct from the
+  // per-browser `chatOpen` show/hide toggle — when off, the panel and its toggle are gone entirely.
+  const chatAvailable = activeWorkspace?.chatEnabled ?? true;
 
   // `lock`/`unlock` are custom operations (see workspace.model.ts) — `locked` itself is no longer
   // writable via a plain PATCH (`forbidLockedInUpdate`), so this always goes through one or the
@@ -169,10 +173,13 @@ export function WorkspacePage() {
           workspaceId={workspaceId}
           refreshSignal={refreshSignal}
           chatOpen={chatOpen}
+          chatAvailable={chatAvailable}
           onToggleChat={() => setChatOpen((v) => !v)}
           locked={activeWorkspace?.locked ?? false}
         />
-        {chatOpen && <WorkspaceChatPanel workspaceId={workspaceId} onTurnDone={() => setRefreshSignal((n) => n + 1)} />}
+        {chatOpen && chatAvailable && (
+          <WorkspaceChatPanel workspaceId={workspaceId} onTurnDone={() => setRefreshSignal((n) => n + 1)} />
+        )}
       </div>
 
       <Routes>

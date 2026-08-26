@@ -2,8 +2,8 @@ import type { ModelDefinition } from '../core/model.js';
 import { PipelineError } from '../core/pipeline.js';
 import { columnKind, isFilterableOrSortable, isKnownColumn, isOperatorValidForKind } from './fields.js';
 
-export type FilterOp = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'like' | 'is';
-const VALID_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '>=', '<', '<=', 'in', 'like', 'is']);
+export type FilterOp = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'like' | 'ilike' | 'is';
+const VALID_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '>=', '<', '<=', 'in', 'like', 'ilike', 'is']);
 const GROUP_LOGICS: ReadonlySet<string> = new Set(['and', 'or']);
 
 export interface FilterClause {

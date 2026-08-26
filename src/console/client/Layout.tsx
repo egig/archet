@@ -106,6 +106,15 @@ function AccountMenu({ showSettings }: { showSettings: boolean }) {
     <div ref={ref} className="relative border-t border-gray-200 p-2">
       {open && (
         <div className="absolute bottom-full left-2 right-2 mb-1 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+          {/* `/` is `IndexRedirect`, which navigates to the signed-in user's own Workspace
+              (or the create form if they have none) — no id to look up here. */}
+          <NavLink
+            to="/"
+            onClick={() => setOpen(false)}
+            className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Workspace
+          </NavLink>
           {showSettings && (
             <NavLink
               to="/settings"

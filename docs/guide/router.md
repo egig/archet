@@ -45,7 +45,7 @@ For anything beyond equality, pass `?filter=` as a JSON array of `[field, operat
 GET /api/invoices?filter=[["amount",">=","100"],["status","!=","draft"]]
 ```
 
-Supported operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `like`, `is`. Only fields declared `indexed: true` can be filtered on (`UNFILTERABLE_FIELD` otherwise), and each operator must be valid for the field's kind (`INVALID_OPERATOR` otherwise).
+Supported operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `like`, `ilike`, `is`. `like`/`ilike` are string/text only and take a pattern with explicit `%` wildcards (`ilike` is the case-insensitive form). Only fields declared `indexed: true` can be filtered on (`UNFILTERABLE_FIELD` otherwise), and each operator must be valid for the field's kind (`INVALID_OPERATOR` otherwise).
 
 ### Relations: `?include=`
 

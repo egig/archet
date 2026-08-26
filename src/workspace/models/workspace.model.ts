@@ -52,10 +52,13 @@ export const Workspace = defineModel('workspaces', {
     userId: field.reference('users', { required: true, indexed: true, displayText: 'Owner' }),
     name: field.string({ required: true, maxLength: 255 }),
     locked: field.boolean({ default: false }),
+    // when false, `WorkspacePage` drops the agent chat panel (and its show/hide toggle)
+    // entirely for this workspace — a persistent setting, not the per-browser hide toggle.
+    chatEnabled: field.boolean({ default: true }),
   },
   operations: {
     create: pipe(requireOwnsRow('userId'), validate, persist),
-    update: pipe(requireOwnsRow('userId'), requireNotLocked, forbidLockedInUpdate, validate, persist),
+    update: pipe(requireOwnsRow('userId'), requireNotLocked, validate, persist),
     remove: pipe(requireOwnsRow('userId'), requireNotLocked, persist.remove),
     lock: {
       pipeline: pipe(requireOwnsRow('userId'), presetFields({ locked: true })),

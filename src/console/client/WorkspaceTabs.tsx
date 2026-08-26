@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useModels } from './models.js';
 import { listRows, createRow, updateRow, removeRow } from './api.js';
@@ -16,6 +16,9 @@ export interface WorkspaceTabsProps {
    * here, in the tab strip's row, rather than inside the chat panel itself, since a fully-hidden
    * panel wouldn't have anywhere to put a re-open control. */
   chatOpen: boolean;
+  /** the workspace's persistent `chatEnabled` setting — when false, chat isn't available at all,
+   * so the show/hide toggle button is dropped entirely (not just the panel). */
+  chatAvailable: boolean;
   onToggleChat: () => void;
   /** the active workspace's `locked` flag — while true, tabs are frozen (no add/reorder/close) and
    * the active tab's `FilterBar` is hidden; the rows a tab shows stay fully interactive, only the
@@ -25,11 +28,23 @@ export interface WorkspaceTabsProps {
 
 /** The tab strip + active tab's content for one workspace — add/reorder/close tabs, all backed by
  * plain `workspace_views` rows through the generic (now owner-scoped) `/api/:model` router. */
-export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleChat, locked }: WorkspaceTabsProps) {
+export function WorkspaceTabs({
+  workspaceId,
+  refreshSignal,
+  chatOpen,
+  chatAvailable,
+  onToggleChat,
+  locked,
+}: WorkspaceTabsProps) {
   const [views, setViews] = useState<WorkspaceViewRow[] | null>(null);
   const [activeId, setActiveIdState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  // the tab whose label is currently being edited inline (double-click), and the in-progress text.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftLabel, setDraftLabel] = useState('');
+  // set by Escape so the input's own onBlur (fired as it unmounts) skips the save.
+  const cancelRenameRef = useRef(false);
   // the active tab's view id is mirrored into `?tab=` so a page refresh (or a link straight to a
   // workspace URL) restores the same tab instead of always falling back to the first one.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -89,6 +104,25 @@ export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleCh
     await refresh();
   }
 
+  function startRename(view: WorkspaceViewRow) {
+    if (locked) return;
+    setEditingId(view.id);
+    setDraftLabel(view.label);
+  }
+
+  async function commitRename(id: string) {
+    if (cancelRenameRef.current) {
+      cancelRenameRef.current = false;
+      return;
+    }
+    const next = draftLabel.trim();
+    setEditingId(null);
+    const current = views?.find((v) => v.id === id);
+    if (!current || !next || next === current.label) return;
+    const updated = await updateRow('workspace_views', id, { label: next });
+    setViews((prev) => prev?.map((v) => (v.id === id ? (updated as unknown as WorkspaceViewRow) : v)) ?? prev);
+  }
+
   async function move(id: string, direction: -1 | 1) {
     if (!views) return;
     const idx = views.findIndex((v) => v.id === id);
@@ -116,9 +150,33 @@ export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleCh
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <button type="button" onClick={() => setActiveId(v.id)}>
-              {v.label}
-            </button>
+            {editingId === v.id ? (
+              <input
+                autoFocus
+                type="text"
+                maxLength={255}
+                value={draftLabel}
+                onChange={(e) => setDraftLabel(e.target.value)}
+                onBlur={() => void commitRename(v.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void commitRename(v.id);
+                  else if (e.key === 'Escape') {
+                    cancelRenameRef.current = true;
+                    setEditingId(null);
+                  }
+                }}
+                className="w-28 rounded border border-gray-300 px-1 py-0.5 text-sm"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setActiveId(v.id)}
+                onDoubleClick={() => startRename(v)}
+                title={locked ? undefined : 'Double-click to rename'}
+              >
+                {v.label}
+              </button>
+            )}
             {!locked && (
               <>
                 <button
@@ -157,16 +215,18 @@ export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleCh
           </div>
         )}
 
-        <div className="ml-auto pb-1">
-          <button
-            type="button"
-            onClick={onToggleChat}
-            title={chatOpen ? 'Hide chat' : 'Show chat'}
-            className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
-          >
-            {chatOpen ? 'Hide chat ›' : '‹ Show chat'}
-          </button>
-        </div>
+        {chatAvailable && (
+          <div className="ml-auto pb-1">
+            <button
+              type="button"
+              onClick={onToggleChat}
+              title={chatOpen ? 'Hide chat' : 'Show chat'}
+              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+            >
+              {chatOpen ? 'Hide chat ›' : '‹ Show chat'}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}

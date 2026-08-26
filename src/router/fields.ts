@@ -34,8 +34,8 @@ export function isFilterableOrSortable(model: ModelDefinition, key: string): boo
 }
 
 const OPERATORS_BY_KIND: Record<ColumnKind, ReadonlySet<string>> = {
-  string: new Set(['=', '!=', 'like', 'is', 'in']),
-  text: new Set(['=', '!=', 'like', 'is', 'in']),
+  string: new Set(['=', '!=', 'like', 'ilike', 'is', 'in']),
+  text: new Set(['=', '!=', 'like', 'ilike', 'is', 'in']),
   integer: new Set(['=', '!=', '>', '>=', '<', '<=', 'in', 'is']),
   decimal: new Set(['=', '!=', '>', '>=', '<', '<=', 'in', 'is']),
   boolean: new Set(['=', '!=', 'is']),

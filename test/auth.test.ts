@@ -138,7 +138,8 @@ describeIfDb('auth system (against a live Postgres)', () => {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspaces (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
-        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false
+        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false,
+        chat_enabled boolean NOT NULL DEFAULT true
       )`);
 
     authApp = createAuthRouter(db);

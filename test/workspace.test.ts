@@ -14,6 +14,14 @@ import { createDefaultWorkspace, DEFAULT_WORKSPACE_NAME } from '../src/workspace
 const connectionString = process.env.DATABASE_URL;
 const describeIfDb = connectionString ? describe : describe.skip;
 
+describe('Workspace fields (src/workspace/models/workspace.model.ts)', () => {
+  it('has a `chatEnabled` boolean defaulting to true — the console gate for the agent chat panel', () => {
+    const f = Workspace.fields.chatEnabled;
+    expect(f?.kind).toBe('boolean');
+    expect(f?.default).toBe(true);
+  });
+});
+
 describe('assertOwnsWorkspace (src/workspace/pipeline.ts)', () => {
   it('passes for a workspace owned by the given user', () => {
     expect(() => assertOwnsWorkspace({ userId: 'u1' }, { id: 'u1' } as never)).not.toThrow();
@@ -85,7 +93,8 @@ describeIfDb('requireWorkspaceOwnership (against a live Postgres)', () => {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspaces (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
-        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false
+        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false,
+        chat_enabled boolean NOT NULL DEFAULT true
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspace_views (
@@ -165,7 +174,8 @@ describeIfDb('Workspace lock/unlock (custom operations, src/workspace/models/wor
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspaces (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
-        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false
+        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false,
+        chat_enabled boolean NOT NULL DEFAULT true
       )`);
     // `presetFields` (inside `lock`/`unlock`) checks the caller's *field* grant on `update` via
     // `resolveGrantedFields` — a real DB lookup by `roleId`, independent of `requireOwnsRow`'s own
@@ -280,7 +290,8 @@ describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a l
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspaces (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
-        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false
+        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false,
+        chat_enabled boolean NOT NULL DEFAULT true
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS workspace_views (

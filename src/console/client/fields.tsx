@@ -3,6 +3,7 @@ import type { ConsoleFieldMeta } from '../serialize-model.js';
 import { listRows, uploadFile, type UploadedFile } from './api.js';
 import { useModels } from './models.js';
 import { useFieldRenderers } from './field-renderers.js';
+import { ReferenceCombobox } from './ReferenceCombobox.js';
 
 /** What a `file` field's form value looks like — either an existing record's read shape
  * (`{ url, filename, mimeType, size }`, from `deriveFileFields`) or a fresh upload's response
@@ -64,7 +65,6 @@ export interface FieldInputProps {
 
 export function FieldInput(props: FieldInputProps) {
   const { field, inputKey, value, onChange, error, mode, modelName } = props;
-  const referenceOptions = useReferenceOptions(field.kind === 'reference' ? field.targetModel : undefined);
   const { models: modelRefOptions } = useModels();
   const fieldRenderers = useFieldRenderers();
   const required = field.writeAs ? mode === 'create' && field.required : field.required;
@@ -172,20 +172,12 @@ export function FieldInput(props: FieldInputProps) {
 
     case 'reference':
       return wrap(
-        <select
-          required={required}
+        <ReferenceCombobox
+          targetModel={field.targetModel ?? ''}
           value={(value as string) ?? ''}
-          onChange={(e) => onChange(inputKey, e.target.value)}
-          className={inputClass}
-          disabled={referenceOptions === null}
-        >
-          <option value="">{referenceOptions === null ? 'Loading…' : !required ? '—' : 'Select…'}</option>
-          {referenceOptions?.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>,
+          onChange={(v) => onChange(inputKey, v)}
+          required={required}
+        />,
       );
 
     case 'modelRef':

@@ -57,6 +57,8 @@ function filterClauseSql(model: ModelDefinition, clause: FilterClause): SQL {
       return sql`${col} <= ${clause.value}`;
     case 'like':
       return sql`${col} LIKE ${clause.value}`;
+    case 'ilike':
+      return sql`${col} ILIKE ${clause.value}`;
     case 'is':
       if (clause.value !== null) {
         throw new PipelineError({

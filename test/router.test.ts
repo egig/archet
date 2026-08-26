@@ -162,6 +162,22 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe('INVALID_OPERATOR');
   });
 
+  it('`ilike` matches case-insensitively on an indexed string field', async () => {
+    await createAuthor('Ada Lovelace');
+    await createAuthor('Grace Hopper');
+
+    const res = await app.request('/authors?filter=' + encodeURIComponent(JSON.stringify([['name', 'ilike', '%ada%']])));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { name: string }[] };
+    expect(body.data.map((a) => a.name)).toEqual(['Ada Lovelace']);
+  });
+
+  it('`ilike` is rejected for a non-text field kind -> 400 INVALID_OPERATOR', async () => {
+    const res = await app.request('/books?filter=' + encodeURIComponent(JSON.stringify([['status', 'ilike', '%x%']])));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('INVALID_OPERATOR');
+  });
+
   it('sort mode returns a cursor envelope, and the cursor pages forward without repeats', async () => {
     const a = await createAuthor('Sort Author');
     for (const [title, status] of [['b1', 'draft'], ['b2', 'published'], ['b3', 'draft']] as const) {
