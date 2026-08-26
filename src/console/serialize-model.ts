@@ -112,7 +112,7 @@ export function serializeField(key: string, f: ModelDefinition['fields'][string]
     meta.scale = f.scale;
   }
   if (f.kind === 'enum') meta.values = f.values;
-  if (f.kind === 'reference') meta.targetModel = f.targetModel;
+  if (f.kind === 'reference' || f.kind === 'manyToMany') meta.targetModel = f.targetModel;
   if (f.kind === 'modelRef' || f.kind === 'actionRef' || f.kind === 'fieldRef') meta.allowWildcard = f.allowWildcard;
   if (f.kind === 'file') {
     meta.accept = f.accept;

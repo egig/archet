@@ -15,7 +15,19 @@ export type {
   ActionRefFieldDefinition,
   FieldRefFieldDefinition,
   FileFieldDefinition,
+  ManyToManyFieldDefinition,
 } from './field.js';
+
+export {
+  manyToManyFieldsOf,
+  findRelationsTargeting,
+  allManyToManyRelationsInvolving,
+  junctionColumns,
+  junctionColumnsOf,
+  junctionColumnFor,
+  buildJunctionModel,
+} from './many-to-many.js';
+export type { ManyToManyRelation, JunctionColumns } from './many-to-many.js';
 
 export { DEFAULT_MAX_FILE_SIZE, sniffMimeType, matchesAccept } from './storage.js';
 export type { FileStorageAdapter, StoredFile } from './storage.js';

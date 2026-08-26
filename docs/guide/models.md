@@ -88,6 +88,62 @@ GET /api/invoices?include=customer
 
 Nested/dot-chained includes (`include=customer.company`) are rejected, not silently truncated.
 
+## Many-to-many relations
+
+`field.manyToMany(targetModel, opts)` declares a many-to-many relation, backed by an
+auto-generated junction table rather than a column on either model:
+
+```ts
+export const Post = defineModel('posts', {
+  fields: {
+    title: field.string({ required: true }),
+    tags: field.manyToMany('tags'),
+  },
+});
+```
+
+Declare it once, on either side — both directions are queryable with no matching declaration
+needed on `Tag`:
+
+```
+GET /api/posts/:id?include=tags   # tags: Tag[]
+GET /api/tags/:id?include=posts   # posts: Post[]  — reverse direction, `Tag` declared nothing
+```
+
+Unlike `reference`, the relation is invisible on a bare `GET` — it only appears once
+`?include=`d — and it's never in `?filter=`/`?sort=` the normal way (there's no column). Instead
+it gets one dedicated filter operator, `has`, which reuses the normal `?filter=` group syntax for
+AND/OR across multiple tags:
+
+```
+GET /api/posts?filter=[["tags","has","<tagId>"]]
+GET /api/posts?filter=[["or",[["tags","has","<id1>"],["tags","has","<id2>"]]]]   # either tag
+```
+
+Writing is always "replace the whole set," never a per-tag patch — `POST`/`PATCH /api/posts`
+accepts `tags: string[]` (the full desired list of target-row ids) and diffs it against the
+current junction rows transactionally, alongside the rest of the write:
+
+```
+PATCH /api/posts/:id
+{ "tags": ["<tagId1>", "<tagId2>"] }
+```
+
+Soft-removing either side cascades: soft-removing a `Post` or a `Tag` soft-removes the junction
+rows between them.
+
+The junction table itself (named `<sourceModel>_<fieldKey>`, e.g. `posts_tags`) has no API or
+console page of its own — `POST /api/posts_tags` doesn't exist. It's a real model internally (so
+its shape is fully generated, migrated, and inspectable in `schema.ts`), but access to the
+relation is governed entirely by `Post`'s own `create`/`update`/`read` permission grants, the same
+as any other field.
+
+Not yet supported: a self-referential relation (`targetModel` equal to the declaring model),
+explicit ordering on the relation, extra columns on the junction row beyond the two FK columns,
+and creating a new target row inline from the console's tag-picker (it only picks from existing
+rows) — an app that needs any of these can hand-write its own join model with two `reference`
+columns instead of using `field.manyToMany()`.
+
 ## Operations
 
 Every model gets `create`, `update`, and `remove` operations, each a [pipeline](/guide/pipelines). If you don't supply your own, the defaults are:

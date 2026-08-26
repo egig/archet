@@ -11,7 +11,7 @@ import { queryKeys } from './query-keys.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
 import { CheckIcon, XMarkIcon } from './icons.js';
 
-type FormValues = Record<string, string | boolean | FileFieldValue>;
+type FormValues = Record<string, string | boolean | FileFieldValue | string[]>;
 
 function inputKeyFor(f: ConsoleFieldMeta): string {
   return f.writeAs ?? f.key;
@@ -37,6 +37,11 @@ function initialValues(model: ConsoleModelMeta, row: Record<string, unknown> | n
       // an existing record's `{ url, filename, mimeType, size }` (display-only — buildPayload
       // never resubmits this, only a fresh upload's `{ key, ... }`); absent entirely for "no file yet".
       if (raw && typeof raw === 'object') values[key] = raw as FileFieldValue;
+    } else if (f.kind === 'manyToMany') {
+      // `raw` is the array of full target rows the edit form's `?include=` fetch returned (see
+      // ModelFormPage's rowQuery below); absent (create mode, or a row with none attached yet) ->
+      // empty selection.
+      values[key] = Array.isArray(raw) ? raw.map((item) => String((item as Record<string, unknown>).id)) : [];
     } else if (f.writeAs) {
       values[key] = ''; // password et al: never round-tripped from a read
     } else {
@@ -89,6 +94,11 @@ function buildPayload(model: ConsoleModelMeta, values: FormValues, mode: 'create
         if (stored?.key) payload[key] = { key: stored.key, filename: stored.filename, mimeType: stored.mimeType, size: stored.size };
         break;
       }
+      case 'manyToMany':
+        // always the full desired set, never a diff — the server (core/pipeline.ts's
+        // syncManyToMany) replaces the whole relation against whatever array is sent.
+        payload[key] = Array.isArray(raw) ? raw : [];
+        break;
       default:
         if ((raw === '' || raw === undefined) && !required) break;
         payload[key] = raw;
@@ -111,9 +121,13 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
   const model = modelName ? getModel(modelName) : undefined;
   const mode: 'create' | 'update' = id ? 'update' : 'create';
 
+  // manyToMany fields are never on the row's own JSON by default (round 4 of the design
+  // discussion) — the edit form has to explicitly `?include=` each one to seed the multi-select
+  // with the record's current selection.
+  const manyToManyIncludes = model?.fields.filter((f) => f.kind === 'manyToMany').map((f) => f.key) ?? [];
   const rowQuery = useQuery({
     queryKey: queryKeys.row(modelName ?? '', id ?? ''),
-    queryFn: () => getRow(model!.name, id!),
+    queryFn: () => getRow(model!.name, id!, { include: manyToManyIncludes }),
     enabled: mode === 'update' && !!model,
   });
 

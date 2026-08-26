@@ -6,6 +6,7 @@ import { useModels } from './models.js';
 import { useFieldRenderers } from './field-renderers.js';
 import { queryKeys } from './query-keys.js';
 import { ReferenceCombobox } from './ReferenceCombobox.js';
+import { ManyToManyMultiSelect } from './ManyToManyMultiSelect.js';
 
 /** What a `file` field's form value looks like — either an existing record's read shape
  * (`{ url, filename, mimeType, size }`, from `deriveFileFields`) or a fresh upload's response
@@ -193,6 +194,15 @@ export function FieldInput(props: FieldInputProps) {
           value={(value as string) ?? ''}
           onChange={(v) => onChange(inputKey, v)}
           required={required}
+        />,
+      );
+
+    case 'manyToMany':
+      return wrap(
+        <ManyToManyMultiSelect
+          targetModel={field.targetModel ?? ''}
+          value={(value as string[]) ?? []}
+          onChange={(v) => onChange(inputKey, v)}
         />,
       );
 

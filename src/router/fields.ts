@@ -46,6 +46,10 @@ const OPERATORS_BY_KIND: Record<ColumnKind, ReadonlySet<string>> = {
   actionRef: new Set(['=', '!=', 'in', 'is']),
   fieldRef: new Set(['=', '!=', 'in', 'is']),
   uuid: new Set(['=', '!=', 'in', 'is']),
+  // Q10-analog for relations: no `indexed` flag applies (there's no column), so this is the one
+  // kind whose filterability is gated purely by operator, not by `isFilterableOrSortable` — see
+  // `assertFilterable`'s manyToMany bypass in router/query.ts.
+  manyToMany: new Set(['has']),
   json: new Set([]),
   // Q13: a `file` field's value is an object — equality/ordering/text-search on it are
   // meaningless. `is` (null-check only, see router/list.ts's filterClauseSql) is the one
