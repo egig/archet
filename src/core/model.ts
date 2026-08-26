@@ -154,6 +154,12 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
         `model '${name}': reference field '${key}' must have a key ending in 'Id' (e.g. 'customerId'), got '${key}'`,
       );
     }
+    // Self-referential manyToMany (targetModel === this model) is out of scope for now — the
+    // junction's two FK columns are named `<modelName>Id` on each side (core/many-to-many.ts's
+    // `junctionColumns`), which would collide when both sides are the same model.
+    if (f.kind === 'manyToMany' && f.targetModel === name) {
+      throw new Error(`model '${name}': self-referential field.manyToMany('${name}') on field '${key}' is not supported yet`);
+    }
   }
 
   const operations: OperationsConfig = {

@@ -1,9 +1,10 @@
 import type { ModelDefinition } from '../core/model.js';
+import { findRelationsTargeting } from '../core/many-to-many.js';
 import { PipelineError } from '../core/pipeline.js';
 import { columnKind, isFilterableOrSortable, isKnownColumn, isOperatorValidForKind } from './fields.js';
 
-export type FilterOp = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'like' | 'ilike' | 'is';
-const VALID_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '>=', '<', '<=', 'in', 'like', 'ilike', 'is']);
+export type FilterOp = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'like' | 'ilike' | 'is' | 'has';
+const VALID_OPS: ReadonlySet<string> = new Set(['=', '!=', '>', '>=', '<', '<=', 'in', 'like', 'ilike', 'is', 'has']);
 const GROUP_LOGICS: ReadonlySet<string> = new Set(['and', 'or']);
 
 export interface FilterClause {
@@ -81,7 +82,7 @@ export function encodeCursor(state: CursorState): string {
   return Buffer.from(JSON.stringify(state), 'utf8').toString('base64url');
 }
 
-export function parseInclude(model: ModelDefinition, raw: string | null): string[] {
+export function parseInclude(model: ModelDefinition, raw: string | null, registry: Record<string, ModelDefinition>): string[] {
   if (!raw) return [];
   return raw.split(',').map((name) => {
     const trimmed = name.trim();
@@ -92,6 +93,13 @@ export function parseInclude(model: ModelDefinition, raw: string | null): string
     // `createdBy` is the one relation name that isn't a declared `field.reference()` — it maps to
     // the auto-injected `createdById` column (core/model.ts, schema-gen.ts) instead of a model field.
     if (trimmed === 'createdBy') return trimmed;
+    // forward manyToMany: declared directly on this model, include name === the field key.
+    if (model.fields[trimmed]?.kind === 'manyToMany') return trimmed;
+    // reverse manyToMany: declared on some *other* model targeting this one — no matching
+    // declaration needed here (round 3 of the design discussion: declaring once makes both
+    // directions queryable). The include name is that other model's own name, e.g. `?include=posts`
+    // on `Tag` for a relation only `Post` ever declared.
+    if (findRelationsTargeting(registry, model.name).some((r) => r.sourceModel.name === trimmed)) return trimmed;
     const fieldKey = `${trimmed}Id`;
     const field = model.fields[fieldKey];
     if (!field || field.kind !== 'reference') {
@@ -137,7 +145,13 @@ function parseStructuredFilters(raw: string | null): (RawClause | RawGroup)[] {
 }
 
 function assertFilterable(model: ModelDefinition, field: string): void {
-  if (!isKnownColumn(model, field) || !isFilterableOrSortable(model, field)) {
+  if (!isKnownColumn(model, field)) {
+    throw new PipelineError({ code: 'UNFILTERABLE_FIELD', status: 400, fields: { [field]: 'not indexed — cannot be filtered on' } });
+  }
+  // manyToMany has no `indexed` flag to gate on (there's no column) — its filterability is gated
+  // purely by operator instead (`has` only, enforced by assertValidOperator/OPERATORS_BY_KIND).
+  if (columnKind(model, field) === 'manyToMany') return;
+  if (!isFilterableOrSortable(model, field)) {
     throw new PipelineError({ code: 'UNFILTERABLE_FIELD', status: 400, fields: { [field]: 'not indexed — cannot be filtered on' } });
   }
 }
@@ -160,7 +174,11 @@ function assertValidOperator(model: ModelDefinition, field: string, op: string):
   }
 }
 
-export function parseListQuery(model: ModelDefinition, searchParams: URLSearchParams): ParsedListQuery {
+export function parseListQuery(
+  model: ModelDefinition,
+  searchParams: URLSearchParams,
+  registry: Record<string, ModelDefinition>,
+): ParsedListQuery {
   // `-field` reverses direction, matching the common REST/JSON:API convention.
   const rawSort = searchParams.get('sort');
   const sortDirection: SortDirection = rawSort?.startsWith('-') ? 'desc' : 'asc';
@@ -195,6 +213,16 @@ export function parseListQuery(model: ModelDefinition, searchParams: URLSearchPa
   for (const [key, value] of searchParams.entries()) {
     if (RESERVED_PARAMS.has(key)) continue;
     assertFilterable(model, key);
+    if (columnKind(model, key) === 'manyToMany') {
+      // a bare `?tags=x` has no operator to carry `has` — reject it with a clear message rather
+      // than silently falling through to `=`, which would try (and fail) to compare a nonexistent
+      // `tags` column.
+      throw new PipelineError({
+        code: 'INVALID_OPERATOR',
+        status: 400,
+        fields: { [key]: `manyToMany field requires the structured filter syntax, e.g. ?filter=[["${key}","has","<id>"]]` },
+      });
+    }
     filters.push({ field: key, op: '=', value });
   }
 
@@ -205,7 +233,7 @@ export function parseListQuery(model: ModelDefinition, searchParams: URLSearchPa
     sortDirection,
     cursor,
     includeDeleted: searchParams.get('includeDeleted') === 'true',
-    include: parseInclude(model, searchParams.get('include')),
+    include: parseInclude(model, searchParams.get('include'), registry),
     filters,
   };
 }

@@ -80,6 +80,9 @@ export async function insertRow(
   }
 
   for (const [key, fieldDef] of Object.entries(model.fields)) {
+    // manyToMany has no backing column — its value is diffed into junction rows separately,
+    // after this insert, by `persistWrite` (core/pipeline.ts), once the new row's id is known.
+    if (fieldDef.kind === 'manyToMany') continue;
     const value = key in input ? input[key] : fieldDef.default;
     if (value === undefined) continue;
     columns.push(sql.identifier(toSnakeCase(key)));
@@ -105,6 +108,7 @@ export async function updateRow(
   const setParts: SQL[] = [sql`${sql.identifier('updated_at')} = ${now.toISOString()}`];
 
   for (const [key, fieldDef] of Object.entries(model.fields)) {
+    if (fieldDef.kind === 'manyToMany') continue; // see insertRow's matching skip
     if (!(key in input)) continue;
     setParts.push(sql`${sql.identifier(toSnakeCase(key))} = ${toDriverValue(fieldDef, input[key])}`);
   }

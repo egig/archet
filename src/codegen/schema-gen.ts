@@ -1,5 +1,6 @@
 import type { FieldDefinition } from '../core/field.js';
 import type { ModelDefinition } from '../core/model.js';
+import { buildJunctionModel, junctionColumnsOf, manyToManyFieldsOf, type ManyToManyRelation } from '../core/many-to-many.js';
 import { toSnakeCase } from '../core/naming.js';
 import type { ScannedModel } from './scan.js';
 
@@ -51,6 +52,12 @@ function columnExpr(key: string, f: FieldDefinition): string {
       // not something the schema can express (see core/validation.ts).
       expr = `varchar('${col}')`;
       break;
+    case 'manyToMany':
+      // never reaches here — `emitTable` filters manyToMany fields out of `model.fields` before
+      // calling `columnExpr` (there's no column to emit; the relation is backed by a separate
+      // junction table, see `emitJunctionTable` below). Kept as an explicit throw, not folded into
+      // a `default:`, so adding a future field kind without a case here is a compile error.
+      throw new Error(`columnExpr: '${col}' is a manyToMany field — it has no column, see emitTable`);
   }
   if (f.required || f.default !== undefined) expr += '.notNull()';
   if (f.default !== undefined) expr += `.default(${JSON.stringify(f.default)})`;
@@ -93,7 +100,7 @@ function extraConfigLines(model: ModelDefinition): string[] {
   return lines;
 }
 
-function emitTable(model: ModelDefinition): string {
+function emitTable(model: ModelDefinition, extraLines: string[] = []): string {
   const varName = tableVar(model.name);
   const columnLines = [
     `  id: uuid('id').primaryKey(),`,
@@ -104,7 +111,11 @@ function emitTable(model: ModelDefinition): string {
     // creates have no actor to stamp) and RESTRICT like every other reference() column, but never
     // declarable via field.* and never touched by requireOwnsRow/updateRow.
     `  createdById: uuid('created_by_id').references(() => ${tableVar('users')}.id, { onDelete: 'restrict' }),`,
-    ...Object.entries(model.fields).map(([key, f]) => `  ${key}: ${columnExpr(key, f)},`),
+    // manyToMany has no column of its own — it's backed by a separate junction table instead
+    // (see emitJunctionTable), so it's excluded here rather than passed to columnExpr.
+    ...Object.entries(model.fields)
+      .filter(([, f]) => f.kind !== 'manyToMany')
+      .map(([key, f]) => `  ${key}: ${columnExpr(key, f)},`),
   ];
   // Auto-indexed unconditionally: `id`, `createdAt`, `updatedAt`, `createdById` are treated as
   // implicitly sortable/filterable by the router (src/router/fields.ts) since a model author has
@@ -116,6 +127,7 @@ function emitTable(model: ModelDefinition): string {
     `  index('${model.name}_updated_at_idx').on(table.updatedAt),`,
     `  index('${model.name}_created_by_id_idx').on(table.createdById),`,
     ...extraConfigLines(model),
+    ...extraLines,
   ];
 
   let src = `export const ${varName} = pgTable('${model.tableName}', {\n${columnLines.join('\n')}\n}`;
@@ -124,6 +136,23 @@ function emitTable(model: ModelDefinition): string {
   }
   src += `);\n`;
   return src;
+}
+
+/** Emits the junction table backing one manyToMany relation — a normal table (see
+ * `buildJunctionModel`, core/many-to-many.ts) plus one thing `field.*`'s own `unique: true` can't
+ * express: a *compound* partial-unique index over both FK columns together, so the same pair can't
+ * be attached twice while still allowing a re-attach after a prior soft-remove (same "partial
+ * index, not plain UNIQUE" reasoning as `extraConfigLines`' per-field unique case above). */
+function emitJunctionTable(relation: ManyToManyRelation): string {
+  const junctionModel = buildJunctionModel(relation);
+  const cols = junctionColumnsOf(relation);
+  const compoundUniqueLine =
+    `  uniqueIndex('${junctionModel.name}_unique_idx').on(table.${cols.sourceColumn}, table.${cols.targetColumn}).where(sql` +
+    '`' +
+    '${table.deletedAt} IS NULL' +
+    '`' +
+    `),`;
+  return emitTable(junctionModel, [compoundUniqueLine]);
 }
 
 /** One shared, fixed-shape table backing every Domain's Domain Settings (ADR 0002) — a single
@@ -165,5 +194,14 @@ export function generateSchemaSource(scanned: ScannedModel[]): string {
 
   const tables = scanned.map(({ model }) => emitTable(model)).join('\n');
 
-  return HEADER + imports + '\n' + tables + '\n' + emitDomainSettingsTable();
+  // Every manyToMany field declared across every scanned model gets its own junction table — only
+  // the declaring (source) side is scanned here, since the field key already namespaces the table
+  // name (`core/many-to-many.ts`'s `junctionColumns`), so there's exactly one declaration per
+  // relation to emit from, even though the relation is queryable from both sides at request time.
+  const junctionTables = scanned
+    .flatMap(({ model }) => manyToManyFieldsOf(model))
+    .map((relation) => emitJunctionTable(relation))
+    .join('\n');
+
+  return HEADER + imports + '\n' + tables + '\n' + junctionTables + '\n' + emitDomainSettingsTable();
 }

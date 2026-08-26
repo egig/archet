@@ -139,8 +139,11 @@ export async function listRows(
   return { mode: 'offset', rows: body.data, ...body.meta };
 }
 
-export function getRow(model: string, id: string): Promise<Record<string, unknown>> {
-  return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}`);
+export function getRow(model: string, id: string, opts: { include?: string[] } = {}): Promise<Record<string, unknown>> {
+  const params = new URLSearchParams();
+  if (opts.include?.length) params.set('include', opts.include.join(','));
+  const qs = params.toString();
+  return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`);
 }
 
 export function createRow(model: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {

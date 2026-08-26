@@ -1,7 +1,13 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { sql, type Name, type SQL } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ReferenceFieldDefinition } from '../core/field.js';
 import type { ModelDefinition } from '../core/model.js';
+import {
+  buildJunctionModel,
+  findRelationsTargeting,
+  junctionColumnsOf,
+  type ManyToManyRelation,
+} from '../core/many-to-many.js';
 import { PipelineError } from '../core/pipeline.js';
 import { toSnakeCase } from '../core/naming.js';
 import { deriveFileFields, normalizeTimestamps, redactSensitiveFields } from '../core/serialize.js';
@@ -10,10 +16,26 @@ import { encodeCursor, type FilterClause, type FilterNode, type ParsedListQuery 
 
 type AnyDb = PgDatabase<any, any, any>;
 
+function tableIdent(model: ModelDefinition): Name {
+  return sql.identifier(model.tableName);
+}
+
+async function execRows(db: AnyDb, query: SQL): Promise<Record<string, unknown>[]> {
+  return (await db.execute(query)) as unknown as Record<string, unknown>[];
+}
+
 interface IncludePlan {
   relationName: string;
   fkField: string;
   targetModel: ModelDefinition;
+}
+
+/** manyToMany include names (forward or reverse — see `router/query.ts`'s `parseInclude`) are
+ * handled entirely separately (`resolveManyToManyIncludes`/`attachManyToManyIncludes` below), so
+ * this only ever needs to build plans for the `reference`/`createdBy` single-row includes it
+ * already handled before manyToMany existed. */
+function referenceIncludeNames(model: ModelDefinition, includeNames: string[]): string[] {
+  return includeNames.filter((name) => name === 'createdBy' || model.fields[`${name}Id`]?.kind === 'reference');
 }
 
 function buildIncludePlans(
@@ -21,7 +43,7 @@ function buildIncludePlans(
   registry: Record<string, ModelDefinition>,
   includeNames: string[],
 ): IncludePlan[] {
-  return includeNames.map((relationName) => {
+  return referenceIncludeNames(model, includeNames).map((relationName) => {
     // `createdBy` -> the auto-injected `createdById` column, always targeting `users` (see
     // parseInclude in router/query.ts) — not a declared `field.reference()`, so it has no entry
     // in `model.fields` to read a `targetModel` off of.
@@ -38,6 +60,93 @@ function buildIncludePlans(
     }
     return { relationName, fkField, targetModel };
   });
+}
+
+interface ManyToManyIncludePlan {
+  relationName: string;
+  relation: ManyToManyRelation;
+  direction: 'forward' | 'reverse';
+}
+
+/** Resolves every `?include=` name that's a manyToMany relation (either direction) rather than a
+ * `reference`/`createdBy` one — see `referenceIncludeNames`, its complement. */
+function manyToManyIncludePlans(
+  model: ModelDefinition,
+  registry: Record<string, ModelDefinition>,
+  includeNames: string[],
+): ManyToManyIncludePlan[] {
+  const plans: ManyToManyIncludePlan[] = [];
+  for (const relationName of includeNames) {
+    const forwardField = model.fields[relationName];
+    if (forwardField?.kind === 'manyToMany') {
+      plans.push({ relationName, relation: { sourceModel: model, fieldKey: relationName, fieldDef: forwardField }, direction: 'forward' });
+      continue;
+    }
+    const reverse = findRelationsTargeting(registry, model.name).find((r) => r.sourceModel.name === relationName);
+    if (reverse) plans.push({ relationName, relation: reverse, direction: 'reverse' });
+  }
+  return plans;
+}
+
+/** Populates every requested manyToMany include as an array on each row — deliberately a separate
+ * step from the main SQL query (unlike a `reference` include's LEFT JOIN), since a many-side LEFT
+ * JOIN would multiply each parent row once per match, breaking pagination/counting on the *primary*
+ * result set. Two extra batched queries per include (junction rows, then target rows) regardless of
+ * how many parent rows are in `rows` — no N+1. A target row that's soft-deleted (or otherwise
+ * missing) is silently dropped from the array, matching how a dangling single reference already
+ * doesn't surface (router/create-router.ts's `filterIncludedRelations` still applies field-level
+ * grants to each array element afterward, same as any other included row). */
+async function attachManyToManyIncludes(
+  db: AnyDb,
+  registry: Record<string, ModelDefinition>,
+  rows: Record<string, unknown>[],
+  plans: ManyToManyIncludePlan[],
+): Promise<void> {
+  if (rows.length === 0 || plans.length === 0) return;
+  const ids = rows.map((r) => r.id as string);
+
+  for (const plan of plans) {
+    const cols = junctionColumnsOf(plan.relation);
+    const junctionModel = buildJunctionModel(plan.relation);
+    const ownColumn = plan.direction === 'forward' ? cols.sourceColumn : cols.targetColumn;
+    const foreignColumn = plan.direction === 'forward' ? cols.targetColumn : cols.sourceColumn;
+    const targetModel = plan.direction === 'forward' ? registry[plan.relation.fieldDef.targetModel] : plan.relation.sourceModel;
+    if (!targetModel) continue; // validated already at parseInclude time — defensive only
+
+    const junctionRows = await execRows(
+      db,
+      sql`SELECT ${sql.identifier(toSnakeCase(ownColumn))} AS own_id, ${sql.identifier(toSnakeCase(foreignColumn))} AS foreign_id
+          FROM ${tableIdent(junctionModel)}
+          WHERE ${sql.identifier(toSnakeCase(ownColumn))} IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) AND deleted_at IS NULL`,
+    );
+
+    const foreignIds = [...new Set(junctionRows.map((r) => r.foreign_id as string))];
+    const targetById = new Map<string, Record<string, unknown>>();
+    if (foreignIds.length > 0) {
+      const targetCols = allColumnKeys(targetModel).map((key) => sql`${sql.identifier(toSnakeCase(key))} AS ${sql.identifier(key)}`);
+      const targetRows = await execRows(
+        db,
+        sql`SELECT ${sql.join(targetCols, sql`, `)} FROM ${tableIdent(targetModel)}
+            WHERE id IN (${sql.join(foreignIds.map((id) => sql`${id}`), sql`, `)}) AND deleted_at IS NULL`,
+      );
+      for (const raw of targetRows) {
+        const cleaned = deriveFileFields(targetModel, redactSensitiveFields(targetModel, normalizeTimestamps(targetModel, raw)));
+        targetById.set(cleaned.id as string, cleaned);
+      }
+    }
+
+    const byOwnId = new Map<string, Record<string, unknown>[]>();
+    for (const jr of junctionRows) {
+      const targetRow = targetById.get(jr.foreign_id as string);
+      if (!targetRow) continue;
+      const ownId = jr.own_id as string;
+      if (!byOwnId.has(ownId)) byOwnId.set(ownId, []);
+      byOwnId.get(ownId)!.push(targetRow);
+    }
+    for (const row of rows) {
+      row[plan.relationName] = byOwnId.get(row.id as string) ?? [];
+    }
+  }
 }
 
 function filterClauseSql(model: ModelDefinition, clause: FilterClause): SQL {
@@ -75,6 +184,18 @@ function filterClauseSql(model: ModelDefinition, clause: FilterClause): SQL {
         values.map((v) => sql`${v}`),
         sql`, `,
       )})`;
+    }
+    case 'has': {
+      // validated by router/query.ts's assertFilterable/assertValidOperator before this ever
+      // runs — `has` is only ever paired with a manyToMany field.
+      const fieldDef = model.fields[clause.field];
+      if (fieldDef?.kind !== 'manyToMany') {
+        throw new PipelineError({ code: 'INVALID_OPERATOR', status: 400, fields: { [clause.field]: "'has' is only valid on a manyToMany field" } });
+      }
+      const relation: ManyToManyRelation = { sourceModel: model, fieldKey: clause.field, fieldDef };
+      const cols = junctionColumnsOf(relation);
+      const junctionModel = buildJunctionModel(relation);
+      return sql`EXISTS (SELECT 1 FROM ${tableIdent(junctionModel)} AS jt WHERE jt.${sql.identifier(toSnakeCase(cols.sourceColumn))} = t.id AND jt.${sql.identifier(toSnakeCase(cols.targetColumn))} = ${clause.value} AND jt.deleted_at IS NULL)`;
     }
   }
 }
@@ -161,6 +282,7 @@ export async function listRows(
   query: ParsedListQuery,
 ): Promise<OffsetPage | CursorPage> {
   const includes = buildIncludePlans(model, registry, query.include);
+  const m2mPlans = manyToManyIncludePlans(model, registry, query.include);
   const tableIdent = sql.identifier(model.tableName);
 
   const whereParts: SQL[] = [];
@@ -195,6 +317,7 @@ export async function listRows(
 
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit).map((r) => nestRow(model, r, includes));
+    await attachManyToManyIncludes(db, registry, page, m2mPlans);
 
     let nextCursor: string | null = null;
     if (hasMore) {
@@ -212,9 +335,12 @@ export async function listRows(
     sql`SELECT COUNT(*)::int AS count FROM ${tableIdent} AS t${whereSql}`,
   )) as unknown as { count: number }[];
 
+  const page = rows.map((r) => nestRow(model, r, includes));
+  await attachManyToManyIncludes(db, registry, page, m2mPlans);
+
   return {
     mode: 'offset',
-    rows: rows.map((r) => nestRow(model, r, includes)),
+    rows: page,
     total: countRows[0]?.count ?? 0,
     limit: query.limit,
     offset: query.offset,
@@ -229,6 +355,7 @@ export async function getOneRow(
   opts: { includeDeleted: boolean; include: string[] },
 ): Promise<Record<string, unknown> | null> {
   const includes = buildIncludePlans(model, registry, opts.include);
+  const m2mPlans = manyToManyIncludePlans(model, registry, opts.include);
   const tableIdent = sql.identifier(model.tableName);
   const joinClause = joinSql(model, includes);
   const selectCols = selectListSql(model, includes);
@@ -238,5 +365,8 @@ export async function getOneRow(
     sql`SELECT ${selectCols} FROM ${tableIdent} AS t${joinClause} WHERE t.id = ${id}${deletedClause} LIMIT 1`,
   )) as unknown as Record<string, unknown>[];
 
-  return rows[0] ? nestRow(model, rows[0], includes) : null;
+  if (!rows[0]) return null;
+  const row = nestRow(model, rows[0], includes);
+  await attachManyToManyIncludes(db, registry, [row], m2mPlans);
+  return row;
 }

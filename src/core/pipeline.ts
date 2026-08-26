@@ -1,7 +1,15 @@
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from './model.js';
 import { buildCreateSchema, buildUpdateSchema } from './validation.js';
-import { fetchRow, hardRemoveRow, insertRow, softRemoveRow, updateRow } from './persistence.js';
+import { fetchRow, hardRemoveRow, insertRow, listRowsByField, softRemoveRow, updateRow } from './persistence.js';
+import {
+  allManyToManyRelationsInvolving,
+  buildJunctionModel,
+  junctionColumnFor,
+  junctionColumnsOf,
+  manyToManyFieldsOf,
+  type ManyToManyRelation,
+} from './many-to-many.js';
 
 // A custom operation (core/model.ts's `CustomOperationDefinition`) runs under its own name here —
 // `validate`/`persist` below only ever special-case `'create'` (everything else is treated as an
@@ -148,22 +156,89 @@ interface PersistFn {
   hardRemove: PipelineFn;
 }
 
+/** Diffs one manyToMany field's desired target-id list against its current junction rows and
+ * writes exactly the difference — inserting rows for newly-added ids, soft-removing rows for
+ * dropped ones (soft, not hard: matches every other delete in this framework, and lets the
+ * relation's `(source, target)` partial-unique index — see schema-gen.ts — allow a re-attach
+ * without colliding with the old, now-deleted row). Runs on the same `db` handle `persistWrite`/
+ * `persistRemove` were given, which is the enclosing `pipe()`'s transaction (`tx`) while this is
+ * called from inside them — see `pipe()` in this file — so a partial diff can never commit. */
+async function syncManyToMany(
+  db: AnyDb,
+  relation: ManyToManyRelation,
+  sourceId: string,
+  desiredTargetIds: readonly string[],
+  createdById: string | null,
+): Promise<void> {
+  const junctionModel = buildJunctionModel(relation);
+  const cols = junctionColumnsOf(relation);
+  const current = await listRowsByField(db, junctionModel, cols.sourceColumn, sourceId);
+  const currentByTargetId = new Map(current.map((row) => [row[cols.targetColumn] as string, row]));
+  const desired = new Set(desiredTargetIds);
+
+  for (const targetId of desiredTargetIds) {
+    if (!currentByTargetId.has(targetId)) {
+      await insertRow(db, junctionModel, { [cols.sourceColumn]: sourceId, [cols.targetColumn]: targetId }, createdById);
+    }
+  }
+  for (const [targetId, row] of currentByTargetId) {
+    if (!desired.has(targetId)) {
+      await softRemoveRow(db, junctionModel, row.id as string);
+    }
+  }
+}
+
+/** Applies `syncManyToMany` to every manyToMany field this model declares that's actually present
+ * in `input` — a field omitted from the create/update body is left untouched entirely (not
+ * cleared), matching how every other optional field already behaves on a PATCH-shaped update. */
+async function syncManyToManyFields(
+  db: AnyDb,
+  model: ModelDefinition,
+  input: Record<string, unknown>,
+  sourceId: string,
+  createdById: string | null,
+): Promise<void> {
+  for (const relation of manyToManyFieldsOf(model)) {
+    if (!(relation.fieldKey in input)) continue;
+    await syncManyToMany(db, relation, sourceId, input[relation.fieldKey] as string[], createdById);
+  }
+}
+
 const persistWrite: PipelineFn = async (ctx) => {
+  const createdById = (ctx.user as { id?: string } | null | undefined)?.id ?? null;
   if (ctx.operation === 'create') {
-    const createdById = (ctx.user as { id?: string } | null | undefined)?.id ?? null;
     const doc = await insertRow(ctx.db, ctx.model, ctx.input, createdById);
+    await syncManyToManyFields(ctx.db, ctx.model, ctx.input, doc.id as string, createdById);
     return { ...ctx, doc };
   }
   if (!ctx.id) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
   const doc = await updateRow(ctx.db, ctx.model, ctx.id, ctx.input);
   if (!doc) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+  await syncManyToManyFields(ctx.db, ctx.model, ctx.input, ctx.id, createdById);
   return { ...ctx, doc };
 };
 
+/** Cascades a soft-remove into every manyToMany relation touching this model, source or target
+ * side alike (Q4, round 2 of the design discussion) — e.g. soft-removing a `Tag` soft-removes every
+ * `posts_tags` row that pointed at it, even though `Tag` never itself declared the `tags` relation.
+ * Needs `ctx.registry` (only set by the generic `/api/:model` router, see `OperationContext`'s own
+ * doc comment) to find relations declared on *other* models; silently skips cascade when it's
+ * absent rather than erroring, since a hand-rolled call site with no registry has no way to know
+ * about relations it isn't a party to either. */
 const persistRemove: PipelineFn = async (ctx) => {
   if (!ctx.id) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
   const doc = await softRemoveRow(ctx.db, ctx.model, ctx.id);
   if (!doc) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+  if (ctx.registry) {
+    for (const relation of allManyToManyRelationsInvolving(ctx.registry, ctx.model.name)) {
+      const junctionModel = buildJunctionModel(relation);
+      const col = junctionColumnFor(relation, ctx.model.name);
+      const rows = await listRowsByField(ctx.db, junctionModel, col, ctx.id);
+      for (const row of rows) {
+        await softRemoveRow(ctx.db, junctionModel, row.id as string);
+      }
+    }
+  }
   return { ...ctx, doc };
 };
 

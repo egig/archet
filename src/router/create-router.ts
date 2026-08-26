@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { FileFieldDefinition, ReferenceFieldDefinition } from '../core/field.js';
 import type { CustomOperationDefinition, ModelDefinition } from '../core/model.js';
+import { findRelationsTargeting } from '../core/many-to-many.js';
 import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
 import { generateId } from '../core/id.js';
@@ -80,7 +81,24 @@ async function filterIncludedRelations(
 ): Promise<void> {
   for (const name of includeNames) {
     const relValue = row[name];
-    if (!relValue || typeof relValue !== 'object') continue;
+    if (relValue === null || relValue === undefined) continue;
+
+    if (Array.isArray(relValue)) {
+      // a manyToMany include (forward or reverse, router/list.ts's attachManyToManyIncludes) —
+      // resolve its target model the same way router/query.ts's parseInclude validated the name.
+      const forwardField = model.fields[name];
+      const targetModelName =
+        forwardField?.kind === 'manyToMany'
+          ? forwardField.targetModel
+          : findRelationsTargeting(registry, model.name).find((r) => r.sourceModel.name === name)?.sourceModel.name;
+      const targetModel = targetModelName ? registry[targetModelName] : undefined;
+      if (!targetModel) continue;
+      const granted = targetModel.api?.public ? ('*' as const) : await resolveGrantedFields(db, roleId, targetModel.name, 'read');
+      row[name] = relValue.map((item) => pickGrantedFields(targetModel, item as Record<string, unknown>, granted));
+      continue;
+    }
+
+    if (typeof relValue !== 'object') continue;
     const targetModel =
       name === 'createdBy' ? registry['users'] : registry[(model.fields[`${name}Id`] as ReferenceFieldDefinition).targetModel];
     if (!targetModel) continue;
@@ -239,7 +257,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
   app.get('/:model', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     const { user, granted } = await resolveFieldAccess(db, c.req.raw, model, 'read');
-    const query = parseListQuery(model, new URL(c.req.url).searchParams);
+    const query = parseListQuery(model, new URL(c.req.url).searchParams, registry);
     assertReadFieldsAllowed(model, query, granted);
     if (model.api?.ownerField) {
       if (!user) throw new PipelineError({ code: 'INTERNAL', status: 500, message: `'${model.name}' combines api.ownerField with api.public — unsupported` });
@@ -262,7 +280,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     const model = resolveModel(registry, c.req.param('model'));
     const { user, granted } = await resolveFieldAccess(db, c.req.raw, model, 'read');
     const searchParams = new URL(c.req.url).searchParams;
-    const include = parseInclude(model, searchParams.get('include'));
+    const include = parseInclude(model, searchParams.get('include'), registry);
     const row = await getOneRow(db, model, registry, c.req.param('id'), {
       includeDeleted: searchParams.get('includeDeleted') === 'true',
       include,

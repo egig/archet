@@ -43,14 +43,22 @@ function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
         mimeType: z.string(),
         size: z.number().int().nonnegative(),
       });
+    case 'manyToMany':
+      // the full desired set of target-row ids, diffed against current junction rows by
+      // `persistWrite` (core/pipeline.ts) — never a partial patch. Always optional regardless of
+      // `f.required` (see `fieldToZod`/`buildUpdateSchema` below): omitting the key entirely means
+      // "leave this relation alone," matching how every other optional field behaves on update.
+      return z.array(z.string().uuid());
   }
 }
 
 function fieldToZod(f: FieldDefinition): ZodTypeAny {
   const schema = baseSchemaForField(f);
   // Q13: a field with `default` is never required (field.ts already rejects required+default
-  // together), so `required` is the only signal needed to decide optionality here.
-  return f.required ? schema : schema.optional();
+  // together), so `required` is the only signal needed to decide optionality here — except
+  // manyToMany, which is never required (`field.manyToMany()` never sets it) but is spelled out
+  // for clarity anyway, since a model author can't accidentally make one required.
+  return f.required && f.kind !== 'manyToMany' ? schema : schema.optional();
 }
 
 export function buildCreateSchema(model: ModelDefinition): ZodTypeAny {

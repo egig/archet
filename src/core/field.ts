@@ -108,6 +108,23 @@ export interface FieldRefFieldDefinition extends BaseFieldDefinition {
   allowWildcard: boolean;
 }
 
+/** Declares a many-to-many relation to `targetModel` — backed by an auto-generated junction model
+ * (see `core/many-to-many.ts`), never a real column on this model's own table. Extends
+ * `BaseFieldDefinition` only so every field kind shares one shape for code that reads across the
+ * `FieldDefinition` union unconditionally (e.g. `console/serialize-model.ts`'s `serializeField`) —
+ * `required`/`default`/`unique`/`indexed`/`sensitive` are all meaningless here (there's no column
+ * to require, default, index, or hide) and `field.manyToMany()` below never lets a caller set them;
+ * `base()` just fills them with its normal false/undefined defaults. Relation filtering goes
+ * through a dedicated `has` operator instead of `indexed` (see `router/fields.ts`), and the
+ * relation is already invisible unless explicitly `?include=`d, so there's nothing for `sensitive`
+ * to hide. Declared once, on either side — `?include=` and `has`-filtering both work from the
+ * *other* model too, with no matching declaration needed there (see `core/many-to-many.ts`'s
+ * `findRelationsTargeting`). */
+export interface ManyToManyFieldDefinition extends BaseFieldDefinition {
+  kind: 'manyToMany';
+  targetModel: string;
+}
+
 /** Stores a reference to a blob held by a `FileStorageAdapter` (see `core/storage.ts`), not the
  * bytes themselves — the column is `{ key, filename, mimeType, size }` (jsonb). `accept` is a
  * comma-separated list of mime patterns (`'image/png'`, `'image/*'`) checked against the
@@ -136,7 +153,8 @@ export type FieldDefinition =
   | ModelRefFieldDefinition
   | ActionRefFieldDefinition
   | FieldRefFieldDefinition
-  | FileFieldDefinition;
+  | FileFieldDefinition
+  | ManyToManyFieldDefinition;
 
 function assertNoRequiredDefaultConflict(opts: FieldCommonOptions): void {
   if (opts.required && opts.default !== undefined) {
@@ -224,6 +242,10 @@ export const field = {
       preview: opts.preview,
       maxSize: opts.maxSize,
     };
+  },
+
+  manyToMany(targetModel: string, opts: { displayText?: string } = {}): ManyToManyFieldDefinition {
+    return { ...base(opts), kind: 'manyToMany', targetModel };
   },
 
   /** Tags an existing field definition with a `name` the console client can key a custom form
