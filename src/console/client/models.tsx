@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { listModels } from './api.js';
+import { queryKeys } from './query-keys.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 
 interface ModelsState {
@@ -15,24 +17,23 @@ const ModelsContext = createContext<ModelsState | null>(null);
  * list/form, and every reference field's target-model lookup (for its `displayField`) — avoids a
  * per-view or per-reference-field round trip. */
 export function ModelsProvider({ children }: { children: ReactNode }) {
-  const [models, setModels] = useState<ConsoleModelMeta[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    listModels()
-      .then((data) => !cancelled && setModels(data))
-      .catch((err: unknown) => !cancelled && setError(err instanceof Error ? err.message : 'failed to load models'))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data, isLoading, error } = useQuery({ queryKey: queryKeys.models, queryFn: listModels });
+  const models = data ?? [];
 
   const getModel = useMemo(() => (name: string) => models.find((m) => m.name === name), [models]);
 
-  return <ModelsContext.Provider value={{ models, loading, error, getModel }}>{children}</ModelsContext.Provider>;
+  return (
+    <ModelsContext.Provider
+      value={{
+        models,
+        loading: isLoading,
+        error: error ? (error instanceof Error ? error.message : 'failed to load models') : null,
+        getModel,
+      }}
+    >
+      {children}
+    </ModelsContext.Provider>
+  );
 }
 
 export function useModels(): ModelsState {

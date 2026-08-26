@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listChatMessages, sendChatMessage, type ChatMessageRow } from './api.js';
 import { useChats } from './chats-context.js';
+import { queryKeys } from './query-keys.js';
 
 interface DisplayMessage {
   id: string;
@@ -32,68 +34,70 @@ export interface ChatThreadViewProps {
  * (chatId from local state, no route involved). */
 export function ChatThreadView({ chatId, workspaceId, onTurnDone }: ChatThreadViewProps) {
   const { refresh } = useChats();
+  const queryClient = useQueryClient();
+
+  const messagesQuery = useQuery({
+    queryKey: queryKeys.chatMessages(chatId),
+    queryFn: () => listChatMessages(chatId),
+  });
 
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
-  const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    listChatMessages(chatId)
-      .then((rows) => !cancelled && setMessages(rows.map(toDisplay)))
-      .catch((err: unknown) => !cancelled && setError(err instanceof Error ? err.message : 'failed to load'))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [chatId]);
+    if (messagesQuery.data) setMessages(messagesQuery.data.map(toDisplay));
+  }, [chatId, messagesQuery.data]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const sendMutation = useMutation({
+    mutationFn: async (text: string) => {
+      setMessages((prev) => [...prev, { id: `local-user-${Date.now()}`, role: 'user', content: text }]);
+      const assistantId = `local-assistant-${Date.now()}`;
+      setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '', thinking: '', pending: true }]);
+
+      await sendChatMessage(
+        chatId,
+        text,
+        {
+          onTextDelta: (delta) => {
+            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + delta } : m)));
+          },
+          onThinkingDelta: (delta) => {
+            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, thinking: (m.thinking ?? '') + delta } : m)));
+          },
+          onDone: () => {
+            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, pending: false } : m)));
+          },
+          onError: (msg) => {
+            setError(msg);
+            setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, pending: false } : m)));
+          },
+        },
+        workspaceId,
+      );
+    },
+    onSuccess: () => {
+      void refresh();
+      void queryClient.invalidateQueries({ queryKey: queryKeys.chatMessages(chatId) });
+      onTurnDone?.();
+    },
+  });
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!draft.trim() || sending) return;
+    if (!draft.trim() || sendMutation.isPending) return;
     const text = draft;
     setDraft('');
-    setSending(true);
     setError(null);
-
-    setMessages((prev) => [...prev, { id: `local-user-${Date.now()}`, role: 'user', content: text }]);
-    const assistantId = `local-assistant-${Date.now()}`;
-    setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '', thinking: '', pending: true }]);
-
-    await sendChatMessage(
-      chatId,
-      text,
-      {
-        onTextDelta: (delta) => {
-          setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + delta } : m)));
-        },
-        onThinkingDelta: (delta) => {
-          setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, thinking: (m.thinking ?? '') + delta } : m)));
-        },
-        onDone: () => {
-          setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, pending: false } : m)));
-          void refresh();
-          onTurnDone?.();
-        },
-        onError: (msg) => {
-          setError(msg);
-          setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, pending: false } : m)));
-        },
-      },
-      workspaceId,
-    );
-    setSending(false);
+    await sendMutation.mutateAsync(text);
   }
 
-  if (loading) return <p className="p-4 text-sm text-gray-500">Loading…</p>;
+  if (messagesQuery.isLoading) return <p className="p-4 text-sm text-gray-500">Loading…</p>;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -135,12 +139,12 @@ export function ChatThreadView({ chatId, workspaceId, onTurnDone }: ChatThreadVi
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Message…"
-          disabled={sending}
+          disabled={sendMutation.isPending}
           className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
         />
         <button
           type="submit"
-          disabled={sending || !draft.trim()}
+          disabled={sendMutation.isPending || !draft.trim()}
           className="rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
         >
           Send

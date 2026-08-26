@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import { useModels } from './models.js';
-import { listRows, createRow, updateRow, removeRow } from './api.js';
+import { listRows, createRow, updateRow, removeRow, type OffsetPage } from './api.js';
+import { queryKeys } from './query-keys.js';
 import { WorkspaceViewTable, type WorkspaceViewRow } from './WorkspaceViewTable.js';
 import { Dialog } from './Dialog.js';
 import { FilterBar, type FilterNode } from './FilterBar.js';
@@ -26,13 +28,28 @@ export interface WorkspaceTabsProps {
 /** The tab strip + active tab's content for one workspace — add/reorder/close tabs, all backed by
  * plain `workspace_views` rows through the generic (now owner-scoped) `/api/:model` router. */
 export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleChat, locked }: WorkspaceTabsProps) {
-  const [views, setViews] = useState<WorkspaceViewRow[] | null>(null);
+  const queryClient = useQueryClient();
   const [activeId, setActiveIdState] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   // the active tab's view id is mirrored into `?tab=` so a page refresh (or a link straight to a
   // workspace URL) restores the same tab instead of always falling back to the first one.
   const [searchParams, setSearchParams] = useSearchParams();
+  // set by a just-completed add/reorder mutation to steer which tab becomes active once the
+  // list's refetch resolves — consumed (reset to undefined) the first time it's used.
+  const preferredIdRef = useRef<string | undefined>(undefined);
+
+  const listParams = useMemo(
+    () => ({ limit: 100, offset: 0, filters: [['workspaceId', '=', workspaceId]] as FilterNode[], sort: 'order' }),
+    [workspaceId],
+  );
+
+  const viewsQuery = useQuery({
+    queryKey: queryKeys.rows('workspace_views', listParams),
+    queryFn: () => listRows('workspace_views', listParams),
+  });
+  const views = (viewsQuery.data?.rows as unknown as WorkspaceViewRow[] | undefined) ?? null;
+  const loadError =
+    viewsQuery.error instanceof Error ? viewsQuery.error.message : viewsQuery.error ? 'failed to load tabs' : null;
 
   function setActiveId(id: string | null) {
     setActiveIdState(id);
@@ -47,59 +64,77 @@ export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleCh
     );
   }
 
-  async function refresh(preferActiveId?: string) {
-    try {
-      const page = await listRows('workspace_views', {
-        limit: 100,
-        offset: 0,
-        filters: [['workspaceId', '=', workspaceId]],
-        sort: 'order',
-      });
-      const rows = page.rows as unknown as WorkspaceViewRow[];
-      setViews(rows);
-      const wanted = preferActiveId ?? activeId ?? searchParams.get('tab');
-      const resolved = rows.some((v) => v.id === wanted) ? wanted! : (rows[0]?.id ?? null);
-      setActiveId(resolved);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'failed to load tabs');
-    }
-  }
+  // resolves the active tab whenever the fetched list changes — a just-created/-moved tab wins
+  // via `preferredIdRef`, otherwise the current selection is kept if it still exists, otherwise
+  // this falls back to `?tab=` (a deep link) and finally the first tab.
+  useEffect(() => {
+    if (!views) return;
+    const wanted = preferredIdRef.current ?? activeId ?? searchParams.get('tab');
+    const resolved = views.some((v) => v.id === wanted) ? wanted! : (views[0]?.id ?? null);
+    preferredIdRef.current = undefined;
+    setActiveId(resolved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views]);
 
   useEffect(() => {
-    void refresh();
+    if (refreshSignal === 0) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.rows('workspace_views', listParams) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, refreshSignal]);
+  }, [refreshSignal]);
+
+  function refetchViews() {
+    return queryClient.invalidateQueries({ queryKey: queryKeys.rows('workspace_views', listParams) });
+  }
+
+  const addTabMutation = useMutation({
+    mutationFn: (input: { targetModel: string; label: string; filters: FilterNode[] }) => {
+      const order = (views?.reduce((max, v) => Math.max(max, v.order), -1) ?? -1) + 1;
+      return createRow('workspace_views', {
+        workspaceId,
+        targetModel: input.targetModel,
+        label: input.label,
+        filters: input.filters,
+        order,
+      });
+    },
+    onSuccess: async (created) => {
+      preferredIdRef.current = (created as unknown as WorkspaceViewRow).id;
+      setShowAddDialog(false);
+      await refetchViews();
+    },
+  });
+
+  const closeTabMutation = useMutation({
+    mutationFn: (id: string) => removeRow('workspace_views', id),
+    onSuccess: () => refetchViews(),
+  });
+
+  const moveMutation = useMutation({
+    mutationFn: async ({ id, direction }: { id: string; direction: -1 | 1 }) => {
+      if (!views) return;
+      const idx = views.findIndex((v) => v.id === id);
+      const swapWith = views[idx + direction];
+      if (!swapWith) return;
+      const current = views[idx]!;
+      await Promise.all([
+        updateRow('workspace_views', current.id, { order: swapWith.order }),
+        updateRow('workspace_views', swapWith.id, { order: current.order }),
+      ]);
+      preferredIdRef.current = id;
+    },
+    onSuccess: () => refetchViews(),
+  });
 
   async function addTab(input: { targetModel: string; label: string; filters: FilterNode[] }) {
-    const order = (views?.reduce((max, v) => Math.max(max, v.order), -1) ?? -1) + 1;
-    const created = await createRow('workspace_views', {
-      workspaceId,
-      targetModel: input.targetModel,
-      label: input.label,
-      filters: input.filters,
-      order,
-    });
-    setShowAddDialog(false);
-    await refresh((created as unknown as WorkspaceViewRow).id);
+    await addTabMutation.mutateAsync(input);
   }
 
   async function closeTab(id: string) {
-    await removeRow('workspace_views', id);
-    await refresh();
+    await closeTabMutation.mutateAsync(id);
   }
 
   async function move(id: string, direction: -1 | 1) {
-    if (!views) return;
-    const idx = views.findIndex((v) => v.id === id);
-    const swapWith = views[idx + direction];
-    if (!swapWith) return;
-    const current = views[idx]!;
-    await Promise.all([
-      updateRow('workspace_views', current.id, { order: swapWith.order }),
-      updateRow('workspace_views', swapWith.id, { order: current.order }),
-    ]);
-    await refresh(id);
+    await moveMutation.mutateAsync({ id, direction });
   }
 
   const active = views?.find((v) => v.id === activeId) ?? null;
@@ -169,7 +204,7 @@ export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleCh
         </div>
       </div>
 
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {loadError && <p className="mb-3 text-sm text-red-600">{loadError}</p>}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {active ? (
@@ -177,7 +212,13 @@ export function WorkspaceTabs({ workspaceId, refreshSignal, chatOpen, onToggleCh
             view={active}
             workspaceId={workspaceId}
             locked={locked}
-            onChange={(next) => setViews((prev) => prev?.map((v) => (v.id === next.id ? next : v)) ?? prev)}
+            onChange={(next) =>
+              queryClient.setQueryData(queryKeys.rows('workspace_views', listParams), (prev: OffsetPage | undefined) =>
+                prev
+                  ? { ...prev, rows: prev.rows.map((r) => (r.id === next.id ? (next as unknown as Record<string, unknown>) : r)) }
+                  : prev,
+              )
+            }
           />
         ) : (
           views && views.length === 0 && <p className="text-sm text-gray-400">No tabs yet — add one above.</p>
