@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type { ConsoleFieldMeta } from '../serialize-model.js';
 import type { ConsoleDomainMeta } from '../serialize-domain.js';
 import { ApiRequestError, getDomainSettings, updateDomainSettings } from './api.js';
 import { FieldInput, type FileFieldValue } from './fields.js';
+import { queryKeys } from './query-keys.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
 
 type FormValues = Record<string, string | boolean | FileFieldValue>;
@@ -68,27 +70,33 @@ function toPayload(fields: ConsoleFieldMeta[], values: FormValues): Record<strin
  * active. Split out of what used to be `DomainSettingsPage` so the tab container can remount this
  * per Domain (via `key`) instead of every field needing to reset itself on tab switch. */
 export function DomainSettingsForm({ domain }: { domain: ConsoleDomainMeta }) {
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.domainSettings(domain.name),
+    queryFn: () => getDomainSettings(domain.name),
+  });
+
   const [values, setValues] = useState<FormValues>({});
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    getDomainSettings(domain.name)
-      .then((data) => !cancelled && setValues(toFormValues(domain.fields, data)))
-      .catch((err: unknown) => !cancelled && setFormError(err instanceof Error ? err.message : 'failed to load settings'))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
+    if (settingsQuery.data) setValues(toFormValues(domain.fields, settingsQuery.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [domain.name]);
+  }, [settingsQuery.data]);
 
-  if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
+  const updateMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => updateDomainSettings(domain.name, payload),
+  });
+
+  const loadError =
+    settingsQuery.error instanceof Error
+      ? settingsQuery.error.message
+      : settingsQuery.error
+        ? 'failed to load settings'
+        : null;
+
+  if (settingsQuery.isLoading) return <p className="text-sm text-gray-500">Loading…</p>;
 
   function handleChange(key: string, value: unknown) {
     setValues((prev) => ({ ...prev, [key]: value as string | boolean | FileFieldValue }));
@@ -97,13 +105,12 @@ export function DomainSettingsForm({ domain }: { domain: ConsoleDomainMeta }) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSubmitting(true);
     setFormError(null);
     setFieldErrors({});
     setSaved(false);
     try {
       const payload = toPayload(domain.fields, values);
-      const data = await updateDomainSettings(domain.name, payload);
+      const data = await updateMutation.mutateAsync(payload);
       setValues(toFormValues(domain.fields, data));
       setSaved(true);
     } catch (err) {
@@ -115,14 +122,12 @@ export function DomainSettingsForm({ domain }: { domain: ConsoleDomainMeta }) {
       } else {
         setFormError(err instanceof Error ? err.message : 'save failed');
       }
-    } finally {
-      setSubmitting(false);
     }
   }
 
   return (
     <div className="max-w-xl">
-      {formError && <p className="mb-4 text-sm text-red-600">{formError}</p>}
+      {(formError ?? loadError) && <p className="mb-4 text-sm text-red-600">{formError ?? loadError}</p>}
       {saved && <p className="mb-4 text-sm text-green-600">Saved.</p>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -136,10 +141,10 @@ export function DomainSettingsForm({ domain }: { domain: ConsoleDomainMeta }) {
         <div className="flex gap-2 pt-2">
           <button
             type="submit"
-            disabled={submitting}
+            disabled={updateMutation.isPending}
             className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save'}
+            {updateMutation.isPending ? 'Saving…' : 'Save'}
           </button>
         </div>
       </form>

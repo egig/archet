@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
-import { hasPermission, listRows, removeRow, type OffsetPage } from './api.js';
+import { hasPermission, listRows, removeRow } from './api.js';
 import { formatCellValue } from './format.js';
 import { OperationButton } from './OperationButton.js';
+import { queryKeys } from './query-keys.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { FilterNode } from './FilterBar.js';
 
@@ -38,15 +40,13 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
   const { getModel } = useModels();
   const { user } = useAuth();
   const { search } = useLocation();
+  const queryClient = useQueryClient();
   const base = basePath ?? `/${model.name}`;
 
-  const [page, setPage] = useState<OffsetPage | null>(null);
   const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const limit = query.limit ?? DEFAULT_LIMIT;
-  const queryKey = useMemo(() => JSON.stringify([model.name, query]), [model.name, query]);
+  const queryKeyString = useMemo(() => JSON.stringify([model.name, query]), [model.name, query]);
 
   const columns = useMemo(() => model.fields.filter((f) => !f.sensitive), [model]);
   const includes = useMemo(
@@ -54,21 +54,20 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
     [columns, query.include],
   );
 
-  useEffect(() => setOffset(0), [queryKey]);
+  useEffect(() => setOffset(0), [queryKeyString]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    const sort = query.sortField ? `${query.sortDirection === 'desc' ? '-' : ''}${query.sortField}` : undefined;
-    listRows(model.name, { limit, offset, include: includes, filters: query.filters, sort })
-      .then((p) => !cancelled && setPage(p))
-      .catch((err: unknown) => !cancelled && setError(err instanceof Error ? err.message : 'failed to load'))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey, offset]);
+  const sort = query.sortField ? `${query.sortDirection === 'desc' ? '-' : ''}${query.sortField}` : undefined;
+  const listParams = { limit, offset, include: includes, filters: query.filters, sort };
+
+  const {
+    data: page,
+    isLoading: loading,
+    error,
+  } = useQuery({
+    queryKey: queryKeys.rows(model.name, listParams),
+    queryFn: () => listRows(model.name, listParams),
+    placeholderData: keepPreviousData,
+  });
 
   const canCreate = hasPermission(user?.permissions ?? [], model.name, 'create');
   const canUpdate = hasPermission(user?.permissions ?? [], model.name, 'update');
@@ -80,16 +79,21 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
     (op) => op.placement.includes('row') && hasPermission(user?.permissions ?? [], model.name, op.name),
   );
 
-  async function refetch() {
-    const sort = query.sortField ? `${query.sortDirection === 'desc' ? '-' : ''}${query.sortField}` : undefined;
-    setPage(await listRows(model.name, { limit, offset, include: includes, filters: query.filters, sort }));
+  function refetchRows() {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.rows(model.name), exact: false });
   }
+
+  const removeMutation = useMutation({
+    mutationFn: (id: string) => removeRow(model.name, id),
+    onSuccess: refetchRows,
+  });
 
   async function handleDelete(id: string) {
     if (!window.confirm(`Delete this ${model.label.replace(/s$/, '')}?`)) return;
-    await removeRow(model.name, id);
-    await refetch();
+    await removeMutation.mutateAsync(id);
   }
+
+  const errorMessage = error ? (error instanceof Error ? error.message : 'failed to load') : null;
 
   return (
     <div>
@@ -104,7 +108,7 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
 
       {toolbar}
 
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {errorMessage && <p className="mb-3 text-sm text-red-600">{errorMessage}</p>}
 
       <div className="overflow-x-auto rounded border border-gray-200 bg-white">
         <table className="w-full text-left text-sm">
@@ -164,7 +168,7 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
                         </Link>
                       )}
                       {rowOperations.map((op) => (
-                        <OperationButton key={op.name} modelName={model.name} id={id} row={row} operation={op} onDone={() => void refetch()} />
+                        <OperationButton key={op.name} modelName={model.name} id={id} row={row} operation={op} onDone={refetchRows} />
                       ))}
                       {canRemove && (
                         <button type="button" onClick={() => void handleDelete(id)} className="text-red-600 hover:underline">

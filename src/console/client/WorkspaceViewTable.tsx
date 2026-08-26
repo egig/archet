@@ -1,3 +1,4 @@
+import { useMutation } from '@tanstack/react-query';
 import { useModels } from './models.js';
 import { updateRow } from './api.js';
 import { RowTable } from './RowTable.js';
@@ -36,12 +37,12 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
   const { getModel } = useModels();
   const model = getModel(view.targetModel);
 
-  if (!model) return <p className="text-sm text-red-600">Unknown model '{view.targetModel}'.</p>;
+  const persistFiltersMutation = useMutation({
+    mutationFn: (filters: FilterNode[]) => updateRow('workspace_views', view.id, { filters }),
+    onSuccess: (updated) => onChange(updated as unknown as WorkspaceViewRow),
+  });
 
-  async function persistFilters(filters: FilterNode[]) {
-    const updated = await updateRow('workspace_views', view.id, { filters });
-    onChange(updated as unknown as WorkspaceViewRow);
-  }
+  if (!model) return <p className="text-sm text-red-600">Unknown model '{view.targetModel}'.</p>;
 
   return (
     <RowTable
@@ -55,7 +56,9 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
       }}
       basePath={`/workspace/${workspaceId}/${model.name}`}
       toolbar={
-        !locked && <FilterBar fields={model.fields} value={view.filters ?? []} onChange={(filters) => void persistFilters(filters)} />
+        !locked && (
+          <FilterBar fields={model.fields} value={view.filters ?? []} onChange={(filters) => persistFiltersMutation.mutate(filters)} />
+        )
       }
     />
   );

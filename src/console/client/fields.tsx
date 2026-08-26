@@ -1,8 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type { ConsoleFieldMeta } from '../serialize-model.js';
-import { listRows, uploadFile, type UploadedFile } from './api.js';
+import { listRows, uploadFile } from './api.js';
 import { useModels } from './models.js';
 import { useFieldRenderers } from './field-renderers.js';
+import { queryKeys } from './query-keys.js';
 
 /** What a `file` field's form value looks like — either an existing record's read shape
  * (`{ url, filename, mimeType, size }`, from `deriveFileFields`) or a fresh upload's response
@@ -20,33 +22,24 @@ export interface ReferenceOption {
 
 /** Fetches up to 100 rows of a reference field's target model to populate a `<select>` — a
  * plain fetched-into-a-dropdown list, not a searchable/paginated combobox; fine for console-scale
- * lookups, not meant to scale to huge target tables. */
+ * lookups, not meant to scale to huge target tables. Shares its `queryKeys.rows(targetModel, ...)`
+ * cache entry with `RowTable`'s own listing of that model, so creating/editing a row there
+ * invalidates this dropdown's options too. */
 export function useReferenceOptions(targetModel: string | undefined): ReferenceOption[] | null {
   const { getModel } = useModels();
-  const [options, setOptions] = useState<ReferenceOption[] | null>(null);
+  const displayField = targetModel ? (getModel(targetModel)?.displayField ?? 'id') : 'id';
+  const listParams = useMemo(() => ({ limit: 100, offset: 0 }), []);
 
-  useEffect(() => {
-    if (!targetModel) return;
-    let cancelled = false;
-    const displayField = getModel(targetModel)?.displayField ?? 'id';
-    listRows(targetModel, { limit: 100, offset: 0 })
-      .then((page) => {
-        if (cancelled) return;
-        setOptions(
-          page.rows.map((row) => ({
-            id: String(row.id),
-            label: String(row[displayField] ?? row.id),
-          })),
-        );
-      })
-      .catch(() => !cancelled && setOptions([]));
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetModel]);
+  const { data, error } = useQuery({
+    queryKey: queryKeys.rows(targetModel ?? '', listParams),
+    queryFn: () => listRows(targetModel!, listParams),
+    enabled: !!targetModel,
+  });
 
-  return options;
+  if (!targetModel) return null;
+  if (error) return [];
+  if (!data) return null;
+  return data.rows.map((row) => ({ id: String(row.id), label: String(row[displayField] ?? row.id) }));
 }
 
 export interface FieldInputProps {
@@ -68,8 +61,10 @@ export function FieldInput(props: FieldInputProps) {
   const { models: modelRefOptions } = useModels();
   const fieldRenderers = useFieldRenderers();
   const required = field.writeAs ? mode === 'create' && field.required : field.required;
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadFile(modelName!, field.key, file),
+    onSuccess: (result) => onChange(inputKey, result),
+  });
 
   const errorEl = error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null;
   const wrap = (input: ReactNode) => (
@@ -246,21 +241,20 @@ export function FieldInput(props: FieldInputProps) {
             type="file"
             accept={field.accept}
             required={required && !stored}
-            disabled={uploading || !modelName}
+            disabled={uploadMutation.isPending || !modelName}
             onChange={(e) => {
               const picked = e.target.files?.[0];
               if (!picked || !modelName) return;
-              setUploading(true);
-              setUploadError(null);
-              uploadFile(modelName, field.key, picked)
-                .then((result: UploadedFile) => onChange(inputKey, result))
-                .catch((err: unknown) => setUploadError(err instanceof Error ? err.message : 'upload failed'))
-                .finally(() => setUploading(false));
+              uploadMutation.mutate(picked);
             }}
             className={inputClass}
           />
-          {uploading && <p className="mt-1 text-xs text-gray-500">Uploading…</p>}
-          {uploadError && <p className="mt-1 text-xs text-red-600">{uploadError}</p>}
+          {uploadMutation.isPending && <p className="mt-1 text-xs text-gray-500">Uploading…</p>}
+          {uploadMutation.error && (
+            <p className="mt-1 text-xs text-red-600">
+              {uploadMutation.error instanceof Error ? uploadMutation.error.message : 'upload failed'}
+            </p>
+          )}
         </div>,
       );
     }
