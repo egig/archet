@@ -1,5 +1,4 @@
 import { defineModel, field, pipe, validate, persist, requireOwnsRow, PipelineError, type PipelineFn } from '../../core/index.js';
-import { requireAuth, requirePermission } from '../../auth/pipeline.js';
 
 /** Blocks `update`/`remove` while `locked` — the workspace's structure (its own fields, and via
  * `requireWorkspaceOwnership` in workspace/pipeline.ts, its `WorkspaceView` tabs) is frozen, e.g. so
@@ -34,24 +33,15 @@ export const Workspace = defineModel('workspaces', {
     locked: field.boolean({ default: false }),
   },
   operations: {
-    create: pipe(requireAuth, requirePermission('workspaces', 'create'), requireOwnsRow('userId'), validate, persist),
-    update: pipe(
-      requireAuth,
-      requirePermission('workspaces', 'update'),
-      requireOwnsRow('userId'),
-      requireNotLocked,
-      validate,
-      persist,
-    ),
-    remove: pipe(
-      requireAuth,
-      requirePermission('workspaces', 'remove'),
-      requireOwnsRow('userId'),
-      requireNotLocked,
-      persist.remove,
-    ),
-    lock: pipe(requireAuth, requirePermission('workspaces', 'update'), requireOwnsRow('userId'), setLocked(true), validate, persist),
-    unlock: pipe(requireAuth, requirePermission('workspaces', 'update'), requireOwnsRow('userId'), setLocked(false), validate, persist),
+    // requireAuth/requirePermission used to be composed here by hand; the generic router now
+    // applies both implicitly to every model (see create-router.ts) — including `lock`/`unlock`
+    // as their own distinct actions, rather than the old hand-rolled pipelines piggybacking on
+    // 'update' for both. A role now needs an explicit 'lock'/'unlock' grant, not just 'update'.
+    create: pipe(requireOwnsRow('userId'), validate, persist),
+    update: pipe(requireOwnsRow('userId'), requireNotLocked, validate, persist),
+    remove: pipe(requireOwnsRow('userId'), requireNotLocked, persist.remove),
+    lock: pipe(requireOwnsRow('userId'), setLocked(true), validate, persist),
+    unlock: pipe(requireOwnsRow('userId'), setLocked(false), validate, persist),
   },
   console: { label: 'Workspaces', displayField: 'name' },
   api: { ownerField: 'userId' },

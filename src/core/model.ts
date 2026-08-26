@@ -47,6 +47,13 @@ export interface ApiModelOptions {
    * step composed into the model's own `operations` pipeline (core/pipeline.ts) — this flag alone
    * doesn't touch POST/PATCH/DELETE. */
   ownerField?: string;
+  /** opts this model out of the generic `/api/:model` router's implicit auth+permission gate
+   * (every route on every model otherwise requires a matching `Permission` row, including reads —
+   * see `ratchet/auth`) — for a model that's genuinely meant to be reachable with no session at
+   * all, e.g. a public read-only catalog. `true` applies to every verb; there's no per-operation
+   * granularity today. Doesn't affect a model's own hand-rolled router (`api.hidden`), which was
+   * never subject to this gate in the first place. */
+  public?: boolean;
 }
 
 export interface ModelDefinition {

@@ -14,10 +14,15 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
   let db: PgDatabase<any, any, any>;
   let app: ReturnType<typeof createApiRouter>;
 
+  // `api: { public: true }` — this suite tests routing/filtering/pagination mechanics, not
+  // auth, and has no Role/Permission/User/Session fixtures of its own (see auth.test.ts /
+  // router.test.ts's sibling suites for that); the generic router otherwise requires a matching
+  // `Permission` row by default for every route, including reads (see create-router.ts).
   const Author = defineModel('authors', {
     fields: {
       name: field.string({ required: true, indexed: true }),
     },
+    api: { public: true },
   });
 
   const Book = defineModel('books', {
@@ -27,6 +32,7 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
       price: field.decimal({ precision: 10, scale: 2, required: true }),
       status: field.enum(['draft', 'published'], { default: 'draft', indexed: true }),
     },
+    api: { public: true },
   });
 
   beforeAll(async () => {

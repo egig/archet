@@ -13,6 +13,7 @@ export type {
   ReferenceFieldDefinition,
   ModelRefFieldDefinition,
   ActionRefFieldDefinition,
+  FieldRefFieldDefinition,
   FileFieldDefinition,
 } from './field.js';
 

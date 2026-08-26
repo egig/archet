@@ -36,25 +36,49 @@ curl http://localhost:3000/api/auth/me \
 
 The `User` model never declares a plaintext `password` field. Instead its `passwordHash` column declares `writeAs: 'password'`, and the `hashPassword` pipeline function intercepts `ctx.input.password`, hashes it, and rewrites it as `passwordHash` before `validate` runs. `passwordHash` itself is `sensitive: true`, so it's never present in a response.
 
-## Guarding your own pipelines
+## Auth + permission is implicit on the generic router
 
-`requireAuth` and `requirePermission(resource, action)` are ordinary [pipeline functions](/guide/pipelines) — compose them into any model's operations:
+Every route on the generic `/api/:model` router requires a matching `Permission` row by default — including reads, which use an implicit `'read'` action (there's no per-model `read` operation to compose a pipeline step into, unlike create/update/remove/lock/unlock). A model author doesn't need to do anything to get this; it applies automatically, the same way `redactSensitiveFields` or `?include=` do.
+
+A model that must stay reachable with no session at all (a public read-only catalog, say) opts out with `api: { public: true }`:
 
 ```ts
-import { pipe, validate, persist } from '@egig/ratchet/core';
-import { requireAuth, requirePermission } from '@egig/ratchet/auth';
-
-export const Invoice = defineModel('invoices', {
+export const Announcement = defineModel('announcements', {
   fields: { /* ... */ },
-  operations: {
-    create: pipe(requireAuth, requirePermission('invoices', 'create'), validate, persist),
-  },
+  api: { public: true },
 });
 ```
+
+`public` applies to every verb on that model — there's no per-operation granularity today.
+
+`requireAuth` and `requirePermission(resource, action)` still exist as ordinary [pipeline functions](/guide/pipelines), for a dedicated router that bypasses the generic one entirely (e.g. `Chat`/`Message`'s own `/api/automation/*` routes, or an agent tool call — `automation/tool.ts`'s `executeModelOperationTool` calls `authorizeRequest`, the same check under the hood, before ever touching a model's pipeline):
 
 - `requireAuth` resolves the `Bearer` token or session cookie on `ctx.request` to a live, active user and stashes it on `ctx.user`. Throws `UNAUTHENTICATED` (401) otherwise.
 - `requirePermission(resource, action)` must run after `requireAuth`. It checks the user's role owns a permission matching `(resource, action)` — either side may be granted as `*`. Throws `FORBIDDEN` (403) otherwise, or `UNAUTHENTICATED` if `requireAuth` didn't run first.
 
 ## Roles and permissions
 
-`Role` and `Permission` are ordinary models, managed like any other through the generic REST API (or the console) — grant a role a permission by creating a `Permission` row with `{ roleId, resource, action }`, using `'*'` for either field to grant broadly.
+`Role` and `Permission` are ordinary models, managed like any other through the generic REST API (or the console) — grant a role a permission by creating a `Permission` row with `{ roleId, resource, action, field }`, using `'*'` for `resource`/`action` to grant broadly.
+
+## Field-level permission
+
+`field` names one field of `resource` a role may read (`action: 'read'`) or write (`action: 'create'`/`'update'`) — or `'*'` for every field. It's required on a `read`/`create`/`update`/`'*'` row and doesn't apply at all to `remove`/`lock`/`unlock` (those gate a whole row/operation, never individual fields).
+
+```
+{ roleId, resource: 'invoices', action: 'read', field: 'total' }
+{ roleId, resource: 'invoices', action: 'read', field: 'customerNotes' }
+{ roleId, resource: 'invoices', action: 'update', field: '*' }
+```
+
+This is **secure-by-default, with no implicit "all fields"**: a role with a `(resource, action)` grant but no matching `field` grant gets zero fields for that action, not every field. A read that field permission denies simply omits that key from the response (the same shape `sensitive: true` fields already get); a write that touches a denied field is rejected outright, naming every offending key, rather than silently dropping it. `?filter=`/`?sort=` on a field a role can't read is rejected the same way — otherwise field-read denial would be a trivial oracle to route around.
+
+Two things are always exempt from field-level permission, for every role:
+
+- **Auto-injected system columns** (`id`, `createdAt`, `updatedAt`, `deletedAt`, `createdById`) — they aren't declarable via `field.*` in the first place, and gating them would break pagination cursors, `?include=`, and file-field URLs for no security benefit.
+- **`sensitive: true`** fields (e.g. a password hash) — that's a separate, absolute, non-role-based redaction: it never reaches *any* role, whereas field permission is about fields that are fine for some roles but not others.
+
+`?include=`d relations are filtered by the same field grant, using the requesting role's `read` permission on the *related* model — embedding a row via `?include=` can't be used to see fields that model's own permission denies.
+
+### Bootstrapping
+
+Because there's no implicit "all fields," the Root role `POST /api/auth/setup` creates grants `{ resource: '*', action: '*', field: '*' }` in one row — the `'*'` on `field` is what keeps the freshly-created admin able to see/edit anything immediately, the same way `'*'` on `resource`/`action` already did. When granting a narrower role by hand, remember `field` needs its own row (or `'*'`) for `read`/`create`/`update` — a grant that only sets `resource`/`action` and leaves `field` unset is rejected by `requireValidPermissionTarget`, not silently treated as "everything."

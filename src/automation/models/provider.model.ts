@@ -1,5 +1,4 @@
-import { defineModel, field, pipe, validate, persist } from '../../core/index.js';
-import { requireAuth, requirePermission } from '../../auth/pipeline.js';
+import { defineModel, field } from '../../core/index.js';
 
 /**
  * A saved API credential + endpoint. `Agent.providerId` references one of these so an agent
@@ -15,11 +14,6 @@ export const Provider = defineModel('providers', {
     // Together, OpenRouter, local vLLM/Ollama, ...); left blank to use a provider's default endpoint.
     url: field.string({ required: false, maxLength: 2048 }),
     apiKey: field.string({ required: true, sensitive: true, maxLength: 512, displayText: 'API Key', writeAs: "apiKey" }),
-  },
-  operations: {
-    create: pipe(requireAuth, requirePermission('providers', 'create'), validate, persist),
-    update: pipe(requireAuth, requirePermission('providers', 'update'), validate, persist),
-    remove: pipe(requireAuth, requirePermission('providers', 'remove'), persist.remove),
   },
   console: { label: 'Providers', displayField: 'name' },
 });

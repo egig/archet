@@ -95,6 +95,19 @@ export interface ActionRefFieldDefinition extends BaseFieldDefinition {
   allowWildcard: boolean;
 }
 
+/** Names a *field* on whichever model a sibling `modelRef` value points at (e.g. `Permission`'s
+ * `field` column names a field on the model its own `resource` column points at) — validated
+ * against the live registry at request time (see `ratchet/auth`'s `requireValidPermissionTarget`),
+ * the same way `ModelRefFieldDefinition`/`ActionRefFieldDefinition` are. `allowWildcard` mirrors
+ * theirs: it lets `'*'` stand for "every field." Unlike `resource`/`action`, requiredness isn't a
+ * static per-field setting here — whether a given row even needs a `field` value depends on that
+ * row's own `action` (e.g. `remove` has no field-shaped meaning at all), so `requireValidPermissionTarget`
+ * enforces that conditionally rather than `field.ts` declaring `required: true`. */
+export interface FieldRefFieldDefinition extends BaseFieldDefinition {
+  kind: 'fieldRef';
+  allowWildcard: boolean;
+}
+
 /** Stores a reference to a blob held by a `FileStorageAdapter` (see `core/storage.ts`), not the
  * bytes themselves — the column is `{ key, filename, mimeType, size }` (jsonb). `accept` is a
  * comma-separated list of mime patterns (`'image/png'`, `'image/*'`) checked against the
@@ -122,6 +135,7 @@ export type FieldDefinition =
   | ReferenceFieldDefinition
   | ModelRefFieldDefinition
   | ActionRefFieldDefinition
+  | FieldRefFieldDefinition
   | FileFieldDefinition;
 
 function assertNoRequiredDefaultConflict(opts: FieldCommonOptions): void {
@@ -194,6 +208,10 @@ export const field = {
 
   actionRef(opts: { allowWildcard?: boolean } & FieldCommonOptions<string> = {}): ActionRefFieldDefinition {
     return { ...base(opts), kind: 'actionRef', allowWildcard: opts.allowWildcard ?? false };
+  },
+
+  fieldRef(opts: { allowWildcard?: boolean } & FieldCommonOptions<string> = {}): FieldRefFieldDefinition {
+    return { ...base(opts), kind: 'fieldRef', allowWildcard: opts.allowWildcard ?? false };
   },
 
   file(

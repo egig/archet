@@ -1,4 +1,5 @@
 import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { ModelDefinition } from '../core/model.js';
 import { PipelineError, type PipelineFn } from '../core/pipeline.js';
 import { hashPassword as hashPasswordValue } from './password.js';
 import { findSessionByToken, findUserById, listPermissionsForRole, type UserRow } from './lookup.js';
@@ -42,8 +43,16 @@ export const requireAuth: PipelineFn = async (ctx) => {
   return { ...ctx, user: user as unknown as Record<string, unknown> };
 };
 
+function permissionAllows(permissions: { resource: string; action: string }[], resource: string, action: string): boolean {
+  return permissions.some((p) => (p.resource === resource || p.resource === '*') && (p.action === action || p.action === '*'));
+}
+
 /** Requires `requireAuth` to have already run (`ctx.user` set), then checks the user's role owns
- * a permission matching `(resource, action)` — either side may be granted as `*`. */
+ * a permission matching `(resource, action)` — either side may be granted as `*`. Kept as a
+ * pipeline fn (rather than being replaced outright by `authorizeRequest`) for library consumers
+ * composing their own custom operations — the generic `/api/:model` router no longer needs a model
+ * author to wire this in themselves, since it now applies implicitly (see `authorizeRequest`,
+ * called directly by `create-router.ts` before a model's own pipeline ever runs). */
 export function requirePermission(resource: string, action: string): PipelineFn {
   return async (ctx) => {
     if (ctx.user === undefined) {
@@ -51,36 +60,126 @@ export function requirePermission(resource: string, action: string): PipelineFn 
     }
     const roleId = ctx.user?.roleId;
     const permissions = typeof roleId === 'string' ? await listPermissionsForRole(ctx.db, roleId) : [];
-
-    const allowed = permissions.some(
-      (p) => (p.resource === resource || p.resource === '*') && (p.action === action || p.action === '*'),
-    );
-    if (!allowed) {
-      throw new PipelineError({
-        code: 'FORBIDDEN',
-        status: 403,
-        message: `missing permission '${resource}:${action}'`,
-      });
+    if (!permissionAllows(permissions, resource, action)) {
+      throw new PipelineError({ code: 'FORBIDDEN', status: 403, message: `missing permission '${resource}:${action}'` });
     }
     return ctx;
   };
 }
 
+/** Router-level counterpart to `requirePermission`, for routes that never build an
+ * `OperationContext` at all — the generic router's `GET` list/detail routes have no per-model
+ * `read` operation to compose a pipeline fn into (unlike create/update/remove/lock/unlock), so the
+ * implicit read gate (`create-router.ts`) calls this directly instead. Resolves the session user
+ * and checks their role holds `(resource, action)` — either side may be `*` — the same rule
+ * `requirePermission` enforces. Throws 401 (no/expired session) or 403 (session valid, permission
+ * missing), same codes as `requirePermission`. */
+export async function authorizeRequest(db: AnyDb, request: Request | undefined, resource: string, action: string): Promise<UserRow> {
+  const user = await resolveSessionUser(db, request);
+  const permissions = typeof user.roleId === 'string' ? await listPermissionsForRole(db, user.roleId) : [];
+  if (!permissionAllows(permissions, resource, action)) {
+    throw new PipelineError({ code: 'FORBIDDEN', status: 403, message: `missing permission '${resource}:${action}'` });
+  }
+  return user;
+}
+
+export type GrantedFields = '*' | ReadonlySet<string>;
+
+/** The field-level counterpart to `requirePermission`/`authorizeRequest`'s resource:action check —
+ * resolves which fields of `resource` a role may touch/see for a field-shaped `action`
+ * (`'read'`/`'create'`/`'update'`; meaningless for `'remove'`/`'lock'`/`'unlock'`, which don't gate
+ * individual fields at all). Unions every matching `Permission` row's `field` (the row's own
+ * `resource`/`action` sides may each independently be `'*'`); any matching row with `field: '*'`
+ * short-circuits to "every field." Secure-by-default (no backward-compat carve-out, ADR-less
+ * breaking change at v0.1.0): a role with *no* matching field-scoped row gets an empty set, not
+ * "everything" — see docs/guide/auth.md. */
+export async function resolveGrantedFields(
+  db: AnyDb,
+  roleId: string | null | undefined,
+  resource: string,
+  action: string,
+): Promise<GrantedFields> {
+  const permissions = typeof roleId === 'string' ? await listPermissionsForRole(db, roleId) : [];
+  const matching = permissions.filter(
+    (p) => (p.resource === resource || p.resource === '*') && (p.action === action || p.action === '*'),
+  );
+  if (matching.some((p) => p.field === '*')) return '*';
+  return new Set(matching.map((p) => p.field).filter((f): f is string => typeof f === 'string'));
+}
+
+/** Strips every `model.fields` key not in `granted` from `row` — used at every read boundary that
+ * enforces field-level permission (the generic router's `GET` routes, `create-router.ts`; agent
+ * tool-call output would need the same treatment if it's ever read-gated too). Auto-injected
+ * system columns (`id`/`createdAt`/`updatedAt`/`deletedAt`/`createdById`) aren't in `model.fields`
+ * at all, so this loop never reaches them — deliberately exempt, see docs/guide/auth.md. */
+export function pickGrantedFields(model: ModelDefinition, row: Record<string, unknown>, granted: GrantedFields): Record<string, unknown> {
+  if (granted === '*') return row;
+  const out = { ...row };
+  for (const key of Object.keys(model.fields)) {
+    if (!granted.has(key)) delete out[key];
+  }
+  return out;
+}
+
+/** Maps a raw write-input key back to the `model.fields` key it actually writes — mainly for
+ * `writeAs` (e.g. `User`'s `password` input key writes the real `passwordHash` field), so a role
+ * denied write access to `passwordHash` can't route around that denial through its `writeAs`
+ * alias. A key that isn't a real field at all resolves to `undefined` and is ignored by
+ * `assertWriteFieldsAllowed` — `validate`'s schema silently strips it same as always. */
+export function fieldKeyForInput(model: ModelDefinition, inputKey: string): string | undefined {
+  if (inputKey in model.fields) return inputKey;
+  return Object.entries(model.fields).find(([, f]) => f.writeAs === inputKey)?.[0];
+}
+
+/** Rejects the whole write (naming every offending key) if `input` touches a field outside
+ * `granted` — used at every write boundary that enforces field-level permission: the generic
+ * router's `POST`/`PATCH` (`create-router.ts`) and agent tool calls (`automation/tool.ts`'s
+ * `executeModelOperationTool`, which invokes a model's `create`/`update` pipeline exactly like the
+ * REST route does and needs the identical check). Rejects rather than silently dropping disallowed
+ * keys, so a caller's local state never disagrees with the server about what actually got written. */
+export function assertWriteFieldsAllowed(model: ModelDefinition, input: Record<string, unknown>, granted: GrantedFields): void {
+  if (granted === '*') return;
+  const fields: Record<string, string> = {};
+  for (const inputKey of Object.keys(input)) {
+    const fieldKey = fieldKeyForInput(model, inputKey);
+    if (fieldKey && !granted.has(fieldKey)) fields[inputKey] = 'field not permitted for your role';
+  }
+  if (Object.keys(fields).length > 0) throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields });
+}
+
+/** Actions that don't gate individual field values at all — `remove` deletes the whole row,
+ * `lock`/`unlock` only ever touch the auto-managed `locked` column (see `workspace.model.ts`'s
+ * `setLocked`). A `Permission` row scoped to one of these must never carry a `field` value. */
+export const FIELDLESS_ACTIONS: ReadonlySet<string> = new Set(['remove', 'lock', 'unlock']);
+
 /** Requires `ctx.registry` (set by the router — see `OperationContext.registry`). Checks that
  * `input.resource` names a real model in the registry and `input.action` names a real operation
- * on *some* model in the registry — or is the `*` wildcard, for either — since those are the only
- * values `requirePermission` treats as meaningful. `action`'s valid set is a registry-wide union
- * rather than being scoped to the chosen `resource`: every model's `operations` always has
- * exactly the same keys (`defineModel` fills in a default pipeline for any verb a model doesn't
- * declare), so there's no real per-resource variation to track, and scoping it would mean the
- * check runs after resource resolution instead of independently. A partial update that isn't
- * touching a given field is left alone (nothing new to validate on that field). */
+ * on *some* model in the registry, or is the built-in implicit `'read'` action (see
+ * `create-router.ts`'s `GET` routes — there's no per-model `read` operation key to derive this
+ * from the way there is for create/update/remove/lock/unlock) — or is the `*` wildcard, for
+ * either — since those are the only values `requirePermission` treats as meaningful. `action`'s
+ * valid set is a registry-wide union rather than being scoped to the chosen `resource`: every
+ * model's `operations` always has exactly the same keys (`defineModel` fills in a default
+ * pipeline for any verb a model doesn't declare), so there's no real per-resource variation to
+ * track, and scoping it would mean the check runs after resource resolution instead of
+ * independently.
+ *
+ * `field`'s requiredness is a cross-field constraint `field.ts`'s static `required` flag can't
+ * express — it depends on the row's own *effective* `action` (required for `read`/`create`/
+ * `update`/`*`, forbidden for `FIELDLESS_ACTIONS`), so it's enforced here instead, against
+ * whichever of `input`/`ctx.doc` last set each of `resource`/`action`/`field` — a partial update
+ * that isn't touching any of the three is left alone entirely. Only applies at all when
+ * `ctx.model` actually declares a `field.fieldRef()` column named `field` — `Permission` does,
+ * `AgentPermission` (same `requireValidPermissionTarget` call, no field-level concept at all)
+ * doesn't, and must be completely unaffected by field-requiredness. */
 export const requireValidPermissionTarget: PipelineFn = async (ctx) => {
+  const hasFieldColumn = ctx.model.fields.field?.kind === 'fieldRef';
   const resource = ctx.input.resource;
   const action = ctx.input.action;
+  const field = hasFieldColumn ? ctx.input.field : undefined;
   const resourceNeedsCheck = resource !== undefined && resource !== '*';
   const actionNeedsCheck = action !== undefined && action !== '*';
-  if (!resourceNeedsCheck && !actionNeedsCheck) return ctx;
+  if (resource === undefined && action === undefined && field === undefined) return ctx;
 
   if (!ctx.registry) {
     throw new PipelineError({
@@ -97,9 +196,40 @@ export const requireValidPermissionTarget: PipelineFn = async (ctx) => {
   }
 
   if (actionNeedsCheck) {
-    const validActions = new Set(Object.values(ctx.registry).flatMap((model) => Object.keys(model.operations)));
+    const validActions = new Set(['read', ...Object.values(ctx.registry).flatMap((model) => Object.keys(model.operations))]);
     if (typeof action !== 'string' || !validActions.has(action)) {
-      fields.action = `unknown action '${String(action)}' — must be a real operation name or '*'`;
+      fields.action = `unknown action '${String(action)}' — must be a real operation name, 'read', or '*'`;
+    }
+  }
+
+  // Only cross-check `field` once `resource`/`action` are themselves known-valid — an invalid
+  // action makes "is field required for it" unanswerable. Skipped entirely for a model with no
+  // `field` column at all (e.g. `AgentPermission`).
+  if (hasFieldColumn && fields.resource === undefined && fields.action === undefined) {
+    const effectiveAction: string | undefined = typeof action === 'string' ? action : typeof ctx.doc?.action === 'string' ? ctx.doc.action : undefined;
+    const effectiveResource: string | undefined =
+      typeof resource === 'string' ? resource : typeof ctx.doc?.resource === 'string' ? ctx.doc.resource : undefined;
+    const effectiveField = field !== undefined ? field : ctx.doc?.field;
+
+    if (effectiveAction !== undefined) {
+      const fieldApplicable = effectiveAction === '*' || !FIELDLESS_ACTIONS.has(effectiveAction);
+
+      if (!fieldApplicable) {
+        if (effectiveField !== undefined && effectiveField !== null) {
+          fields.field = `not applicable for action '${effectiveAction}' — it doesn't gate individual fields, leave 'field' unset`;
+        }
+      } else if (effectiveField === undefined || effectiveField === null || effectiveField === '') {
+        fields.field = `required for action '${effectiveAction}' — name a field, or '*' for every field`;
+      } else if (typeof effectiveField === 'string' && effectiveField !== '*') {
+        if (effectiveResource === '*') {
+          fields.field = `must be '*' when resource is '*' — a concrete field can't be checked against every model`;
+        } else if (typeof effectiveResource === 'string') {
+          const targetModel = ctx.registry[effectiveResource];
+          if (!targetModel || !(effectiveField in targetModel.fields)) {
+            fields.field = `unknown field '${effectiveField}' on resource '${effectiveResource}'`;
+          }
+        }
+      }
     }
   }
 

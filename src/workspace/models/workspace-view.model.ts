@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { defineModel, field, pipe, validate, persist, requireOwnsRow } from '../../core/index.js';
-import { requireAuth, requirePermission } from '../../auth/pipeline.js';
 import { requireWorkspaceOwnership } from '../pipeline.js';
 
 // a bare `field.json()` defaults to an object schema (z.record) — `filters`/`include` are arrays,
@@ -47,29 +46,9 @@ export const WorkspaceView = defineModel('workspace_views', {
     order: field.integer({ default: 0, indexed: true }),
   },
   operations: {
-    create: pipe(
-      requireAuth,
-      requirePermission('workspace_views', 'create'),
-      requireOwnsRow('userId'),
-      validate,
-      requireWorkspaceOwnership,
-      persist,
-    ),
-    update: pipe(
-      requireAuth,
-      requirePermission('workspace_views', 'update'),
-      requireOwnsRow('userId'),
-      validate,
-      requireWorkspaceOwnership,
-      persist,
-    ),
-    remove: pipe(
-      requireAuth,
-      requirePermission('workspace_views', 'remove'),
-      requireOwnsRow('userId'),
-      requireWorkspaceOwnership,
-      persist.remove,
-    ),
+    create: pipe(requireOwnsRow('userId'), validate, requireWorkspaceOwnership, persist),
+    update: pipe(requireOwnsRow('userId'), validate, requireWorkspaceOwnership, persist),
+    remove: pipe(requireOwnsRow('userId'), requireWorkspaceOwnership, persist.remove),
   },
   console: { hidden: true },
   api: { ownerField: 'userId' },

@@ -265,6 +265,21 @@ export function FieldInput(props: FieldInputProps) {
       );
     }
 
+    // No live cross-field dropdown (the field this names lives on whichever model a *sibling*
+    // `resource` value points at, which this component doesn't have visibility into) — falls
+    // through to a plain text input, same as 'string', with a hint about the wildcard.
+    case 'fieldRef':
+      return wrap(
+        <input
+          type="text"
+          required={required}
+          placeholder={field.allowWildcard ? "field name, or '*' for every field" : 'field name'}
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(inputKey, e.target.value)}
+          className={inputClass}
+        />,
+      );
+
     case 'string':
     default:
       return wrap(

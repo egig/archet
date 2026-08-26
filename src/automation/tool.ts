@@ -3,6 +3,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition, Operation, OperationContext } from '../core/index.js';
 import { buildCreateSchema, buildUpdateSchema } from '../core/index.js';
+import { authorizeRequest, resolveGrantedFields, assertWriteFieldsAllowed } from '../auth/pipeline.js';
 import { listPermissionsForAgent } from './lookup.js';
 import type { ToolSpec } from './provider.js';
 
@@ -77,27 +78,43 @@ export async function resolveAgentTools(
 }
 
 /**
- * Runs a granted tool call through the target model's own `operations[operation]` pipeline —
- * the exact same call `/api/:model` would make (src/router/create-router.ts) — so it's gated by
- * that model's real `requireAuth`/`requirePermission` steps against `request`'s session, not by
- * `AgentPermission` alone. `AgentPermission` only decided which tools the agent was offered; this
- * is what stops it from doing more than the chat's own user could already do via the REST API.
+ * Runs a granted tool call through the target model's own `operations[operation]` pipeline — the
+ * exact same call `/api/:model` would make (src/router/create-router.ts). Model pipelines
+ * themselves no longer carry their own `requireAuth`/`requirePermission` steps (the generic
+ * router applies both implicitly to every model — see `create-router.ts`'s `resolveAccess`/
+ * `resolveFieldAccess`), so this — the *other* caller of `model.operations[...]` that bypasses
+ * that router entirely — has to perform the identical check itself, against the chat's own
+ * `request` (never `AgentPermission` alone): `authorizeRequest` for the resource:action grant,
+ * `resolveGrantedFields` + `assertWriteFieldsAllowed` for create/update's field-level grant
+ * (`remove` has no field concept — see `FIELDLESS_ACTIONS`). `AgentPermission` only decided which
+ * tools the agent was offered; this is what stops it from doing more than the chat's own user
+ * could already do via the REST API.
  */
 export async function executeModelOperationTool(
   tool: ModelOperationTool,
   input: Record<string, unknown>,
   ctx: { db: AnyDb; request: Request | undefined; registry: Record<string, ModelDefinition> },
 ): Promise<unknown> {
+  const user = await authorizeRequest(ctx.db, ctx.request, tool.model.name, tool.operation);
+
   const { id, ...rest } = input as { id?: string } & Record<string, unknown>;
+  const writeInput = tool.operation === 'create' ? input : rest;
+
+  if (tool.operation === 'create' || tool.operation === 'update') {
+    const granted = await resolveGrantedFields(ctx.db, user.roleId, tool.model.name, tool.operation);
+    assertWriteFieldsAllowed(tool.model, writeInput, granted);
+  }
+
   const opCtx: OperationContext = {
     operation: tool.operation,
     id: tool.operation === 'create' ? undefined : id,
-    input: tool.operation === 'create' ? input : rest,
+    input: writeInput,
     doc: null,
     model: tool.model,
     db: ctx.db,
     request: ctx.request,
     registry: ctx.registry,
+    user: user as unknown as Record<string, unknown>,
   };
   const result = await tool.model.operations[tool.operation](opCtx);
   return result.doc;
