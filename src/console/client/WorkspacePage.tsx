@@ -9,6 +9,7 @@ import { WorkspaceTabs } from './WorkspaceTabs.js';
 import { WorkspaceChatPanel } from './WorkspaceChatPanel.js';
 import { ModelFormDialog } from './ModelFormDialog.js';
 import { BrandMark } from './BrandMark.js';
+import { LockClosedIcon, LockOpenIcon, LogOutIcon } from './icons.js';
 
 interface WorkspaceOption {
   id: string;
@@ -57,8 +58,9 @@ function UserMenu({ user, onLogout }: { user: AuthUser; onLogout: () => void }) 
               setOpen(false);
               onLogout();
             }}
-            className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
           >
+            <LogOutIcon className="h-4 w-4 text-gray-400" />
             Log out
           </button>
         </div>
@@ -160,9 +162,19 @@ export function WorkspacePage() {
             <button
               type="button"
               onClick={() => void toggleLock()}
-              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+              className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
             >
-              {activeWorkspace.locked ? 'Unlock workspace' : 'Lock workspace'}
+              {activeWorkspace.locked ? (
+                <>
+                  <LockClosedIcon className="h-3.5 w-3.5" />
+                  Unlock workspace
+                </>
+              ) : (
+                <>
+                  <LockOpenIcon className="h-3.5 w-3.5" />
+                  Lock workspace
+                </>
+              )}
             </button>
           )}
           {isRoot && (

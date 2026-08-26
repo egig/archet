@@ -5,6 +5,7 @@ import { ApiRequestError, callOperation } from './api.js';
 import { Dialog } from './Dialog.js';
 import { FieldInput, type FileFieldValue } from './fields.js';
 import { datetimeLocalToIso } from './format.js';
+import { CheckIcon, XMarkIcon } from './icons.js';
 
 type ParamValues = Record<string, string | boolean | FileFieldValue>;
 
@@ -139,15 +140,17 @@ function OperationParamsDialog({ operation, modelName, onCancel, onSubmit }: Ope
           <button
             type="submit"
             disabled={submitting}
-            className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
+            <CheckIcon className="h-4 w-4" />
             {submitting ? 'Submitting…' : 'Submit'}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="flex items-center gap-1.5 rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
           >
+            <XMarkIcon className="h-4 w-4" />
             Cancel
           </button>
         </div>

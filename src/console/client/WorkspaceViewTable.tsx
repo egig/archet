@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useModels } from './models.js';
 import { updateRow } from './api.js';
@@ -29,26 +30,47 @@ export interface WorkspaceViewTableProps {
   locked: boolean;
 }
 
+function sameFilters(a: FilterNode[], b: FilterNode[]): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** One workspace tab's content: the saved query rendered through the shared `RowTable`, plus a
- * `FilterBar` (RowTable's `toolbar` slot) for editing its filters by hand — edits persist back to
- * the `workspace_views` row immediately, the same row an agent's `update_workspace_views` tool
- * call would edit. */
+ * `FilterBar` (revealed by RowTable's "Filter" toggle) for editing its filters by hand. Edits are
+ * held as a local draft and only run/persisted when the user hits "Apply" — so a half-built clause
+ * (e.g. a reference `=` with nothing picked) never reaches the query layer. A committed set
+ * persists back to the same `workspace_views` row an agent's `update_workspace_views` tool edits. */
 export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: WorkspaceViewTableProps) {
   const { getModel } = useModels();
   const model = getModel(view.targetModel);
+
+  const applied = view.filters ?? [];
+  const [draftFilters, setDraftFilters] = useState<FilterNode[]>(applied);
+  // re-sync the draft whenever the persisted set changes out from under us — an agent's
+  // `update_workspace_views` call, or this component instance being reused for another tab.
+  useEffect(() => {
+    setDraftFilters(view.filters ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.id, JSON.stringify(view.filters)]);
 
   const persistFiltersMutation = useMutation({
     mutationFn: (filters: FilterNode[]) => updateRow('workspace_views', view.id, { filters }),
     onSuccess: (updated) => onChange(updated as unknown as WorkspaceViewRow),
   });
 
+  function applyFilters(filters: FilterNode[]) {
+    setDraftFilters(filters);
+    persistFiltersMutation.mutate(filters);
+  }
+
   if (!model) return <p className="text-sm text-red-600">Unknown model '{view.targetModel}'.</p>;
+
+  const hasFilterableFields = model.fields.some((f) => f.indexed);
 
   return (
     <RowTable
       model={model}
       query={{
-        filters: view.filters ?? [],
+        filters: applied,
         sortField: view.sortField ?? undefined,
         sortDirection: view.sortDirection,
         include: view.include ?? undefined,
@@ -56,9 +78,16 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
       }}
       basePath={`/workspace/${workspaceId}/${model.name}`}
       toolbar={
-        !locked && (
-          <FilterBar fields={model.fields} value={view.filters ?? []} onChange={(filters) => persistFiltersMutation.mutate(filters)} />
-        )
+        !locked && hasFilterableFields ? (
+          <FilterBar
+            fields={model.fields}
+            value={draftFilters}
+            onChange={setDraftFilters}
+            onApply={applyFilters}
+            dirty={!sameFilters(draftFilters, applied)}
+            applying={persistFiltersMutation.isPending}
+          />
+        ) : undefined
       }
     />
   );

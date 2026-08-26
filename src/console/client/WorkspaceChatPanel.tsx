@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChatsProvider, useChats } from './chats-context.js';
 import { ChatThreadView } from './ChatThreadView.js';
 import { ChatEmptyStateView } from './ChatEmptyStateView.js';
+import { ChevronDownIcon, PlusIcon } from './icons.js';
 import type { ChatSummary } from './api.js';
 
 /** "History" dropdown in place of a `<select>` — lists every chat, with the active one
@@ -33,9 +34,10 @@ function ChatHistoryMenu({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="w-full truncate rounded border border-gray-300 px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-50"
+        className="flex w-full items-center gap-1 rounded border border-gray-300 px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-50"
       >
-        History
+        <span className="min-w-0 flex-1 truncate">History</span>
+        <ChevronDownIcon className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -73,8 +75,9 @@ function WorkspaceChatPanelInner({ workspaceId, onTurnDone }: { workspaceId: str
         <button
           type="button"
           onClick={() => setSelectedChatId(null)}
-          className="shrink-0 rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+          className="flex shrink-0 items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
         >
+          <PlusIcon className="h-3.5 w-3.5" />
           New
         </button>
       </div>

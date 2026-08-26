@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getRow, listRows } from './api.js';
 import { useModels } from './models.js';
 import type { ReferenceOption } from './fields.js';
+import { ChevronUpDownIcon, MagnifyingGlassIcon, XMarkIcon } from './icons.js';
 
 const controlClass =
-  'w-full rounded border border-gray-300 px-3 py-2 text-left text-sm focus:border-gray-500 focus:outline-none disabled:opacity-50';
+  'flex w-full items-center gap-2 rounded border border-gray-300 px-3 py-2 text-left text-sm focus:border-gray-500 focus:outline-none disabled:opacity-50';
 
 export interface ReferenceComboboxProps {
   /** the currently selected row id, or '' for none. */
@@ -144,37 +145,42 @@ export function ReferenceCombobox({ value, onChange, targetModel, required, disa
         className={controlClass}
       >
         {selected ? (
-          <span className="text-gray-900">{selected.label}</span>
+          <span className="min-w-0 flex-1 truncate text-gray-900">{selected.label}</span>
         ) : (
-          <span className="text-gray-400">{required ? 'Select…' : '—'}</span>
+          <span className="min-w-0 flex-1 truncate text-gray-400">{required ? 'Select…' : '—'}</span>
         )}
+        <ChevronUpDownIcon className="h-4 w-4 shrink-0 text-gray-400" />
       </button>
 
       {open && (
         <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-gray-200 bg-white shadow-lg">
-          <input
-            autoFocus
-            type="text"
-            value={query}
-            placeholder="Search…"
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setOpen(false);
-              else if (e.key === 'Enter' && results[0]) {
-                e.preventDefault();
-                choose(results[0]);
-              }
-            }}
-            className="w-full rounded-t-md border-b border-gray-200 px-3 py-2 text-sm focus:outline-none"
-          />
+          <div className="flex items-center gap-2 border-b border-gray-200 px-3">
+            <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-gray-400" />
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              placeholder="Search…"
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setOpen(false);
+                else if (e.key === 'Enter' && results[0]) {
+                  e.preventDefault();
+                  choose(results[0]);
+                }
+              }}
+              className="w-full py-2 text-sm focus:outline-none"
+            />
+          </div>
           <div className="max-h-60 overflow-y-auto py-1">
             {!required && (
               <button
                 type="button"
                 onClick={() => choose(null)}
-                className="block w-full px-3 py-1.5 text-left text-sm text-gray-500 hover:bg-gray-50"
+                className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-sm text-gray-500 hover:bg-gray-50"
               >
-                — (clear)
+                <XMarkIcon className="h-3.5 w-3.5" />
+                Clear
               </button>
             )}
             {results.map((opt) => (

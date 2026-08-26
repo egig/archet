@@ -8,7 +8,8 @@ import { formatCellValue } from './format.js';
 import { OperationButton } from './OperationButton.js';
 import { queryKeys } from './query-keys.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
-import type { FilterNode } from './FilterBar.js';
+import { countFilters, sanitizeFilters, type FilterNode } from './FilterBar.js';
+import { ChevronLeftIcon, ChevronRightIcon, EditIcon, FilterIcon, PlusIcon, TrashIcon } from './icons.js';
 
 const DEFAULT_LIMIT = 20;
 
@@ -23,8 +24,8 @@ export interface RowTableQuery {
 export interface RowTableProps {
   model: ConsoleModelMeta;
   query: RowTableQuery;
-  /** rendered between the New-button header and the table itself — `WorkspaceViewTable` uses
-   * this slot for its `FilterBar`; `ModelListPage` leaves it unset. */
+  /** the collapsible filter section, revealed by the header's "Filter" toggle — `WorkspaceViewTable`
+   * passes its `FilterBar` here; `ModelListPage` leaves it unset (no toggle button then). */
   toolbar?: ReactNode;
   /** where the New/Edit links point, as a prefix for `/new` and `/:id` — defaults to
    * `/${model.name}` (`ModelListPage`'s own route). `WorkspaceViewTable` overrides this to
@@ -45,6 +46,11 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
 
   const [offset, setOffset] = useState(0);
 
+  const activeFilterCount = useMemo(() => countFilters(query.filters), [query.filters]);
+  // always collapsed on mount — the header toggle reveals it; the "Filter (n)" badge signals when
+  // filters are active while it's closed.
+  const [showFilters, setShowFilters] = useState(false);
+
   const limit = query.limit ?? DEFAULT_LIMIT;
   const queryKeyString = useMemo(() => JSON.stringify([model.name, query]), [model.name, query]);
 
@@ -57,7 +63,10 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
   useEffect(() => setOffset(0), [queryKeyString]);
 
   const sort = query.sortField ? `${query.sortDirection === 'desc' ? '-' : ''}${query.sortField}` : undefined;
-  const listParams = { limit, offset, include: includes, filters: query.filters, sort };
+  // incomplete clauses (a reference `=` with nothing picked, an empty number box) are stripped
+  // here too — not just on Apply — so a stale/hand-built saved filter can't 500 the listing.
+  const filtersForQuery = useMemo(() => sanitizeFilters(query.filters ?? []), [query.filters]);
+  const listParams = { limit, offset, include: includes, filters: filtersForQuery, sort };
 
   const {
     data: page,
@@ -99,14 +108,35 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-gray-900">{model.label}</h1>
-        {canCreate && (
-          <Link to={{ pathname: `${base}/new`, search }} className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800">
-            New
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {toolbar && (
+            <button
+              type="button"
+              onClick={() => setShowFilters((v) => !v)}
+              aria-expanded={showFilters}
+              className={`flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${
+                showFilters
+                  ? 'border-gray-400 bg-gray-100 text-gray-800'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <FilterIcon className="h-4 w-4" />
+              Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            </button>
+          )}
+          {canCreate && (
+            <Link
+              to={{ pathname: `${base}/new`, search }}
+              className="flex items-center gap-1.5 rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800"
+            >
+              <PlusIcon className="h-4 w-4" />
+              New
+            </Link>
+          )}
+        </div>
       </div>
 
-      {toolbar}
+      {toolbar && showFilters && toolbar}
 
       {errorMessage && <p className="mb-3 text-sm text-red-600">{errorMessage}</p>}
 
@@ -163,7 +193,11 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
                   {(canUpdate || canRemove || rowOperations.length > 0) && (
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {canUpdate && (
-                        <Link to={{ pathname: `${base}/${id}`, search }} className="mr-3 text-gray-600 hover:underline">
+                        <Link
+                          to={{ pathname: `${base}/${id}`, search }}
+                          className="mr-3 inline-flex items-center gap-1 align-middle text-gray-600 hover:underline"
+                        >
+                          <EditIcon className="h-4 w-4" />
                           Edit
                         </Link>
                       )}
@@ -171,7 +205,12 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
                         <OperationButton key={op.name} modelName={model.name} id={id} row={row} operation={op} onDone={refetchRows} />
                       ))}
                       {canRemove && (
-                        <button type="button" onClick={() => void handleDelete(id)} className="text-red-600 hover:underline">
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(id)}
+                          className="inline-flex items-center gap-1 align-middle text-red-600 hover:underline"
+                        >
+                          <TrashIcon className="h-4 w-4" />
                           Delete
                         </button>
                       )}
@@ -203,17 +242,19 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
               type="button"
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - limit))}
-              className="rounded border border-gray-300 px-3 py-1 disabled:opacity-40"
+              className="flex items-center gap-1 rounded border border-gray-300 py-1 pl-2 pr-3 disabled:opacity-40"
             >
+              <ChevronLeftIcon className="h-4 w-4" />
               Prev
             </button>
             <button
               type="button"
               disabled={offset + limit >= page.total}
               onClick={() => setOffset(offset + limit)}
-              className="rounded border border-gray-300 px-3 py-1 disabled:opacity-40"
+              className="flex items-center gap-1 rounded border border-gray-300 py-1 pl-3 pr-2 disabled:opacity-40"
             >
               Next
+              <ChevronRightIcon className="h-4 w-4" />
             </button>
           </div>
         </div>

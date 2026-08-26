@@ -4,6 +4,7 @@ import { useAuth } from './auth.js';
 import { useModels } from './models.js';
 import { useDomains } from './domains.js';
 import { BrandMark } from './BrandMark.js';
+import { ChevronDownIcon, LogOutIcon, SettingsIcon, WorkspaceIcon } from './icons.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { ConsoleDomainMeta } from '../serialize-domain.js';
 
@@ -111,8 +112,9 @@ function AccountMenu({ showSettings }: { showSettings: boolean }) {
           <NavLink
             to="/"
             onClick={() => setOpen(false)}
-            className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
           >
+            <WorkspaceIcon className="h-4 w-4 text-gray-400" />
             Workspace
           </NavLink>
           {showSettings && (
@@ -120,9 +122,10 @@ function AccountMenu({ showSettings }: { showSettings: boolean }) {
               to="/settings"
               onClick={() => setOpen(false)}
               className={({ isActive }) =>
-                `block px-3 py-2 text-sm ${isActive ? 'font-medium text-gray-900' : 'text-gray-700'} hover:bg-gray-50`
+                `flex items-center gap-2 px-3 py-2 text-sm ${isActive ? 'font-medium text-gray-900' : 'text-gray-700'} hover:bg-gray-50`
               }
             >
+              <SettingsIcon className="h-4 w-4 text-gray-400" />
               Settings
             </NavLink>
           )}
@@ -132,8 +135,9 @@ function AccountMenu({ showSettings }: { showSettings: boolean }) {
               setOpen(false);
               void logout();
             }}
-            className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
           >
+            <LogOutIcon className="h-4 w-4 text-gray-400" />
             Log out
           </button>
         </div>
@@ -149,17 +153,9 @@ function AccountMenu({ showSettings }: { showSettings: boolean }) {
           {initials(user.email)}
         </span>
         <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{user.email}</span>
-        <svg
-          viewBox="0 0 20 20"
-          fill="currentColor"
+        <ChevronDownIcon
           className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-            clipRule="evenodd"
-          />
-        </svg>
+        />
       </button>
     </div>
   );

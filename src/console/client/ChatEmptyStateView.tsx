@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { createChatAndSend, listRows } from './api.js';
 import { useChats } from './chats-context.js';
 import { queryKeys } from './query-keys.js';
+import { PaperAirplaneIcon } from './icons.js';
 
 interface AgentOption {
   id: string;
@@ -105,8 +106,9 @@ export function ChatEmptyStateView({ workspaceId, onCreated }: ChatEmptyStateVie
         <button
           type="submit"
           disabled={createMutation.isPending || !agentId || !message.trim()}
-          className="w-full rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-1.5 rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
         >
+          <PaperAirplaneIcon className="h-4 w-4" />
           {createMutation.isPending ? 'Sending…' : 'Send'}
         </button>
       </form>

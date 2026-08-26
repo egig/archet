@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listChatMessages, sendChatMessage, type ChatMessageRow } from './api.js';
 import { useChats } from './chats-context.js';
 import { queryKeys } from './query-keys.js';
+import { PaperAirplaneIcon } from './icons.js';
 
 interface DisplayMessage {
   id: string;
@@ -145,8 +146,10 @@ export function ChatThreadView({ chatId, workspaceId, onTurnDone }: ChatThreadVi
         <button
           type="submit"
           disabled={sendMutation.isPending || !draft.trim()}
-          className="rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
+          aria-label="Send message"
+          className="flex items-center gap-1.5 rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
         >
+          <PaperAirplaneIcon className="h-4 w-4" />
           Send
         </button>
       </form>

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { ConsoleFieldMeta } from '../serialize-model.js';
 import { useReferenceOptions } from './fields.js';
 import { isoToDatetimeLocal, datetimeLocalToIso } from './format.js';
+import { PlusIcon, XMarkIcon } from './icons.js';
 
 export type FilterClause = [string, string, unknown];
 
@@ -12,6 +13,37 @@ export type FilterNode = FilterClause | FilterGroupClause;
 
 function isGroup(node: FilterNode): node is FilterGroupClause {
   return node.length === 2 && (node[0] === 'and' || node[0] === 'or');
+}
+
+/** A clause is "complete" once it carries a usable value: `is` needs none (it's a null-check),
+ * every other operator needs a non-empty value. Half-built clauses — e.g. a freshly-added
+ * reference `=` with nothing picked yet — carry `''`, which Postgres rejects for a uuid/number
+ * column ("invalid input syntax for type uuid"). */
+function isCompleteClause(clause: FilterClause): boolean {
+  const [, op, value] = clause;
+  if (op === 'is') return true;
+  return value !== '' && value !== null && value !== undefined;
+}
+
+/** Drops incomplete clauses (and any group left empty by that) before a filter set is run or
+ * persisted — the single guard that keeps a partially-built row out of the query layer. */
+export function sanitizeFilters(nodes: FilterNode[]): FilterNode[] {
+  const out: FilterNode[] = [];
+  for (const node of nodes) {
+    if (isGroup(node)) {
+      const conditions = node[1].filter(isCompleteClause);
+      if (conditions.length > 0) out.push([node[0], conditions] as FilterGroupClause);
+    } else if (isCompleteClause(node)) {
+      out.push(node);
+    }
+  }
+  return out;
+}
+
+/** Count of clauses that would actually apply — used for the "Filter (n)" badge. */
+export function countFilters(nodes: FilterNode[] | null | undefined): number {
+  if (!nodes) return 0;
+  return sanitizeFilters(nodes).reduce((n, node) => n + (isGroup(node) ? node[1].length : 1), 0);
 }
 
 /** Client-side mirror of `router/fields.ts`'s `OPERATORS_BY_KIND` — presentation-only (which
@@ -138,7 +170,7 @@ function FilterClauseRow({
         onChange={(e) => {
           const next = fields.find((f) => f.key === e.target.value)!;
           const nextOps = OPERATORS_BY_KIND[next.kind] ?? [];
-          onChange([next.key, nextOps[0] ?? '=', '']);
+          onChange([next.key, nextOps[0] ?? '=', defaultFilterValue(next)]);
         }}
         className={selectClass}
       >
@@ -159,17 +191,32 @@ function FilterClauseRow({
 
       {op !== 'is' && <FilterValueInput field={field} value={value} onChange={(v) => onChange([fieldKey, op, v])} />}
 
-      <button type="button" onClick={onRemove} className="text-xs text-red-600 hover:underline">
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label="Remove filter"
+        className="inline-flex items-center gap-0.5 text-xs text-red-600 hover:underline"
+      >
+        <XMarkIcon className="h-3.5 w-3.5" />
         Remove
       </button>
     </div>
   );
 }
 
+/** Seed value for a freshly-picked field — `boolean`/`enum` render as a `<select>` with no empty
+ * option, so a clause left untouched would still carry `''` and get dropped on Apply; giving it a
+ * real default up front means "add filter → Apply" works without touching the value. */
+function defaultFilterValue(field: ConsoleFieldMeta): unknown {
+  if (field.kind === 'boolean') return false;
+  if (field.kind === 'enum') return field.values?.[0] ?? '';
+  return '';
+}
+
 function newClause(filterable: ConsoleFieldMeta[]): FilterClause {
   const first = filterable[0]!;
   const ops = OPERATORS_BY_KIND[first.kind] ?? [];
-  return [first.key, ops[0] ?? '=', ''];
+  return [first.key, ops[0] ?? '=', defaultFilterValue(first)];
 }
 
 function FilterGroupBox({
@@ -200,7 +247,12 @@ function FilterGroupBox({
           </select>
           of:
         </div>
-        <button type="button" onClick={onRemove} className="text-xs text-red-600 hover:underline">
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex items-center gap-0.5 text-xs text-red-600 hover:underline"
+        >
+          <XMarkIcon className="h-3.5 w-3.5" />
           Remove group
         </button>
       </div>
@@ -218,9 +270,10 @@ function FilterGroupBox({
       <button
         type="button"
         onClick={() => onChange([logic, [...conditions, newClause(fields)]])}
-        className="text-sm text-gray-600 hover:underline"
+        className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
       >
-        + Add condition
+        <PlusIcon className="h-3.5 w-3.5" />
+        Add condition
       </button>
     </div>
   );
@@ -232,12 +285,21 @@ export interface FilterBarProps {
   fields: ConsoleFieldMeta[];
   value: FilterNode[];
   onChange: (value: FilterNode[]) => void;
+  /** when set, the bar shows an "Apply" button that hands back the current (sanitized) filter set
+   * — `WorkspaceViewTable` uses this to defer running/persisting the query until the user commits,
+   * so a half-built clause never reaches the query layer. Left unset by `AddTabDialog`, whose own
+   * "Add tab" button is the commit point. */
+  onApply?: (value: FilterNode[]) => void;
+  /** whether `value` differs from the last-applied set — drives the Apply button's enabled state. */
+  dirty?: boolean;
+  /** an apply is in flight (persisting) — shows "Applying…" and keeps the button disabled. */
+  applying?: boolean;
 }
 
 /** Manual filter builder for a `WorkspaceView` tab — a flat, implicitly-AND'd list of `[field, op,
  * value]` clauses and/or `(a AND b)`/`(a OR b)` groups, the exact shape `router/query.ts`'s
  * `FilterNode[]` consumes. */
-export function FilterBar({ fields, value, onChange }: FilterBarProps) {
+export function FilterBar({ fields, value, onChange, onApply, dirty, applying }: FilterBarProps) {
   const filterable = useMemo(() => fields.filter((f) => f.indexed), [fields]);
 
   if (filterable.length === 0) return null;
@@ -263,21 +325,33 @@ export function FilterBar({ fields, value, onChange }: FilterBarProps) {
           />
         ),
       )}
-      <div className="flex gap-3">
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={() => onChange([...value, newClause(filterable)])}
-          className="text-sm text-gray-600 hover:underline"
+          className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
         >
-          + Add filter
+          <PlusIcon className="h-3.5 w-3.5" />
+          Add filter
         </button>
         <button
           type="button"
           onClick={() => onChange([...value, ['or', [newClause(filterable)]]])}
-          className="text-sm text-gray-600 hover:underline"
+          className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
         >
-          + Add group
+          <PlusIcon className="h-3.5 w-3.5" />
+          Add group
         </button>
+        {onApply && (
+          <button
+            type="button"
+            disabled={!dirty || applying}
+            onClick={() => onApply(sanitizeFilters(value))}
+            className="ml-auto rounded bg-gray-900 px-3 py-1 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
+          >
+            {applying ? 'Applying…' : 'Apply'}
+          </button>
+        )}
       </div>
     </div>
   );

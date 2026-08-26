@@ -6,7 +6,8 @@ import { listRows, createRow, updateRow, removeRow, type OffsetPage } from './ap
 import { queryKeys } from './query-keys.js';
 import { WorkspaceViewTable, type WorkspaceViewRow } from './WorkspaceViewTable.js';
 import { Dialog } from './Dialog.js';
-import { FilterBar, type FilterNode } from './FilterBar.js';
+import { FilterBar, sanitizeFilters, type FilterNode } from './FilterBar.js';
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, XMarkIcon } from './icons.js';
 
 export interface WorkspaceTabsProps {
   workspaceId: string;
@@ -222,20 +223,27 @@ export function WorkspaceTabs({
                   type="button"
                   disabled={i === 0}
                   onClick={() => void move(v.id, -1)}
+                  aria-label="Move tab left"
                   className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
                 >
-                  ‹
+                  <ChevronLeftIcon className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   disabled={i === views.length - 1}
                   onClick={() => void move(v.id, 1)}
+                  aria-label="Move tab right"
                   className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
                 >
-                  ›
+                  <ChevronRightIcon className="h-3.5 w-3.5" />
                 </button>
-                <button type="button" onClick={() => void closeTab(v.id)} className="ml-1 text-gray-400 hover:text-red-600">
-                  ×
+                <button
+                  type="button"
+                  onClick={() => void closeTab(v.id)}
+                  aria-label="Close tab"
+                  className="ml-1 text-gray-400 hover:text-red-600"
+                >
+                  <XMarkIcon className="h-3.5 w-3.5" />
                 </button>
               </>
             )}
@@ -247,9 +255,10 @@ export function WorkspaceTabs({
             <button
               type="button"
               onClick={() => setShowAddDialog(true)}
-              className="rounded border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+              className="flex items-center gap-1 rounded border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
             >
-              + Add tab
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add tab
             </button>
           </div>
         )}
@@ -260,9 +269,19 @@ export function WorkspaceTabs({
               type="button"
               onClick={onToggleChat}
               title={chatOpen ? 'Hide chat' : 'Show chat'}
-              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+              className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
             >
-              {chatOpen ? 'Hide chat ›' : '‹ Show chat'}
+              {chatOpen ? (
+                <>
+                  Hide chat
+                  <ChevronRightIcon className="h-3.5 w-3.5" />
+                </>
+              ) : (
+                <>
+                  <ChevronLeftIcon className="h-3.5 w-3.5" />
+                  Show chat
+                </>
+              )}
             </button>
           </div>
         )}
@@ -273,6 +292,7 @@ export function WorkspaceTabs({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {active ? (
           <WorkspaceViewTable
+            key={active.id}
             view={active}
             workspaceId={workspaceId}
             locked={locked}
@@ -362,15 +382,21 @@ function AddTabDialog({
       </div>
 
       <div className="mt-6 flex justify-end gap-2">
-        <button type="button" onClick={onClose} className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          <XMarkIcon className="h-4 w-4" />
           Cancel
         </button>
         <button
           type="button"
           disabled={!model || !label.trim()}
-          onClick={() => model && onCreate({ targetModel: model.name, label: label.trim(), filters })}
-          className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+          onClick={() => model && onCreate({ targetModel: model.name, label: label.trim(), filters: sanitizeFilters(filters) })}
+          className="flex items-center gap-1.5 rounded bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
         >
+          <PlusIcon className="h-4 w-4" />
           Add tab
         </button>
       </div>
