@@ -1,6 +1,6 @@
 # Custom Operations
 
-Every model gets three builtin operations — `create`, `update`, `remove` — dispatched by the generic router. A **custom operation** is a fourth (fifth, sixth, ...) named operation a model declares itself, for a convenient action that's really just a specific write in disguise — the canonical example is a `lock`/`unlock` button that's really an `update` with `locked` set to a fixed value.
+Every model gets three builtin operations — `create`, `update`, `remove` — dispatched by the generic router. A **custom operation** is a fourth (fifth, sixth, ...) named operation a model declares itself, for a convenient action that's really just a specific write in disguise — the canonical example is a `lock`/`unlock` button that's really an `update` with `locked` set to a fixed value. The framework's own `Workspace` model (`src/workspace/models/workspace.model.ts`) is a real, worked example of exactly this pattern.
 
 ```ts
 import { defineModel, field } from '@egig/ratchet/core';

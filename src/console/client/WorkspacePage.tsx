@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
-import { listRows, updateRow, type AuthUser } from './api.js';
+import { callOperation, listRows, type AuthUser } from './api.js';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
 import { WorkspaceTabs } from './WorkspaceTabs.js';
@@ -117,9 +117,12 @@ export function WorkspacePage() {
 
   const activeWorkspace = workspaces?.find((w) => w.id === workspaceId) ?? null;
 
+  // `lock`/`unlock` are custom operations (see workspace.model.ts) — `locked` itself is no longer
+  // writable via a plain PATCH (`forbidLockedInUpdate`), so this always goes through one or the
+  // other by name rather than PATCHing `{ locked: !locked }`.
   async function toggleLock() {
     if (!activeWorkspace) return;
-    await updateRow('workspaces', activeWorkspace.id, { locked: !activeWorkspace.locked });
+    await callOperation('workspaces', activeWorkspace.id, activeWorkspace.locked ? 'unlock' : 'lock');
     await refreshWorkspaces();
   }
 
