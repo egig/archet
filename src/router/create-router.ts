@@ -121,7 +121,7 @@ function collectFilterFields(nodes: FilterNode[]): string[] {
 function assertReadFieldsAllowed(model: ModelDefinition, query: ParsedListQuery, granted: GrantedFields): void {
   if (granted === '*') return;
   const requested = collectFilterFields(query.filters);
-  if (query.sortField) requested.push(query.sortField);
+  for (const key of query.sort) requested.push(key.field);
   const fields: Record<string, string> = {};
   for (const key of requested) {
     if (key in model.fields && !granted.has(key)) fields[key] = 'field not permitted for your role';

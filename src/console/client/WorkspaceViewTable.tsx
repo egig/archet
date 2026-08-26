@@ -4,6 +4,7 @@ import { useModels } from './models.js';
 import { updateRow } from './api.js';
 import { RowTable } from './RowTable.js';
 import { FilterBar, type FilterNode } from './FilterBar.js';
+import { SortBar, type SortKey } from './SortBar.js';
 
 export interface WorkspaceViewRow {
   id: string;
@@ -11,8 +12,7 @@ export interface WorkspaceViewRow {
   targetModel: string;
   label: string;
   filters: FilterNode[] | null;
-  sortField: string | null;
-  sortDirection: 'asc' | 'desc';
+  sort: SortKey[] | null;
   include: string[] | null;
   limit: number;
   order: number;
@@ -62,6 +62,26 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
     persistFiltersMutation.mutate(filters);
   }
 
+  // Sort has no draft/Apply step — a `SortKey` is always complete, so every SortBar edit and header
+  // click applies to the table immediately (optimistic `sortState`) and persists to the row, the
+  // same way a tab rename does; a failed write rolls the state back.
+  const [sortState, setSortState] = useState<SortKey[]>(view.sort ?? []);
+  useEffect(() => {
+    setSortState(view.sort ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.id, JSON.stringify(view.sort)]);
+
+  const persistSortMutation = useMutation({
+    mutationFn: (sort: SortKey[]) => updateRow('workspace_views', view.id, { sort }),
+    onSuccess: (updated) => onChange(updated as unknown as WorkspaceViewRow),
+    onError: () => setSortState(view.sort ?? []),
+  });
+
+  function changeSort(sort: SortKey[]) {
+    setSortState(sort);
+    persistSortMutation.mutate(sort);
+  }
+
   if (!model) return <p className="text-sm text-red-600">Unknown model '{view.targetModel}'.</p>;
 
   const hasFilterableFields = model.fields.some((f) => f.indexed);
@@ -71,16 +91,16 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
       model={model}
       query={{
         filters: applied,
-        sortField: view.sortField ?? undefined,
-        sortDirection: view.sortDirection,
+        sort: sortState,
         include: view.include ?? undefined,
         limit: view.limit,
       }}
       basePath={`/workspace/${workspaceId}/${model.name}`}
-      // a View owns its filtering through the FilterBar below (persist-on-Apply); the shared
-      // RowTable's built-in ad-hoc filter must stay out of the way — including when `locked` drops
-      // the toolbar entirely.
+      // a View owns its filtering/sorting through the bars below (persisted to the row); the shared
+      // RowTable's built-in ad-hoc `?filter=`/`?sort=` overlays must stay out of the way — including
+      // when `locked` drops the editors entirely.
       builtinFilters={false}
+      builtinSort={false}
       toolbar={
         !locked && hasFilterableFields ? (
           <FilterBar
@@ -93,6 +113,8 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
           />
         ) : undefined
       }
+      onSortChange={locked ? undefined : changeSort}
+      sortToolbar={locked ? undefined : <SortBar model={model} value={sortState} onChange={changeSort} />}
     />
   );
 }

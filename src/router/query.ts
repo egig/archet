@@ -33,11 +33,20 @@ export interface CursorState {
 
 export type SortDirection = 'asc' | 'desc';
 
+export interface SortKey {
+  field: string;
+  direction: SortDirection;
+}
+
 export interface ParsedListQuery {
   limit: number;
   offset: number;
-  sortField?: string;
-  sortDirection: SortDirection;
+  /** ordered list of sort keys — `?sort=status,-createdAt` → `[{status,asc},{createdAt,desc}]`.
+   * Empty means the endpoint's default ordering (`created_at DESC`). */
+  sort: SortKey[];
+  /** `?cursor=` was present (even empty, for the first page) — opt in to cursor-mode pagination.
+   * Requires exactly one `sort` key. A bare `?sort=` stays offset-mode with the ordering applied. */
+  cursorMode: boolean;
   cursor?: CursorState;
   includeDeleted: boolean;
   include: string[];
@@ -164,6 +173,26 @@ function assertSortable(model: ModelDefinition, field: string): void {
   }
 }
 
+/** `?sort=` is a comma-separated list of `field` (asc) / `-field` (desc) keys, in priority order.
+ * Empty segments are skipped and a field repeated across segments keeps only its first appearance,
+ * so a hand-edited `?sort=name,,-name` still parses to a single well-formed key list. */
+function parseSort(model: ModelDefinition, raw: string | null): SortKey[] {
+  if (!raw) return [];
+  const out: SortKey[] = [];
+  const seen = new Set<string>();
+  for (const segment of raw.split(',')) {
+    const trimmed = segment.trim();
+    if (!trimmed) continue;
+    const direction: SortDirection = trimmed.startsWith('-') ? 'desc' : 'asc';
+    const field = trimmed.replace(/^-/, '');
+    assertSortable(model, field);
+    if (seen.has(field)) continue;
+    seen.add(field);
+    out.push({ field, direction });
+  }
+  return out;
+}
+
 function assertValidOperator(model: ModelDefinition, field: string, op: string): asserts op is FilterOp {
   if (!VALID_OPS.has(op)) {
     throw new PipelineError({ code: 'INVALID_OPERATOR', status: 400, fields: { [field]: `unknown operator '${op}'` } });
@@ -179,16 +208,18 @@ export function parseListQuery(
   searchParams: URLSearchParams,
   registry: Record<string, ModelDefinition>,
 ): ParsedListQuery {
-  // `-field` reverses direction, matching the common REST/JSON:API convention.
-  const rawSort = searchParams.get('sort');
-  const sortDirection: SortDirection = rawSort?.startsWith('-') ? 'desc' : 'asc';
-  const sortField = rawSort ? rawSort.replace(/^-/, '') : undefined;
-  if (sortField) assertSortable(model, sortField);
+  const sort = parseSort(model, searchParams.get('sort'));
 
   const cursorRaw = searchParams.get('cursor');
+  // `?cursor=` (present at all, even empty for the first page) opts into cursor-mode pagination; a
+  // bare `?sort=` stays offset-mode with the ordering applied.
+  const cursorMode = cursorRaw !== null;
   const cursor = cursorRaw ? decodeCursor(cursorRaw) : undefined;
-  if (cursor && !sortField) {
+  if (cursorMode && sort.length === 0) {
     throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { cursor: 'requires ?sort=<field>' } });
+  }
+  if (cursorMode && sort.length > 1) {
+    throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { cursor: 'cursor pagination supports a single sort field' } });
   }
 
   const filters: FilterNode[] = [];
@@ -229,8 +260,8 @@ export function parseListQuery(
   return {
     limit: parseLimit(searchParams.get('limit')),
     offset: parseOffset(searchParams.get('offset')),
-    sortField,
-    sortDirection,
+    sort,
+    cursorMode,
     cursor,
     includeDeleted: searchParams.get('includeDeleted') === 'true',
     include: parseInclude(model, searchParams.get('include'), registry),

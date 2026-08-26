@@ -19,17 +19,18 @@ Every response body is `{ data, meta? }`. Errors are `{ error: { code, message, 
 ### Pagination
 
 - `?limit=` — default 20, clamped (not rejected) to a max of 100.
-- `?offset=` — offset-mode pagination; response `meta` is `{ total, limit, offset }`.
-- `?sort=` + `?cursor=` — cursor-mode pagination; response `meta` is `{ nextCursor, hasMore }`. A cursor requires an accompanying `?sort=`.
+- `?offset=` — offset-mode pagination; response `meta` is `{ total, limit, offset }`. This is the default, and a bare `?sort=` stays in it (just ordered).
+- `?cursor=` — cursor-mode pagination; response `meta` is `{ nextCursor, hasMore }`. Requires an accompanying single-key `?sort=`; pass `?cursor=` empty for the first page, then the returned `nextCursor` for each subsequent one.
 
 ### Sorting
 
 ```
-GET /api/invoices?sort=amount     # ascending
-GET /api/invoices?sort=-amount    # descending, '-' prefix
+GET /api/invoices?sort=amount           # ascending
+GET /api/invoices?sort=-amount          # descending, '-' prefix
+GET /api/invoices?sort=status,-amount   # multi-column: status asc, then amount desc
 ```
 
-Only fields declared `indexed: true` can be sorted on — otherwise the API returns `UNSORTABLE_FIELD`.
+Only fields declared `indexed: true` (plus the always-indexed system columns `id`, `createdAt`, `updatedAt`, `createdById`) can be sorted on — otherwise the API returns `UNSORTABLE_FIELD`. Cursor-mode pagination accepts a single sort key only.
 
 ### Filtering
 

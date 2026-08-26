@@ -120,7 +120,8 @@ export async function listRows(
     /** the same shape `router/query.ts`'s `FilterNode[]` parses, sent as `?filter=<json>` (Q:
      * WorkspaceView's saved `filters` round-trip straight through here). */
     filters?: FilterNode[];
-    /** `-field` for descending, matching `router/query.ts`'s convention. */
+    /** comma-separated priority list of `field` / `-field` (descending) keys, matching
+     * `router/query.ts`'s `?sort=` convention — e.g. `'status,-createdAt'`. */
     sort?: string;
   },
 ): Promise<OffsetPage> {

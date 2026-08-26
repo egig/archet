@@ -100,7 +100,7 @@ describeIfDb('requireWorkspaceOwnership (against a live Postgres)', () => {
       CREATE TABLE IF NOT EXISTS workspace_views (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         user_id uuid NOT NULL, workspace_id uuid NOT NULL, target_model varchar NOT NULL, label varchar NOT NULL,
-        filters jsonb, sort_field varchar, sort_direction varchar NOT NULL DEFAULT 'asc', include jsonb,
+        filters jsonb, sort jsonb, include jsonb,
         "limit" integer NOT NULL DEFAULT 20, "order" integer NOT NULL DEFAULT 0
       )`);
   });
@@ -297,7 +297,7 @@ describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a l
       CREATE TABLE IF NOT EXISTS workspace_views (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         user_id uuid NOT NULL, workspace_id uuid NOT NULL, target_model varchar NOT NULL, label varchar NOT NULL,
-        filters jsonb, sort_field varchar, sort_direction varchar NOT NULL DEFAULT 'asc', include jsonb,
+        filters jsonb, sort jsonb, include jsonb,
         "limit" integer NOT NULL DEFAULT 20, "order" integer NOT NULL DEFAULT 0
       )`);
     await db.execute(sql`
@@ -343,8 +343,7 @@ describeIfDb('createDefaultWorkspace (src/workspace/provisioning.ts, against a l
       targetModel: 'leads',
       label: 'My Leads',
       filters: [['status', '=', 'open']],
-      sortField: 'createdAt',
-      sortDirection: 'desc',
+      sort: [{ field: 'createdAt', direction: 'desc' }],
       order: 0,
     });
     await insertRow(db, WorkspaceView, {

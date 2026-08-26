@@ -25,6 +25,7 @@ export async function runDev(cwd: string): Promise<void> {
   let child: ChildProcess | null = null;
   let restarting = false;
   let pendingRestart = false;
+  let shuttingDown = false;
 
   // Re-invoke this same CLI entry point (whatever launched `dev` — the .ts source under tsx,
   // or the built dist/cli/bin.js) with `serve` instead of `dev`, via `npx tsx` so both cases work
@@ -35,7 +36,11 @@ export async function runDev(cwd: string): Promise<void> {
   function startServer(): void {
     child = spawn('npx', ['tsx', cliEntry, 'serve'], { cwd, stdio: 'inherit' });
     child.on('exit', (code, signal) => {
-      if (!restarting && code !== 0 && signal === null) {
+      // Ctrl-C reaches the child directly through the shared terminal process group, so it exits
+      // with SIGINT (code 130) before `shutdown` gets a turn — that, a signal kill, and our own
+      // restart/shutdown teardown are all deliberate, not a crash worth reporting.
+      const deliberate = restarting || shuttingDown || signal !== null || code === 130 || code === 143;
+      if (!deliberate && code !== 0) {
         console.error(`[dev] server exited with code ${code}`);
       }
     });
@@ -44,11 +49,14 @@ export async function runDev(cwd: string): Promise<void> {
   async function stopServer(): Promise<void> {
     if (!child) return;
     const dying = child;
+    child = null;
+    // May already be gone — Ctrl-C kills it via the terminal before we get here — in which case
+    // `exit` has fired and won't fire again, so waiting on it would hang forever.
+    if (dying.exitCode !== null || dying.signalCode !== null) return;
     await new Promise<void>((resolve) => {
       dying.once('exit', () => resolve());
       dying.kill();
     });
-    child = null;
   }
 
   async function restart(reason: string): Promise<void> {
@@ -87,6 +95,8 @@ export async function runDev(cwd: string): Promise<void> {
   });
 
   const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     clearTimeout(debounceTimer);
     await stopServer();
     await consoleHandle.stop();

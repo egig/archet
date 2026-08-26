@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { defineModel, field, pipe, validate, persist, requireOwnsRow } from '../../core/index.js';
 import { requireWorkspaceOwnership } from '../pipeline.js';
 
-// a bare `field.json()` defaults to an object schema (z.record) — `filters`/`include` are arrays,
-// so each needs its own explicit shape (core/validation.ts's `baseSchemaForField` can't infer one).
+// a bare `field.json()` defaults to an object schema (z.record) — `filters`/`sort`/`include` are
+// arrays, so each needs its own explicit shape (core/validation.ts's `baseSchemaForField` can't
+// infer one).
 //
 // A filter entry is either a plain `[field, op, value]` clause, or a `[logic, [clauses]]` group —
 // one level of `(a AND b)`/`(a OR b)` grouping around plain clauses, deliberately not recursive
@@ -14,6 +15,9 @@ const filterClauseSchema = z.tuple([z.string(), z.string(), z.unknown()]);
 const filterGroupSchema = z.tuple([z.enum(['and', 'or']), z.array(filterClauseSchema)]);
 const filtersSchema = z.array(z.union([filterClauseSchema, filterGroupSchema]));
 const includeSchema = z.array(z.string());
+// an ordered list of sort keys, mirroring `router/query.ts`'s `SortKey[]` — `?sort=a,-b` round-trips
+// through here as `[{ field: 'a', direction: 'asc' }, { field: 'b', direction: 'desc' }]`.
+const sortSchema = z.array(z.object({ field: z.string(), direction: z.enum(['asc', 'desc']) }));
 
 /**
  * One tab in a `Workspace` (workspace.model.ts): a saved filter/sort/columns configuration
@@ -39,8 +43,7 @@ export const WorkspaceView = defineModel('workspace_views', {
     targetModel: field.modelRef({ required: true, indexed: true, displayText: 'Model' }),
     label: field.string({ required: true, maxLength: 255 }),
     filters: field.json({ required: false, schema: filtersSchema }),
-    sortField: field.string({ required: false, maxLength: 255 }),
-    sortDirection: field.enum(['asc', 'desc'], { default: 'asc' }),
+    sort: field.json({ required: false, schema: sortSchema }),
     include: field.json({ required: false, schema: includeSchema }),
     limit: field.integer({ default: 20 }),
     order: field.integer({ default: 0, indexed: true }),

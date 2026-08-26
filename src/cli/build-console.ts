@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import * as esbuild from 'esbuild';
 import type { resolveDirs } from './load-config.js';
 
@@ -47,21 +48,41 @@ async function hashFile(filePath: string): Promise<string> {
   return createHash('sha1').update(content).digest('hex').slice(0, 8);
 }
 
+const require = createRequire(import.meta.url);
+
+/** Absolute path to the standalone Tailwind CLI's entry script. `@tailwindcss/cli` is a direct
+ * dependency of this package, so it resolves whether it's hoisted to the consumer's top-level
+ * `node_modules` or nested under `@egig/ratchet` — unlike `npx tailwindcss`, which fails in a
+ * consumer app with "could not determine executable to run" because the CLI is a transitive
+ * dependency and its bin is never linked into the consumer's root `node_modules/.bin`. The
+ * package only exposes `./package.json` through its `exports`, so resolve that and read the
+ * `bin` entry from it, then spawn it directly with `node`. */
+function tailwindCliEntry(): string {
+  const pkgJsonPath = require.resolve('@tailwindcss/cli/package.json');
+  const pkg = require('@tailwindcss/cli/package.json') as { bin: Record<string, string> };
+  return path.resolve(path.dirname(pkgJsonPath), pkg.bin.tailwindcss!);
+}
+
 function runTailwindOnce(input: string, output: string, minify: boolean): Promise<void> {
   return new Promise((resolve, reject) => {
-    const args = ['tailwindcss', '--input', input, '--output', output];
+    const args = [tailwindCliEntry(), '--input', input, '--output', output];
     if (minify) args.push('--minify');
-    const child = spawn('npx', args, { stdio: 'inherit' });
+    const child = spawn(process.execPath, args, { stdio: 'inherit' });
     child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`tailwindcss exited with code ${code}`))));
     child.on('error', reject);
   });
 }
 
 function spawnTailwindWatch(input: string, output: string): ChildProcess {
-  return spawn('npx', ['tailwindcss', '--input', input, '--output', output, '--watch=always'], { stdio: 'inherit' });
+  return spawn(process.execPath, [tailwindCliEntry(), '--input', input, '--output', output, '--watch=always'], {
+    stdio: 'inherit',
+  });
 }
 
 async function killChild(child: ChildProcess): Promise<void> {
+  // Ctrl-C reaches the child directly through the shared terminal process group, so it may
+  // already be gone — `exit` has then fired and won't fire again, so waiting on it would hang.
+  if (child.exitCode !== null || child.signalCode !== null) return;
   await new Promise<void>((resolve) => {
     child.once('exit', () => resolve());
     child.kill();

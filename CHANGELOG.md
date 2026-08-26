@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-column sort**: `?sort=` now takes a comma-separated, priority-ordered list of keys — `?sort=status,-createdAt` sorts by `status` ascending, then `createdAt` descending. `id`/`createdAt`/`updatedAt`/`createdById` are always sortable (previously only `indexed: true` fields were).
+- Console: sortable column headers plus a "Sort" panel next to "Filter" — click a header to sort by it (cycles asc → desc → off), shift-click to add it as a secondary key, or compose the full ordered list in the panel. Works on model list pages (as a shareable `?sort=` URL overlay) and on workspace tabs (persisted to the saved view).
 - Granular, per-field permission: `Permission` rows can now name a `field` (`resource`/`action`/`field`, any of which may be `'*'`) to grant a role read/write access to individual fields of a model, not just whole resource:action pairs.
 - `ilike` filter operator — the case-insensitive form of `like` for string/text fields (`?filter=[["name","ilike","%ada%"]]`).
 - `Workspace.chatEnabled` (defaults `true`): a persistent per-workspace setting that removes the console's agent chat panel and its show/hide toggle entirely when off, distinct from the per-browser hide toggle.
@@ -22,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** field-level access is secure-by-default — a role with a `(resource, action)` grant but no matching `field` grant gets zero fields, not every field. Existing `Permission` rows need a `field: '*'` added (or per-field rows) to keep working after upgrading; the bootstrap Root role created by `POST /api/auth/setup` already does this automatically.
 - `requireAuth`/`requirePermission` no longer need to be composed by hand into a model's own `operations` — the router applies both automatically. They're still exported for custom/dedicated routers that bypass the generic router entirely (e.g. an agent tool call, `automation/tool.ts`).
 - **Breaking:** `Workspace` freezes/unfreezes a row via `lock`/`unlock` custom operations (built on `presetFields()`, above) instead of a plain `PATCH { locked: … }` — a role needs its own `lock`/`unlock` grant in addition to the `update`+`locked` field grant it already needed. The console's "Lock workspace"/"Unlock workspace" button calls the new operations.
+- **Breaking:** a bare `?sort=` on `GET /api/:model` is now offset-mode (response `meta` is `{ total, limit, offset }`, just ordered) instead of switching to cursor-mode. Cursor-mode pagination now requires an explicit `?cursor=` (pass it empty for the first page) alongside a single-key `?sort=`.
+- **Breaking:** `workspace_views.sortField` + `sortDirection` are replaced by a single `sort` JSONB column holding an ordered `[{ field, direction }]` list. Consumer apps must re-run `ratchet migrate`; the `update_workspace_views` agent tool now takes `sort` instead of the two scalar fields.
+
+### Fixed
+
+- `ratchet dev`/`ratchet build` no longer shell out to `npx tailwindcss` for the console stylesheet — it invoked the Tailwind CLI as if it were a consumer dependency and failed with `could not determine executable to run` in any app that didn't also install `@tailwindcss/cli`. The framework now resolves and runs its own bundled `@tailwindcss/cli`.
+- `ratchet dev` no longer prints `[dev] server exited with code 130` on Ctrl-C — the interrupt reaches the spawned server directly through the terminal, and that (plus signal kills) is now recognized as a deliberate shutdown rather than a crash. Shutdown also no longer hangs when the server has already exited.
 
 ## [v0.1.0] - 2026-08-24
 

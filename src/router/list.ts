@@ -289,9 +289,12 @@ export async function listRows(
   if (!query.includeDeleted) whereParts.push(sql`t.deleted_at IS NULL`);
   for (const node of query.filters) whereParts.push(filterNodeSql(model, node));
 
-  if (query.sortField && query.cursor) {
-    const sortCol = sql`t.${sql.identifier(toSnakeCase(query.sortField))}`;
-    const cmp = query.sortDirection === 'asc' ? sql`>` : sql`<`;
+  // cursor-mode is opt-in via `?cursor=` and `query.ts` guarantees exactly one sort key for it.
+  const cursorKey = query.cursorMode ? query.sort[0]! : undefined;
+
+  if (cursorKey && query.cursor) {
+    const sortCol = sql`t.${sql.identifier(toSnakeCase(cursorKey.field))}`;
+    const cmp = cursorKey.direction === 'asc' ? sql`>` : sql`<`;
     whereParts.push(
       sql`(${sortCol}, t.id) ${cmp} (${query.cursor.value}, ${query.cursor.id})`,
     );
@@ -302,14 +305,18 @@ export async function listRows(
   const selectCols = selectListSql(model, includes);
 
   let orderSql: SQL;
-  if (query.sortField) {
-    const dir = query.sortDirection === 'asc' ? sql`ASC` : sql`DESC`;
-    orderSql = sql` ORDER BY t.${sql.identifier(toSnakeCase(query.sortField))} ${dir}, t.id ${dir}`;
+  if (query.sort.length > 0) {
+    const keyParts = query.sort.map(
+      (k) => sql`t.${sql.identifier(toSnakeCase(k.field))} ${k.direction === 'asc' ? sql`ASC` : sql`DESC`}`,
+    );
+    // id tiebreak follows the last key's direction — a stable, total order (needed for cursor paging).
+    const lastDir = query.sort[query.sort.length - 1]!.direction === 'asc' ? sql`ASC` : sql`DESC`;
+    orderSql = sql` ORDER BY ${sql.join(keyParts, sql`, `)}, t.id ${lastDir}`;
   } else {
     orderSql = sql` ORDER BY t.created_at DESC, t.id DESC`;
   }
 
-  if (query.sortField) {
+  if (cursorKey) {
     // cursor mode (§5): fetch one extra row to know whether another page exists.
     const rows = (await db.execute(
       sql`SELECT ${selectCols} FROM ${tableIdent} AS t${joinClause}${whereSql}${orderSql} LIMIT ${query.limit + 1}`,
@@ -322,7 +329,7 @@ export async function listRows(
     let nextCursor: string | null = null;
     if (hasMore) {
       const last = page[page.length - 1]!;
-      nextCursor = encodeCursor({ value: last[query.sortField], id: last.id as string });
+      nextCursor = encodeCursor({ value: last[cursorKey.field], id: last.id as string });
     }
     return { mode: 'cursor', rows: page, nextCursor, hasMore };
   }

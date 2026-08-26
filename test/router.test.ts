@@ -178,13 +178,38 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe('INVALID_OPERATOR');
   });
 
-  it('sort mode returns a cursor envelope, and the cursor pages forward without repeats', async () => {
+  it('a bare ?sort= stays offset-mode (keeps { total, limit, offset }), rows sorted', async () => {
     const a = await createAuthor('Sort Author');
+    for (const [title, status] of [['b1', 'published'], ['b2', 'draft'], ['b3', 'published']] as const) {
+      await app.request('/books', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ authorId: a, title, price: '1.00', status }) });
+    }
+
+    const res = await app.request('/books?sort=status');
+    const body = (await res.json()) as { data: { status: string }[]; meta: Record<string, unknown> };
+    expect(body.meta).toEqual({ total: 3, limit: 20, offset: 0 });
+    expect(body.data.map((r) => r.status)).toEqual(['draft', 'published', 'published']);
+  });
+
+  it('multi-key ?sort= orders by each key in turn (comma-separated, `-` for desc)', async () => {
+    const a = await createAuthor('Multi Sort Author');
+    for (const [title, status] of [['b1', 'published'], ['b2', 'draft'], ['b3', 'published'], ['b4', 'draft']] as const) {
+      await app.request('/books', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ authorId: a, title, price: '1.00', status }) });
+    }
+
+    // status asc, then newest-first within each status (id is uuid v7 — monotonic with insert order).
+    const res = await app.request('/books?sort=status,-id');
+    const body = (await res.json()) as { data: { title: string }[] };
+    expect(body.data.map((r) => r.title)).toEqual(['b4', 'b2', 'b3', 'b1']);
+  });
+
+  it('?sort= + ?cursor= is cursor-mode, and the cursor pages forward without repeats', async () => {
+    const a = await createAuthor('Cursor Author');
     for (const [title, status] of [['b1', 'draft'], ['b2', 'published'], ['b3', 'draft']] as const) {
       await app.request('/books', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ authorId: a, title, price: '1.00', status }) });
     }
 
-    const page1 = await app.request('/books?sort=status&limit=2');
+    // empty `?cursor=` opts into cursor-mode for the first page.
+    const page1 = await app.request('/books?sort=status&limit=2&cursor=');
     const body1 = (await page1.json()) as { data: { title: string }[]; meta: { nextCursor: string | null; hasMore: boolean } };
     expect(body1.data).toHaveLength(2);
     expect(body1.meta.hasMore).toBe(true);
@@ -197,6 +222,12 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
 
     const allTitles = [...body1.data, ...body2.data].map((r) => r.title).sort();
     expect(allTitles).toEqual(['b1', 'b2', 'b3']);
+  });
+
+  it('?cursor= with a multi-key ?sort= -> 400 (cursor paging is single-key only)', async () => {
+    const res = await app.request('/books?sort=status,-id&cursor=');
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('VALIDATION_ERROR');
   });
 
   it('?include=<relation> expands as a sibling key without dropping the FK scalar (Q5)', async () => {
