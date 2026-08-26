@@ -89,7 +89,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS permissions (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
-        role_id uuid NOT NULL, resource varchar NOT NULL, action varchar NOT NULL
+        role_id uuid NOT NULL, resource varchar NOT NULL, action varchar NOT NULL, field varchar
       )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS users (
@@ -311,8 +311,8 @@ describeIfDb('auth system (against a live Postgres)', () => {
     await db.execute(sql`UPDATE users SET role_id = ${roleId} WHERE id = ${user.id}`);
 
     const withRole = await authApp.request('/me', { headers: { authorization: `Bearer ${token}` } });
-    const body = (await withRole.json()) as { data: { permissions: { resource: string; action: string }[] } };
-    expect(body.data.permissions).toEqual([{ resource: 'invoices', action: 'list' }]);
+    const body = (await withRole.json()) as { data: { permissions: { resource: string; action: string; field: string | null }[] } };
+    expect(body.data.permissions).toEqual([{ resource: 'invoices', action: 'list', field: null }]);
   });
 
   describe('cookie-based session (admin SPA transport)', () => {
@@ -403,9 +403,11 @@ describeIfDb('auth system (against a live Postgres)', () => {
     await db.execute(
       sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${adminRoleId}, ${now}, ${now}, 'admin')`,
     );
+    // `field: '*'` — 'create' is a field-shaped action (see FIELDLESS_ACTIONS, src/auth/pipeline.ts):
+    // secure-by-default field permission means a grant naming no field at all grants none.
     await db.execute(
-      sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action)
-          VALUES (${generateId()}, ${now}, ${now}, ${adminRoleId}, 'roles', 'create')`,
+      sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
+          VALUES (${generateId()}, ${now}, ${now}, ${adminRoleId}, 'roles', 'create', '*')`,
     );
     await db.execute(sql`UPDATE users SET role_id = ${adminRoleId} WHERE id = ${user.id}`);
 
@@ -464,9 +466,29 @@ describeIfDb('auth system (against a live Postgres)', () => {
   });
 
   describe('ownerField scoping (ApiModelOptions.ownerField, core/model.ts + create-router.ts)', () => {
+    // The generic router now requires a matching Permission row for every route by default,
+    // including reads (the implicit 'read' action) — a registered-but-roleless user (as
+    // `registerUser` produces) has none, so `GET /notes` alone would 403 before ownerField
+    // scoping ever runs. Grants a fresh role read access to every field of `resource` and assigns
+    // it to `userId`, mirroring what an admin would set up via `Permission` in a real app.
+    async function grantRead(userId: string, resource: string): Promise<void> {
+      const roleId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(
+        sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, ${`reader-${roleId}`})`,
+      );
+      await db.execute(
+        sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
+            VALUES (${generateId()}, ${now}, ${now}, ${roleId}, ${resource}, 'read', '*')`,
+      );
+      await db.execute(sql`UPDATE users SET role_id = ${roleId} WHERE id = ${userId}`);
+    }
+
     it('GET /:model scopes results to the requesting user, additively (cannot see other rows)', async () => {
       const a = await registerUser('owner-a@example.com', 'pw');
       const b = await registerUser('owner-b@example.com', 'pw');
+      await grantRead(a.user.id as string, 'notes');
+      await grantRead(b.user.id as string, 'notes');
       await insertRow(db, Note, { userId: a.user.id, text: 'a-note' });
       await insertRow(db, Note, { userId: b.user.id, text: 'b-note' });
 
@@ -482,6 +504,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
     it("GET /:model/:id 404s when the row isn't the requesting user's own", async () => {
       const a = await registerUser('owner-c@example.com', 'pw');
       const b = await registerUser('owner-d@example.com', 'pw');
+      await grantRead(a.user.id as string, 'notes');
       const bNote = await insertRow(db, Note, { userId: b.user.id, text: 'private' });
 
       const res = await apiApp.request(`/notes/${bNote.id}`, { headers: { authorization: `Bearer ${a.token}` } });

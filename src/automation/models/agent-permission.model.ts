@@ -1,5 +1,5 @@
 import { defineModel, field, pipe, validate, persist } from '../../core/index.js';
-import { requireAuth, requirePermission, requireValidPermissionTarget } from '../../auth/pipeline.js';
+import { requireValidPermissionTarget } from '../../auth/pipeline.js';
 
 /**
  * Grants an `Agent` the ability to call one model operation as a tool — the same
@@ -23,21 +23,8 @@ export const AgentPermission = defineModel('agent_permissions', {
     action: field.actionRef({ required: true, allowWildcard: true }),
   },
   operations: {
-    create: pipe(
-      requireAuth,
-      requirePermission('agent_permissions', 'create'),
-      validate,
-      requireValidPermissionTarget,
-      persist,
-    ),
-    update: pipe(
-      requireAuth,
-      requirePermission('agent_permissions', 'update'),
-      validate,
-      requireValidPermissionTarget,
-      persist,
-    ),
-    remove: pipe(requireAuth, requirePermission('agent_permissions', 'remove'), persist.remove),
+    create: pipe(validate, requireValidPermissionTarget, persist),
+    update: pipe(validate, requireValidPermissionTarget, persist),
   },
   // without this, the console's default label is `humanize(model.name)` — a bare capitalize, no
   // underscore-to-space split (see `console/serialize-model.ts`) — so 'agent_permissions' would

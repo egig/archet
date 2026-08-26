@@ -44,6 +44,7 @@ const OPERATORS_BY_KIND: Record<ColumnKind, ReadonlySet<string>> = {
   reference: new Set(['=', '!=', 'in', 'is']),
   modelRef: new Set(['=', '!=', 'in', 'is']),
   actionRef: new Set(['=', '!=', 'in', 'is']),
+  fieldRef: new Set(['=', '!=', 'in', 'is']),
   uuid: new Set(['=', '!=', 'in', 'is']),
   json: new Set([]),
   // Q13: a `file` field's value is an object — equality/ordering/text-search on it are

@@ -1,6 +1,6 @@
 import { defineModel, field, pipe, validate, persist } from '../../core/index.js';
 import { createDefaultWorkspace } from '../../workspace/provisioning.js';
-import { hashPassword, requireAuth, requirePermission } from '../pipeline.js';
+import { hashPassword } from '../pipeline.js';
 
 export const User = defineModel('users', {
   fields: {
@@ -11,10 +11,10 @@ export const User = defineModel('users', {
     active: field.boolean({ default: true }),
   },
   operations: {
-    // admin-driven creation via generic `POST /api/users` — gated like any other model.
-    create: pipe(requireAuth, requirePermission('users', 'create'), hashPassword, validate, persist, createDefaultWorkspace),
-    update: pipe(requireAuth, requirePermission('users', 'update'), hashPassword, validate, persist),
-    remove: pipe(requireAuth, requirePermission('users', 'remove'), persist.remove),
+    // admin-driven creation via generic `POST /api/users` — implicitly gated like any other model
+    // (see create-router.ts), same as every operation below.
+    create: pipe(hashPassword, validate, persist, createDefaultWorkspace),
+    update: pipe(hashPassword, validate, persist),
   },
 });
 

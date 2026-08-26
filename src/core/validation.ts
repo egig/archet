@@ -28,6 +28,7 @@ function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
       return z.string().uuid();
     case 'modelRef':
     case 'actionRef':
+    case 'fieldRef':
       // intentionally not checked against the registry here — no live registry exists when a
       // model's static field definitions are built. The real check is
       // `requireValidPermissionTarget` (ratchet/auth), which runs per-request with `ctx.registry`.

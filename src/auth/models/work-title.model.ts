@@ -1,5 +1,4 @@
-import { defineModel, field, pipe, validate, persist } from '../../core/index.js';
-import { requireAuth, requirePermission } from '../pipeline.js';
+import { defineModel, field } from '../../core/index.js';
 
 /**
  * A named, ranked position a `User` (`user.model.ts`'s `workTitleId`) can hold — at most one per
@@ -23,11 +22,6 @@ export const WorkTitle = defineModel('work_titles', {
       indexed: true,
       displayText: 'Mandatory Workspace Template',
     }),
-  },
-  operations: {
-    create: pipe(requireAuth, requirePermission('work_titles', 'create'), validate, persist),
-    update: pipe(requireAuth, requirePermission('work_titles', 'update'), validate, persist),
-    remove: pipe(requireAuth, requirePermission('work_titles', 'remove'), persist.remove),
   },
   console: { label: 'Work Titles', displayField: 'name' },
 });

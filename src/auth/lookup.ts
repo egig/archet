@@ -75,12 +75,16 @@ export async function findUserByEmail(db: AnyDb, email: string): Promise<UserRow
 export interface PermissionRow {
   resource: string;
   action: string;
+  /** null for a row scoped to a fieldless action (`remove`/`lock`/`unlock`) — see
+   * `requireValidPermissionTarget`, which enforces that a `read`/`create`/`update`/`*` row always
+   * has one and a `remove`/`lock`/`unlock` row never does. */
+  field: string | null;
 }
 
 export async function listPermissionsForRole(db: AnyDb, roleId: string): Promise<PermissionRow[]> {
   const rows = await execRows(
     db,
-    sql`SELECT resource, action FROM permissions WHERE role_id = ${roleId} AND deleted_at IS NULL`,
+    sql`SELECT resource, action, field FROM permissions WHERE role_id = ${roleId} AND deleted_at IS NULL`,
   );
   return rows.map((r) => rowToCamelCase(r) as unknown as PermissionRow);
 }

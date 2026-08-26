@@ -1,5 +1,4 @@
-import { defineModel, field, pipe, validate, persist } from '../../core/index.js';
-import { requireAuth, requirePermission } from '../../auth/pipeline.js';
+import { defineModel, field } from '../../core/index.js';
 
 /**
  * A reusable assistant config — system prompt + provider/model + tools — not a live
@@ -22,11 +21,6 @@ export const Agent = defineModel('agents', {
     // support a given key.
     config: field.json({ required: false }),
     active: field.boolean({ default: true }),
-  },
-  operations: {
-    create: pipe(requireAuth, requirePermission('agents', 'create'), validate, persist),
-    update: pipe(requireAuth, requirePermission('agents', 'update'), validate, persist),
-    remove: pipe(requireAuth, requirePermission('agents', 'remove'), persist.remove),
   },
   console: { label: 'Agents', displayField: 'name' },
 });

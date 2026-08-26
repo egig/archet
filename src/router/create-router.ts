@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import type { FileFieldDefinition } from '../core/field.js';
+import type { FileFieldDefinition, ReferenceFieldDefinition } from '../core/field.js';
 import type { ModelDefinition } from '../core/model.js';
 import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
@@ -14,10 +14,101 @@ import {
   type FileStorageAdapter,
   type StoredFile,
 } from '../core/storage.js';
-import { resolveSessionUser } from '../auth/pipeline.js';
+import {
+  authorizeRequest,
+  resolveGrantedFields,
+  pickGrantedFields,
+  assertWriteFieldsAllowed,
+  type GrantedFields,
+} from '../auth/pipeline.js';
+import type { UserRow } from '../auth/lookup.js';
 import { toErrorResponse } from './errors.js';
-import { parseInclude, parseListQuery } from './query.js';
+import { parseInclude, parseListQuery, type FilterNode, type ParsedListQuery } from './query.js';
 import { getOneRow, listRows } from './list.js';
+
+type AccessResult = { user: UserRow | null };
+type FieldAccessResult = { user: UserRow | null; granted: GrantedFields };
+
+/** `OperationContext.user` is a plain `Record<string, unknown>` (no index signature on `UserRow`
+ * itself), so setting it from a resolved `UserRow` needs the same double-cast `requireAuth`
+ * (auth/pipeline.ts) already used before this router started resolving the user itself. */
+function toCtxUser(user: UserRow | null): Record<string, unknown> | null {
+  return user as unknown as Record<string, unknown> | null;
+}
+
+/** Every route on the generic router requires a matching `Permission` row by default — including
+ * reads (the implicit `'read'` action, see `ratchet/auth`'s `requireValidPermissionTarget`) — with
+ * no way to opt individual models back in to their old always-open behavior except `api.public`
+ * (`core/model.ts`). Skips auth entirely for a `public` model; otherwise defers to
+ * `authorizeRequest`, which 401s (no/expired session) or 403s (session valid, permission missing). */
+async function resolveAccess(db: AnyDb, request: Request | undefined, model: ModelDefinition, action: string): Promise<AccessResult> {
+  if (model.api?.public) return { user: null };
+  const user = await authorizeRequest(db, request, model.name, action);
+  return { user };
+}
+
+/** `resolveAccess` plus the field-level grant for a field-shaped action (`read`/`create`/
+ * `update` — never `remove`/`lock`/`unlock`, which have no field concept, see
+ * `FIELDLESS_ACTIONS`). A `public` model gets `'*'` — no session means no role to scope fields by,
+ * and "public but field-restricted" isn't a combination this framework supports. */
+async function resolveFieldAccess(
+  db: AnyDb,
+  request: Request | undefined,
+  model: ModelDefinition,
+  action: string,
+): Promise<FieldAccessResult> {
+  if (model.api?.public) return { user: null, granted: '*' };
+  const user = await authorizeRequest(db, request, model.name, action);
+  const granted = await resolveGrantedFields(db, user.roleId, model.name, action);
+  return { user, granted };
+}
+
+/** Applies `pickGrantedFields` to every `?include=`d relation object already nested onto `row` by
+ * `router/list.ts`'s `nestRow` — without this, embedding a related row via `?include=` would be a
+ * clean bypass of that related resource's own field-read grants. Uses the same requesting role's
+ * `read` grant for the *related* model, not the primary one; a role with no `read` access to that
+ * resource at all degrades to an empty granted set (id/timestamps only), not an error — see
+ * `resolveGrantedFields`'s "no matching row = nothing granted" default. */
+async function filterIncludedRelations(
+  db: AnyDb,
+  registry: Record<string, ModelDefinition>,
+  model: ModelDefinition,
+  row: Record<string, unknown>,
+  includeNames: string[],
+  roleId: string | null | undefined,
+): Promise<void> {
+  for (const name of includeNames) {
+    const relValue = row[name];
+    if (!relValue || typeof relValue !== 'object') continue;
+    const targetModel =
+      name === 'createdBy' ? registry['users'] : registry[(model.fields[`${name}Id`] as ReferenceFieldDefinition).targetModel];
+    if (!targetModel) continue;
+    // A `public` target model has no role to check a grant against at all (same reasoning as
+    // `resolveFieldAccess` for the primary resource) — everything is granted, independent of
+    // whether the *primary* resource being listed/fetched is itself public.
+    const granted = targetModel.api?.public ? ('*' as const) : await resolveGrantedFields(db, roleId, targetModel.name, 'read');
+    row[name] = pickGrantedFields(targetModel, relValue as Record<string, unknown>, granted);
+  }
+}
+
+function collectFilterFields(nodes: FilterNode[]): string[] {
+  return nodes.flatMap((node) => ('logic' in node ? node.conditions.map((c) => c.field) : [node.field]));
+}
+
+/** Blocks `?filter=`/`?sort=` on a field the requester can't read — otherwise field-read denial
+ * (`pickGrantedFields`) is trivial to bypass: binary-search a hidden value's range through
+ * repeated filtered list calls even though it never appears in a response body. System columns
+ * (not in `model.fields`) are exempt, same as everywhere else this framework gates fields. */
+function assertReadFieldsAllowed(model: ModelDefinition, query: ParsedListQuery, granted: GrantedFields): void {
+  if (granted === '*') return;
+  const requested = collectFilterFields(query.filters);
+  if (query.sortField) requested.push(query.sortField);
+  const fields: Record<string, string> = {};
+  for (const key of requested) {
+    if (key in model.fields && !granted.has(key)) fields[key] = 'field not permitted for your role';
+  }
+  if (Object.keys(fields).length > 0) throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields });
+}
 
 type AnyDb = PgDatabase<any, any, any>;
 
@@ -139,47 +230,60 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
 
   app.get('/:model', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
+    const { user, granted } = await resolveFieldAccess(db, c.req.raw, model, 'read');
     const query = parseListQuery(model, new URL(c.req.url).searchParams);
+    assertReadFieldsAllowed(model, query, granted);
     if (model.api?.ownerField) {
-      const user = await resolveSessionUser(db, c.req.raw);
+      if (!user) throw new PipelineError({ code: 'INTERNAL', status: 500, message: `'${model.name}' combines api.ownerField with api.public — unsupported` });
       query.filters.push({ field: model.api.ownerField, op: '=', value: user.id });
     }
     const page = await listRows(db, model, registry, query);
+    for (const row of page.rows) {
+      await filterIncludedRelations(db, registry, model, row, query.include, user?.roleId);
+    }
+    const rows = page.rows.map((row) => pickGrantedFields(model, row, granted));
 
     // §5: `{ data, meta }` always — offset mode gets total/limit/offset, cursor mode gets nextCursor/hasMore.
     if (page.mode === 'offset') {
-      return c.json({ data: page.rows, meta: { total: page.total, limit: page.limit, offset: page.offset } });
+      return c.json({ data: rows, meta: { total: page.total, limit: page.limit, offset: page.offset } });
     }
-    return c.json({ data: page.rows, meta: { nextCursor: page.nextCursor, hasMore: page.hasMore } });
+    return c.json({ data: rows, meta: { nextCursor: page.nextCursor, hasMore: page.hasMore } });
   });
 
   app.get('/:model/:id', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
+    const { user, granted } = await resolveFieldAccess(db, c.req.raw, model, 'read');
     const searchParams = new URL(c.req.url).searchParams;
+    const include = parseInclude(model, searchParams.get('include'));
     const row = await getOneRow(db, model, registry, c.req.param('id'), {
       includeDeleted: searchParams.get('includeDeleted') === 'true',
-      include: parseInclude(model, searchParams.get('include')),
+      include,
     });
     if (!row) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
     if (model.api?.ownerField) {
-      const user = await resolveSessionUser(db, c.req.raw);
+      if (!user) throw new PipelineError({ code: 'INTERNAL', status: 500, message: `'${model.name}' combines api.ownerField with api.public — unsupported` });
       assertOwnsRow(model, row, user.id);
     }
-    return c.json({ data: row });
+    await filterIncludedRelations(db, registry, model, row, include, user?.roleId);
+    return c.json({ data: pickGrantedFields(model, row, granted) });
   });
 
   // `GET /:model/:id/:field` — the only way a client ever reads a `file` field's bytes back
   // (Q9/Q12: the record's own JSON response only ever carries this route's URL, never the raw
   // storage key). Reuses `getOneRow` so a soft-deleted record's file 404s the same way the
-  // record itself does; there's no separate read-permission system in this framework to layer on
-  // top of (creates/updates/removes are the only operations a model's pipeline can gate).
+  // record itself does. Gated by the same `read` field grant as the record's own JSON response —
+  // a role that can't see a `file` field's metadata can't fetch its bytes either.
   app.get('/:model/:id/:field', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     resolveFileField(model, c.req.param('field'));
+    const { user, granted } = await resolveFieldAccess(db, c.req.raw, model, 'read');
+    if (granted !== '*' && !granted.has(c.req.param('field'))) {
+      throw new PipelineError({ code: 'FORBIDDEN', status: 403, message: `missing read permission for field '${c.req.param('field')}'` });
+    }
     const row = await getOneRow(db, model, registry, c.req.param('id'), { includeDeleted: false, include: [] });
     if (!row) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
     if (model.api?.ownerField) {
-      const user = await resolveSessionUser(db, c.req.raw);
+      if (!user) throw new PipelineError({ code: 'INTERNAL', status: 500, message: `'${model.name}' combines api.ownerField with api.public — unsupported` });
       assertOwnsRow(model, row, user.id);
     }
     const stored = storedFileOf(row, c.req.param('field'));
@@ -196,12 +300,13 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
   // back a `StoredFile` reference; the client then sends that reference as the field's normal
   // create/update value. No id — a "new record" form uploads before the record exists.
   //
-  // Deliberately unauthenticated by default, same as every other route in this router (a model
-  // gains auth only by composing `requireAuth`/`requirePermission` into its own `operations`
-  // pipeline — see `ratchet/auth`). There's no equivalent composition point for this route today,
-  // so an anonymous caller can currently store an orphaned blob even if they could never attach
-  // it to a real record (blocked by the model's own create/update permission check, if any) —
-  // `maxSize` bounds the resulting storage cost but this is a known gap, not a design choice.
+  // Deliberately unauthenticated, unlike every other route in this router (which now implicitly
+  // requires auth+permission by default — see `resolveAccess`/`resolveFieldAccess`). This route
+  // isn't tied to any one operation (a "new record" form uploads before the record exists, so
+  // there's no `create`/`update` action to check permission against yet) and so was never brought
+  // under that gate — an anonymous caller can currently store an orphaned blob even if they could
+  // never attach it to a real record (blocked by the eventual create/update's own permission check)
+  // — `maxSize` bounds the resulting storage cost but this is a known gap, not a design choice.
   app.post('/:model/:field/upload', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     const field = resolveFileField(model, c.req.param('field'));
@@ -236,15 +341,28 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
 
   app.post('/:model', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
+    const { user, granted } = await resolveFieldAccess(db, c.req.raw, model, 'create');
     const input = await readJsonBody(c);
-    const ctx: OperationContext = { operation: 'create', input, doc: null, model, db, request: c.req.raw, registry };
+    assertWriteFieldsAllowed(model, input, granted);
+    const ctx: OperationContext = {
+      operation: 'create',
+      input,
+      doc: null,
+      model,
+      db,
+      request: c.req.raw,
+      registry,
+      user: toCtxUser(user),
+    };
     const result = await model.operations.create(ctx);
     return c.json({ data: result.doc && toResponseRow(model, result.doc) }, 201);
   });
 
   app.patch('/:model/:id', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
+    const { user, granted } = await resolveFieldAccess(db, c.req.raw, model, 'update');
     const input = await readJsonBody(c);
+    assertWriteFieldsAllowed(model, input, granted);
     const oldDoc = fileFieldsOf(model).length > 0 ? await fetchRow(db, model, c.req.param('id')) : null;
     const ctx: OperationContext = {
       operation: 'update',
@@ -255,6 +373,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       db,
       request: c.req.raw,
       registry,
+      user: toCtxUser(user),
     };
     const result = await model.operations.update(ctx);
     if (result.doc) await cleanupReplacedFiles(storage, model, oldDoc, result.doc);
@@ -263,10 +382,13 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
 
   // `POST /:model/:id/lock` and `/unlock` — the only routes for a model's non-CRUD operations
   // (core/model.ts's `OperationsConfig.lock`/`.unlock`, e.g. `Workspace`). 404s for any model that
-  // doesn't define one, the same "unknown route" shape as an unsupported model name.
+  // doesn't define one, the same "unknown route" shape as an unsupported model name. `lock`/
+  // `unlock` are their own actions for permission purposes — fieldless, like `remove` — not folded
+  // into 'update'.
   app.post('/:model/:id/lock', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     if (!model.operations.lock) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+    const { user } = await resolveAccess(db, c.req.raw, model, 'lock');
     const ctx: OperationContext = {
       operation: 'lock',
       id: c.req.param('id'),
@@ -276,6 +398,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       db,
       request: c.req.raw,
       registry,
+      user: toCtxUser(user),
     };
     const result = await model.operations.lock(ctx);
     return c.json({ data: result.doc && toResponseRow(model, result.doc) });
@@ -284,6 +407,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
   app.post('/:model/:id/unlock', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     if (!model.operations.unlock) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+    const { user } = await resolveAccess(db, c.req.raw, model, 'unlock');
     const ctx: OperationContext = {
       operation: 'unlock',
       id: c.req.param('id'),
@@ -293,6 +417,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       db,
       request: c.req.raw,
       registry,
+      user: toCtxUser(user),
     };
     const result = await model.operations.unlock(ctx);
     return c.json({ data: result.doc && toResponseRow(model, result.doc) });
@@ -300,6 +425,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
 
   app.delete('/:model/:id', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
+    const { user } = await resolveAccess(db, c.req.raw, model, 'remove');
     const ctx: OperationContext = {
       operation: 'remove',
       id: c.req.param('id'),
@@ -309,6 +435,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
       db,
       request: c.req.raw,
       registry,
+      user: toCtxUser(user),
     };
     const result = await model.operations.remove(ctx);
     return c.json({ data: result.doc && toResponseRow(model, result.doc) });

@@ -46,6 +46,7 @@ function columnExpr(key: string, f: FieldDefinition): string {
       break;
     case 'modelRef':
     case 'actionRef':
+    case 'fieldRef':
       // like 'enum': no length cap — real value enforcement is a per-request registry check,
       // not something the schema can express (see core/validation.ts).
       expr = `varchar('${col}')`;
