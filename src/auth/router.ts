@@ -103,9 +103,9 @@ export function createAuthRouter(db: AnyDb): Hono {
       const role = (await findRoleByName(txDb, ROOT_ROLE_NAME)) ?? (await insertRow(txDb, Role, { name: ROOT_ROLE_NAME }));
       const permissions = await listPermissionsForRole(txDb, role.id as string);
       if (!permissions.some((p) => p.resource === '*' && p.action === '*')) {
-        // `field: '*'` isn't optional here even though `action: '*'` already implies every
-        // fieldless action (remove/lock/unlock) — `requireValidPermissionTarget` still requires an
-        // explicit field value for the field-shaped actions ('*' covers read/create/update too).
+        // `field: '*'` isn't optional here even though `action: '*'` already implies the
+        // fieldless `remove` action — `requireValidPermissionTarget` still requires an explicit
+        // field value for the field-shaped actions ('*' covers read/create/update too).
         // Without it, secure-by-default field permission (docs/guide/auth.md) would brick the
         // console immediately after setup: the root admin could log in but see/write no fields on
         // any model, with no way to grant the first field permission.

@@ -7,7 +7,7 @@ import type { OperationContext } from '../src/core/index.js';
 import { generateId } from '../src/core/id.js';
 import { insertRow } from '../src/core/persistence.js';
 import { WorkTitle } from '../src/auth/models/work-title.model.js';
-import { Workspace, WorkspaceView, requireNotLocked, setLocked } from '../src/workspace/models/index.js';
+import { Workspace, WorkspaceView, requireNotLocked } from '../src/workspace/models/index.js';
 import { assertOwnsWorkspace, requireWorkspaceOwnership } from '../src/workspace/pipeline.js';
 import { createDefaultWorkspace, DEFAULT_WORKSPACE_NAME } from '../src/workspace/provisioning.js';
 
@@ -34,27 +34,30 @@ describe('assertOwnsWorkspace (src/workspace/pipeline.ts)', () => {
 
 describe('requireNotLocked (src/workspace/models/workspace.model.ts)', () => {
   it('passes when the doc is not locked', () => {
-    const ctx = { doc: { locked: false } } as never;
+    const ctx = { doc: { locked: false }, input: { name: 'x' } } as never;
     expect(requireNotLocked(ctx)).toBe(ctx);
   });
 
   it('passes when the doc has no locked field at all', () => {
-    const ctx = { doc: {} } as never;
+    const ctx = { doc: {}, input: { name: 'x' } } as never;
     expect(requireNotLocked(ctx)).toBe(ctx);
   });
 
-  it('throws FORBIDDEN when the doc is locked', () => {
-    expect(() => requireNotLocked({ doc: { locked: true } } as never)).toThrow(
+  it('throws FORBIDDEN when the doc is locked and the write touches anything but `locked`', () => {
+    expect(() => requireNotLocked({ doc: { locked: true }, input: { name: 'x' } } as never)).toThrow(
       expect.objectContaining({ code: 'FORBIDDEN', status: 403 }),
     );
   });
-});
 
-describe('setLocked (src/workspace/models/workspace.model.ts)', () => {
-  it('forces ctx.input to just { locked: value }, discarding any existing input', () => {
-    const ctx = { input: { name: 'Sneaky rename' } } as never;
-    expect(setLocked(true)(ctx)).toMatchObject({ input: { locked: true } });
-    expect(setLocked(false)(ctx)).toMatchObject({ input: { locked: false } });
+  it('throws FORBIDDEN when a locked-row write pairs `locked` with another field', () => {
+    expect(() =>
+      requireNotLocked({ doc: { locked: true }, input: { locked: false, name: 'x' } } as never),
+    ).toThrow(expect.objectContaining({ code: 'FORBIDDEN', status: 403 }));
+  });
+
+  it('passes a locked-row write whose only effect is to clear `locked` (how a `PATCH { locked: false }` unlocks)', () => {
+    const ctx = { doc: { locked: true }, input: { locked: false } } as never;
+    expect(requireNotLocked(ctx)).toBe(ctx);
   });
 });
 

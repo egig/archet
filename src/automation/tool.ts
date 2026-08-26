@@ -9,10 +9,8 @@ import type { ToolSpec } from './provider.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
-// Narrower than `Operation` (which also has optional `lock`/`unlock`) — an agent tool call only
-// ever maps to one of these three, and `OperationsConfig` declares all three non-optional, so
-// keeping this file's own type that narrow (rather than the full `Operation`) is what lets
-// `tool.model.operations[tool.operation]` below type-check as always-defined, not `PipelineFn | undefined`.
+// Mirrors `core`'s `Operation` exactly (create/update/remove) — kept as its own type here mainly
+// so `OPERATIONS` below has a single source of truth for iterating the tool-generating verbs.
 type ToolOperation = 'create' | 'update' | 'remove';
 
 const OPERATIONS: ToolOperation[] = ['create', 'update', 'remove'];

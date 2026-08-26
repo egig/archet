@@ -48,7 +48,7 @@ async function resolveAccess(db: AnyDb, request: Request | undefined, model: Mod
 }
 
 /** `resolveAccess` plus the field-level grant for a field-shaped action (`read`/`create`/
- * `update` — never `remove`/`lock`/`unlock`, which have no field concept, see
+ * `update` — never `remove`, which has no field concept, see
  * `FIELDLESS_ACTIONS`). A `public` model gets `'*'` — no session means no role to scope fields by,
  * and "public but field-restricted" isn't a combination this framework supports. */
 async function resolveFieldAccess(
@@ -377,49 +377,6 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     };
     const result = await model.operations.update(ctx);
     if (result.doc) await cleanupReplacedFiles(storage, model, oldDoc, result.doc);
-    return c.json({ data: result.doc && toResponseRow(model, result.doc) });
-  });
-
-  // `POST /:model/:id/lock` and `/unlock` — the only routes for a model's non-CRUD operations
-  // (core/model.ts's `OperationsConfig.lock`/`.unlock`, e.g. `Workspace`). 404s for any model that
-  // doesn't define one, the same "unknown route" shape as an unsupported model name. `lock`/
-  // `unlock` are their own actions for permission purposes — fieldless, like `remove` — not folded
-  // into 'update'.
-  app.post('/:model/:id/lock', async (c) => {
-    const model = resolveModel(registry, c.req.param('model'));
-    if (!model.operations.lock) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
-    const { user } = await resolveAccess(db, c.req.raw, model, 'lock');
-    const ctx: OperationContext = {
-      operation: 'lock',
-      id: c.req.param('id'),
-      input: {},
-      doc: null,
-      model,
-      db,
-      request: c.req.raw,
-      registry,
-      user: toCtxUser(user),
-    };
-    const result = await model.operations.lock(ctx);
-    return c.json({ data: result.doc && toResponseRow(model, result.doc) });
-  });
-
-  app.post('/:model/:id/unlock', async (c) => {
-    const model = resolveModel(registry, c.req.param('model'));
-    if (!model.operations.unlock) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
-    const { user } = await resolveAccess(db, c.req.raw, model, 'unlock');
-    const ctx: OperationContext = {
-      operation: 'unlock',
-      id: c.req.param('id'),
-      input: {},
-      doc: null,
-      model,
-      db,
-      request: c.req.raw,
-      registry,
-      user: toCtxUser(user),
-    };
-    const result = await model.operations.unlock(ctx);
     return c.json({ data: result.doc && toResponseRow(model, result.doc) });
   });
 

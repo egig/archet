@@ -1,23 +1,20 @@
 import { defineModel, field, pipe, validate, persist, requireOwnsRow, PipelineError, type PipelineFn } from '../../core/index.js';
 
-/** Blocks `update`/`remove` while `locked` — the workspace's structure (its own fields, and via
+/** Blocks writes to a `locked` workspace — its structure (its own fields, and via
  * `requireWorkspaceOwnership` in workspace/pipeline.ts, its `WorkspaceView` tabs) is frozen, e.g. so
  * a `WorkTitle`-provisioned workspace can be handed to someone who should only work with the data
- * inside it (see workspace-view.model.ts). Deliberately not composed into `lock`/`unlock` below — an
- * already-locked workspace must still accept `unlock`. Must run after `requireOwnsRow` so a
- * non-owner still gets 404, not 403. */
+ * inside it (see workspace-view.model.ts). The one carve-out: a write whose *only* effect is to
+ * flip `locked` itself passes through even on a locked row — that's how a `PATCH { locked: false }`
+ * unlocks (there's no separate unlock route; locking is just a normal field write). Must run after
+ * `requireOwnsRow` so a non-owner still gets 404, not 403. */
 export const requireNotLocked: PipelineFn = (ctx) => {
-  if (ctx.doc?.locked) {
+  const keys = Object.keys(ctx.input);
+  const onlyTogglesLock = keys.length === 1 && keys[0] === 'locked';
+  if (ctx.doc?.locked && !onlyTogglesLock) {
     throw new PipelineError({ code: 'FORBIDDEN', status: 403 });
   }
   return ctx;
 };
-
-/** Forces `ctx.input` to just `{ locked: value }`, ignoring any client-supplied body — same
- * "server decides, not the request" pattern as `requireOwnsRow` forcing the owner field. Used by
- * the `lock`/`unlock` operations below, each of which is otherwise a normal `validate` + `persist`
- * update. */
-export const setLocked = (value: boolean): PipelineFn => (ctx) => ({ ...ctx, input: { locked: value } });
 
 /**
  * A named collection of `WorkspaceView` tabs (workspace-view.model.ts), owned by exactly one
@@ -34,14 +31,14 @@ export const Workspace = defineModel('workspaces', {
   },
   operations: {
     // requireAuth/requirePermission used to be composed here by hand; the generic router now
-    // applies both implicitly to every model (see create-router.ts) — including `lock`/`unlock`
-    // as their own distinct actions, rather than the old hand-rolled pipelines piggybacking on
-    // 'update' for both. A role now needs an explicit 'lock'/'unlock' grant, not just 'update'.
+    // applies both implicitly to every model (see create-router.ts). There's no dedicated
+    // lock/unlock operation — `locked` is an ordinary field, so a client (or the console's
+    // Lock/Unlock button) toggles it with a normal `PATCH { locked: … }`, gated by the same
+    // `update` permission + `locked` field grant as any other write. `requireNotLocked` has the
+    // carve-out that lets a lone `{ locked: false }` through on an already-locked row.
     create: pipe(requireOwnsRow('userId'), validate, persist),
     update: pipe(requireOwnsRow('userId'), requireNotLocked, validate, persist),
     remove: pipe(requireOwnsRow('userId'), requireNotLocked, persist.remove),
-    lock: pipe(requireOwnsRow('userId'), setLocked(true), validate, persist),
-    unlock: pipe(requireOwnsRow('userId'), setLocked(false), validate, persist),
   },
   console: { label: 'Workspaces', displayField: 'name' },
   api: { ownerField: 'userId' },

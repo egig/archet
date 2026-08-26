@@ -38,7 +38,7 @@ The `User` model never declares a plaintext `password` field. Instead its `passw
 
 ## Auth + permission is implicit on the generic router
 
-Every route on the generic `/api/:model` router requires a matching `Permission` row by default — including reads, which use an implicit `'read'` action (there's no per-model `read` operation to compose a pipeline step into, unlike create/update/remove/lock/unlock). A model author doesn't need to do anything to get this; it applies automatically, the same way `redactSensitiveFields` or `?include=` do.
+Every route on the generic `/api/:model` router requires a matching `Permission` row by default — including reads, which use an implicit `'read'` action (there's no per-model `read` operation to compose a pipeline step into, unlike create/update/remove). A model author doesn't need to do anything to get this; it applies automatically, the same way `redactSensitiveFields` or `?include=` do.
 
 A model that must stay reachable with no session at all (a public read-only catalog, say) opts out with `api: { public: true }`:
 
@@ -62,7 +62,7 @@ export const Announcement = defineModel('announcements', {
 
 ## Field-level permission
 
-`field` names one field of `resource` a role may read (`action: 'read'`) or write (`action: 'create'`/`'update'`) — or `'*'` for every field. It's required on a `read`/`create`/`update`/`'*'` row and doesn't apply at all to `remove`/`lock`/`unlock` (those gate a whole row/operation, never individual fields).
+`field` names one field of `resource` a role may read (`action: 'read'`) or write (`action: 'create'`/`'update'`) — or `'*'` for every field. It's required on a `read`/`create`/`update`/`'*'` row and doesn't apply at all to `remove` (which gates a whole row, never individual fields).
 
 ```
 { roleId, resource: 'invoices', action: 'read', field: 'total' }

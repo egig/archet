@@ -75,9 +75,9 @@ export async function findUserByEmail(db: AnyDb, email: string): Promise<UserRow
 export interface PermissionRow {
   resource: string;
   action: string;
-  /** null for a row scoped to a fieldless action (`remove`/`lock`/`unlock`) — see
-   * `requireValidPermissionTarget`, which enforces that a `read`/`create`/`update`/`*` row always
-   * has one and a `remove`/`lock`/`unlock` row never does. */
+  /** null for a row scoped to a fieldless action (`remove`) — see `requireValidPermissionTarget`,
+   * which enforces that a `read`/`create`/`update`/`*` row always has one and a `remove` row
+   * never does. */
   field: string | null;
 }
 

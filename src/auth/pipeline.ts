@@ -69,7 +69,7 @@ export function requirePermission(resource: string, action: string): PipelineFn 
 
 /** Router-level counterpart to `requirePermission`, for routes that never build an
  * `OperationContext` at all — the generic router's `GET` list/detail routes have no per-model
- * `read` operation to compose a pipeline fn into (unlike create/update/remove/lock/unlock), so the
+ * `read` operation to compose a pipeline fn into (unlike create/update/remove), so the
  * implicit read gate (`create-router.ts`) calls this directly instead. Resolves the session user
  * and checks their role holds `(resource, action)` — either side may be `*` — the same rule
  * `requirePermission` enforces. Throws 401 (no/expired session) or 403 (session valid, permission
@@ -87,8 +87,8 @@ export type GrantedFields = '*' | ReadonlySet<string>;
 
 /** The field-level counterpart to `requirePermission`/`authorizeRequest`'s resource:action check —
  * resolves which fields of `resource` a role may touch/see for a field-shaped `action`
- * (`'read'`/`'create'`/`'update'`; meaningless for `'remove'`/`'lock'`/`'unlock'`, which don't gate
- * individual fields at all). Unions every matching `Permission` row's `field` (the row's own
+ * (`'read'`/`'create'`/`'update'`; meaningless for `'remove'`, which doesn't gate individual
+ * fields at all). Unions every matching `Permission` row's `field` (the row's own
  * `resource`/`action` sides may each independently be `'*'`); any matching row with `field: '*'`
  * short-circuits to "every field." Secure-by-default (no backward-compat carve-out, ADR-less
  * breaking change at v0.1.0): a role with *no* matching field-scoped row gets an empty set, not
@@ -147,16 +147,16 @@ export function assertWriteFieldsAllowed(model: ModelDefinition, input: Record<s
   if (Object.keys(fields).length > 0) throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields });
 }
 
-/** Actions that don't gate individual field values at all — `remove` deletes the whole row,
- * `lock`/`unlock` only ever touch the auto-managed `locked` column (see `workspace.model.ts`'s
- * `setLocked`). A `Permission` row scoped to one of these must never carry a `field` value. */
-export const FIELDLESS_ACTIONS: ReadonlySet<string> = new Set(['remove', 'lock', 'unlock']);
+/** Actions that don't gate individual field values at all — currently just `remove`, which
+ * deletes the whole row. A `Permission` row scoped to one of these must never carry a `field`
+ * value. (Kept as a set so adding another whole-row action later is a one-line change.) */
+export const FIELDLESS_ACTIONS: ReadonlySet<string> = new Set(['remove']);
 
 /** Requires `ctx.registry` (set by the router — see `OperationContext.registry`). Checks that
  * `input.resource` names a real model in the registry and `input.action` names a real operation
  * on *some* model in the registry, or is the built-in implicit `'read'` action (see
  * `create-router.ts`'s `GET` routes — there's no per-model `read` operation key to derive this
- * from the way there is for create/update/remove/lock/unlock) — or is the `*` wildcard, for
+ * from the way there is for create/update/remove) — or is the `*` wildcard, for
  * either — since those are the only values `requirePermission` treats as meaningful. `action`'s
  * valid set is a registry-wide union rather than being scoped to the chosen `resource`: every
  * model's `operations` always has exactly the same keys (`defineModel` fills in a default

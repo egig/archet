@@ -3,7 +3,7 @@ import type { ModelDefinition } from './model.js';
 import { buildCreateSchema, buildUpdateSchema } from './validation.js';
 import { fetchRow, hardRemoveRow, insertRow, softRemoveRow, updateRow } from './persistence.js';
 
-export type Operation = 'create' | 'update' | 'remove' | 'lock' | 'unlock';
+export type Operation = 'create' | 'update' | 'remove';
 
 type AnyDb = PgDatabase<any, any, any>;
 

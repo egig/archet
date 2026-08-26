@@ -5,11 +5,6 @@ export interface OperationsConfig {
   create: PipelineFn;
   update: PipelineFn;
   remove: PipelineFn;
-  /** non-CRUD operations, e.g. `Workspace`'s `lock`/`unlock` (src/workspace/models/workspace.model.ts)
-   * — undefined for every model that doesn't define one; `create-router.ts` 404s a request for one
-   * that isn't present rather than assuming every model supports it. */
-  lock?: PipelineFn;
-  unlock?: PipelineFn;
 }
 
 export interface ConsoleModelOptions {
@@ -93,8 +88,6 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
     create: config.operations?.create ?? pipe(validate, persist),
     update: config.operations?.update ?? pipe(validate, persist),
     remove: config.operations?.remove ?? pipe(persist.remove),
-    ...(config.operations?.lock ? { lock: config.operations.lock } : {}),
-    ...(config.operations?.unlock ? { unlock: config.operations.unlock } : {}),
   };
 
   return { name, tableName: name, fields: config.fields, operations, console: config.console, api: config.api };

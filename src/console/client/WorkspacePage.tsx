@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
-import { listRows, lockRow, unlockRow, type AuthUser } from './api.js';
+import { listRows, updateRow, type AuthUser } from './api.js';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
 import { WorkspaceTabs } from './WorkspaceTabs.js';
@@ -119,8 +119,7 @@ export function WorkspacePage() {
 
   async function toggleLock() {
     if (!activeWorkspace) return;
-    if (activeWorkspace.locked) await unlockRow('workspaces', activeWorkspace.id);
-    else await lockRow('workspaces', activeWorkspace.id);
+    await updateRow('workspaces', activeWorkspace.id, { locked: !activeWorkspace.locked });
     await refreshWorkspaces();
   }
 
