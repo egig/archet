@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { useModels } from './models.js';
@@ -6,6 +7,7 @@ import { useAuth } from './auth.js';
 import { ApiRequestError, createRow, getRow, hasPermission, updateRow } from './api.js';
 import { FieldInput, type FileFieldValue } from './fields.js';
 import { OperationButton } from './OperationButton.js';
+import { queryKeys } from './query-keys.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
 
 type FormValues = Record<string, string | boolean | FileFieldValue>;
@@ -104,13 +106,17 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
   const { model: modelName, id } = useParams<{ model: string; id?: string }>();
   const { getModel, loading: modelsLoading } = useModels();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const model = modelName ? getModel(modelName) : undefined;
   const mode: 'create' | 'update' = id ? 'update' : 'create';
 
+  const rowQuery = useQuery({
+    queryKey: queryKeys.row(modelName ?? '', id ?? ''),
+    queryFn: () => getRow(model!.name, id!),
+    enabled: mode === 'update' && !!model,
+  });
+
   const [values, setValues] = useState<FormValues>({});
-  const [row, setRow] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(mode === 'update');
-  const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -118,23 +124,37 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
     if (!model) return;
     if (mode === 'create') {
       setValues(initialValues(model, null));
-      return;
+    } else if (rowQuery.data) {
+      setValues(initialValues(model, rowQuery.data));
     }
-    let cancelled = false;
-    setLoading(true);
-    getRow(model.name, id!)
-      .then((fetchedRow) => {
-        if (cancelled) return;
-        setValues(initialValues(model, fetchedRow));
-        setRow(fetchedRow);
-      })
-      .catch((err: unknown) => !cancelled && setFormError(err instanceof Error ? err.message : 'failed to load record'))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model?.name, id]);
+  }, [model?.name, id, mode, rowQuery.data]);
+
+  const loading = mode === 'update' && rowQuery.isLoading;
+  const loadError =
+    mode === 'update' && rowQuery.error
+      ? rowQuery.error instanceof Error
+        ? rowQuery.error.message
+        : 'failed to load record'
+      : null;
+
+  function refetchRows() {
+    if (!model) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.rows(model.name), exact: false });
+  }
+
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => createRow(model!.name, payload),
+    onSuccess: refetchRows,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => updateRow(model!.name, id!, payload),
+    onSuccess: (updated) => {
+      refetchRows();
+      queryClient.setQueryData(queryKeys.row(model!.name, id!), updated);
+    },
+  });
 
   if (modelsLoading || loading) return <p className="text-sm text-gray-500">Loading…</p>;
   if (!model) return <p className="text-sm text-red-600">Unknown model.</p>;
@@ -145,15 +165,14 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSubmitting(true);
     setFormError(null);
     setFieldErrors({});
     try {
       const payload = buildPayload(model!, values, mode);
       if (mode === 'create') {
-        await createRow(model!.name, payload);
+        await createMutation.mutateAsync(payload);
       } else {
-        await updateRow(model!.name, id!, payload);
+        await updateMutation.mutateAsync(payload);
       }
       onDone();
     } catch (err) {
@@ -165,16 +184,14 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
       } else {
         setFormError(err instanceof Error ? err.message : 'save failed');
       }
-    } finally {
-      setSubmitting(false);
     }
   }
 
-  async function refetchRow() {
+  const submitting = createMutation.isPending || updateMutation.isPending;
+
+  function refetchRow() {
     if (mode !== 'update') return;
-    const fetchedRow = await getRow(model!.name, id!);
-    setValues(initialValues(model!, fetchedRow));
-    setRow(fetchedRow);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.row(model!.name, id!) });
   }
 
   const detailOperations =
@@ -188,7 +205,7 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
         {mode === 'create' ? `New ${model.label.replace(/s$/, '')}` : `Edit ${model.label.replace(/s$/, '')}`}
       </h1>
 
-      {formError && <p className="mb-4 text-sm text-red-600">{formError}</p>}
+      {(formError ?? loadError) && <p className="mb-4 text-sm text-red-600">{formError ?? loadError}</p>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {model.fields
@@ -239,7 +256,7 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
               key={op.name}
               modelName={model.name}
               id={id!}
-              row={row}
+              row={rowQuery.data ?? null}
               operation={op}
               onDone={() => void refetchRow()}
               className="text-sm text-gray-600 hover:underline"

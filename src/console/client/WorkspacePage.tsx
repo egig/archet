@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import { callOperation, listRows, type AuthUser } from './api.js';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
+import { queryKeys } from './query-keys.js';
 import { WorkspaceTabs } from './WorkspaceTabs.js';
 import { WorkspaceChatPanel } from './WorkspaceChatPanel.js';
 import { ModelFormDialog } from './ModelFormDialog.js';
@@ -79,7 +81,7 @@ export function WorkspacePage() {
   const { search } = useLocation();
   const { models } = useModels();
   const { user, logout } = useAuth();
-  const [workspaces, setWorkspaces] = useState<WorkspaceOption[] | null>(null);
+  const queryClient = useQueryClient();
   const [refreshSignal, setRefreshSignal] = useState(0);
   const [chatOpen, setChatOpen] = useState(() => {
     try {
@@ -105,16 +107,12 @@ export function WorkspacePage() {
   // the generic `/api/workspaces` GET is always owner-scoped (`api.ownerField`, create-router.ts),
   // so every row here is one the current user owns — no extra ownership check before showing the
   // lock/unlock control below.
-  async function refreshWorkspaces() {
-    const page = await listRows('workspaces', { limit: 100, offset: 0 });
-    setWorkspaces(page.rows as unknown as WorkspaceOption[]);
-  }
-
-  useEffect(() => {
-    void refreshWorkspaces().catch(() => setWorkspaces([]));
-  }, []);
-
-  if (!workspaceId) return null;
+  const listParams = useMemo(() => ({ limit: 100, offset: 0 }), []);
+  const workspacesQuery = useQuery({
+    queryKey: queryKeys.rows('workspaces', listParams),
+    queryFn: () => listRows('workspaces', listParams).catch(() => ({ mode: 'offset' as const, rows: [], total: 0, limit: 100, offset: 0 })),
+  });
+  const workspaces = (workspacesQuery.data?.rows as unknown as WorkspaceOption[] | undefined) ?? null;
 
   const activeWorkspace = workspaces?.find((w) => w.id === workspaceId) ?? null;
   // a persistent per-workspace setting (workspace.model.ts's `chatEnabled`), distinct from the
@@ -124,10 +122,18 @@ export function WorkspacePage() {
   // `lock`/`unlock` are custom operations (see workspace.model.ts) — `locked` itself is no longer
   // writable via a plain PATCH (`forbidLockedInUpdate`), so this always goes through one or the
   // other by name rather than PATCHing `{ locked: !locked }`.
+  const toggleLockMutation = useMutation({
+    mutationFn: () => {
+      if (!activeWorkspace) return Promise.resolve(null);
+      return callOperation('workspaces', activeWorkspace.id, activeWorkspace.locked ? 'unlock' : 'lock');
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.rows('workspaces'), exact: false }),
+  });
+
+  if (!workspaceId) return null;
+
   async function toggleLock() {
-    if (!activeWorkspace) return;
-    await callOperation('workspaces', activeWorkspace.id, activeWorkspace.locked ? 'unlock' : 'lock');
-    await refreshWorkspaces();
+    await toggleLockMutation.mutateAsync();
   }
 
   return (

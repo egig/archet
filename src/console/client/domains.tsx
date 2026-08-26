@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { listDomains } from './api.js';
+import { queryKeys } from './query-keys.js';
 import type { ConsoleDomainMeta } from '../serialize-domain.js';
 
 interface DomainsState {
@@ -14,23 +16,15 @@ const DomainsContext = createContext<DomainsState | null>(null);
  * sidebar's per-Domain "Settings" link, its declared `consoleMenu`, and the settings form itself.
  * Mirrors `ModelsProvider` (models.tsx). */
 export function DomainsProvider({ children }: { children: ReactNode }) {
-  const [domains, setDomains] = useState<ConsoleDomainMeta[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    listDomains()
-      .then((data) => !cancelled && setDomains(data))
-      .catch(() => !cancelled && setDomains([]))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.domains,
+    queryFn: () => listDomains().catch(() => []),
+  });
+  const domains = data ?? [];
 
   const getDomain = useMemo(() => (name: string) => domains.find((d) => d.name === name), [domains]);
 
-  return <DomainsContext.Provider value={{ domains, loading, getDomain }}>{children}</DomainsContext.Provider>;
+  return <DomainsContext.Provider value={{ domains, loading: isLoading, getDomain }}>{children}</DomainsContext.Provider>;
 }
 
 export function useDomains(): DomainsState {

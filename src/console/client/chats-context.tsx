@@ -1,5 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { listChats, type ChatSummary } from './api.js';
+import { queryKeys } from './query-keys.js';
 
 interface ChatsState {
   chats: ChatSummary[];
@@ -19,24 +21,22 @@ export function useChats(): ChatsState {
 /** Owns the chat list for `WorkspaceChatPanel`'s "History" dropdown, refreshed (via `refresh()`)
  * by `ChatEmptyStateView`/`ChatThreadView` after a turn completes. */
 export function ChatsProvider({ children }: { children: ReactNode }) {
-  const [chats, setChats] = useState<ChatSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: queryKeys.chats, queryFn: listChats });
 
-  const refresh = useCallback(async () => {
-    try {
-      setChats(await listChats());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'failed to load chats');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  async function refresh() {
+    await refetch();
+  }
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  return <ChatsContext.Provider value={{ chats, loading, error, refresh }}>{children}</ChatsContext.Provider>;
+  return (
+    <ChatsContext.Provider
+      value={{
+        chats: data ?? [],
+        loading: isLoading,
+        error: error ? (error instanceof Error ? error.message : 'failed to load chats') : null,
+        refresh,
+      }}
+    >
+      {children}
+    </ChatsContext.Provider>
+  );
 }

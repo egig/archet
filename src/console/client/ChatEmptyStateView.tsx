@@ -1,6 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { createChatAndSend, listRows } from './api.js';
 import { useChats } from './chats-context.js';
+import { queryKeys } from './query-keys.js';
 
 interface AgentOption {
   id: string;
@@ -20,48 +22,54 @@ export interface ChatEmptyStateViewProps {
 export function ChatEmptyStateView({ workspaceId, onCreated }: ChatEmptyStateViewProps) {
   const { refresh } = useChats();
 
-  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const listParams = useMemo(() => ({ limit: 100, offset: 0 }), []);
+  const agentsQuery = useQuery({
+    queryKey: queryKeys.rows('agents', listParams),
+    queryFn: () => listRows('agents', listParams),
+  });
+  const agents = ((agentsQuery.data?.rows as unknown as AgentOption[] | undefined) ?? []).filter((a) => a.active);
+  const agentsError =
+    agentsQuery.error instanceof Error ? agentsQuery.error.message : agentsQuery.error ? 'failed to load agents' : null;
+
   const [agentId, setAgentId] = useState('');
   const [message, setMessage] = useState('');
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listRows('agents', { limit: 100, offset: 0 })
-      .then((page) => {
-        const active = (page.rows as unknown as AgentOption[]).filter((a) => a.active);
-        setAgents(active);
-        setAgentId((current) => current || active[0]?.id || '');
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'failed to load agents'));
-  }, []);
+    setAgentId((current) => current || agents[0]?.id || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentsQuery.data]);
+
+  const createMutation = useMutation({
+    mutationFn: async ({ agentId, message }: { agentId: string; message: string }) => {
+      let createdChatId: string | null = null;
+      await createChatAndSend(
+        agentId,
+        message,
+        {
+          onTextDelta: () => {},
+          onThinkingDelta: () => {},
+          onDone: (info) => {
+            createdChatId = info.chatId;
+          },
+          onError: (msg) => setError(msg),
+        },
+        workspaceId,
+      );
+      return createdChatId;
+    },
+    onSuccess: async (createdChatId) => {
+      if (!createdChatId) return;
+      await refresh();
+      onCreated(createdChatId);
+    },
+  });
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!agentId || !message.trim() || sending) return;
-    setSending(true);
+    if (!agentId || !message.trim() || createMutation.isPending) return;
     setError(null);
-
-    let createdChatId: string | null = null;
-    await createChatAndSend(
-      agentId,
-      message,
-      {
-        onTextDelta: () => {},
-        onThinkingDelta: () => {},
-        onDone: (info) => {
-          createdChatId = info.chatId;
-        },
-        onError: (msg) => setError(msg),
-      },
-      workspaceId,
-    );
-
-    setSending(false);
-    if (createdChatId) {
-      await refresh();
-      onCreated(createdChatId);
-    }
+    await createMutation.mutateAsync({ agentId, message });
   }
 
   return (
@@ -72,7 +80,7 @@ export function ChatEmptyStateView({ workspaceId, onCreated }: ChatEmptyStateVie
         <select
           value={agentId}
           onChange={(e) => setAgentId(e.target.value)}
-          disabled={sending || agents.length === 0}
+          disabled={createMutation.isPending || agents.length === 0}
           className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
         >
           {agents.length === 0 && <option value="">No agents available</option>}
@@ -87,19 +95,19 @@ export function ChatEmptyStateView({ workspaceId, onCreated }: ChatEmptyStateVie
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Message…"
-          disabled={sending}
+          disabled={createMutation.isPending}
           rows={3}
           className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
         />
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {(error ?? agentsError) && <p className="text-sm text-red-600">{error ?? agentsError}</p>}
 
         <button
           type="submit"
-          disabled={sending || !agentId || !message.trim()}
+          disabled={createMutation.isPending || !agentId || !message.trim()}
           className="w-full rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
         >
-          {sending ? 'Sending…' : 'Send'}
+          {createMutation.isPending ? 'Sending…' : 'Send'}
         </button>
       </form>
     </div>

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import type { ConsoleFieldMeta, ConsoleOperationMeta } from '../serialize-model.js';
 import { ApiRequestError, callOperation } from './api.js';
 import { Dialog } from './Dialog.js';
@@ -176,12 +177,12 @@ export function OperationButton({ modelName, id, row, operation, onDone, classNa
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isOperationVisible(operation, row)) return null;
+  const mutation = useMutation({
+    mutationFn: (params?: Record<string, unknown>) => callOperation(modelName, id, operation.name, params),
+    onSuccess: () => onDone(),
+  });
 
-  async function run(params?: Record<string, unknown>) {
-    await callOperation(modelName, id, operation.name, params);
-    onDone();
-  }
+  if (!isOperationVisible(operation, row)) return null;
 
   function handleClick() {
     if (operation.params.length > 0) {
@@ -193,7 +194,7 @@ export function OperationButton({ modelName, id, row, operation, onDone, classNa
       if (!window.confirm(message)) return;
     }
     setError(null);
-    run().catch((err: unknown) => setError(err instanceof Error ? err.message : 'operation failed'));
+    mutation.mutateAsync(undefined).catch((err: unknown) => setError(err instanceof Error ? err.message : 'operation failed'));
   }
 
   return (
@@ -208,7 +209,7 @@ export function OperationButton({ modelName, id, row, operation, onDone, classNa
           modelName={modelName}
           onCancel={() => setOpen(false)}
           onSubmit={async (params) => {
-            await run(params);
+            await mutation.mutateAsync(params);
             setOpen(false);
           }}
         />
