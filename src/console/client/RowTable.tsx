@@ -1,17 +1,42 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
 import { hasPermission, listRows, removeRow } from './api.js';
 import { formatCellValue } from './format.js';
 import { OperationButton } from './OperationButton.js';
 import { queryKeys } from './query-keys.js';
-import type { ConsoleModelMeta } from '../serialize-model.js';
-import { countFilters, sanitizeFilters, type FilterNode } from './FilterBar.js';
+import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
+import { countFilters, sanitizeFilters, FilterBar, type FilterClause, type FilterNode } from './FilterBar.js';
 import { ChevronLeftIcon, ChevronRightIcon, EditIcon, FilterIcon, PlusIcon, TrashIcon } from './icons.js';
 
 const DEFAULT_LIMIT = 20;
+
+/** The URL query-string key the built-in filter builder reads/writes its clause set into (as JSON)
+ * — mirrors `WorkspaceTabs`' `?tab=`, so an ad-hoc filter survives a reload and is shareable. */
+const AD_HOC_FILTER_PARAM = 'filter';
+
+/** Keeps only well-formed `[field, op, value]` clauses (and the non-empty groups of them) whose
+ * field is an indexed column on the model currently being shown. This is what lets a `?filter=`
+ * param built on one model's page be silently ignored on another's — and keeps a hand-edited URL
+ * from reaching the query layer with a field the server would 400 on. */
+function keepKnownClauses(value: unknown, indexedFields: ConsoleFieldMeta[]): FilterNode[] {
+  if (!Array.isArray(value)) return [];
+  const known = new Set(indexedFields.map((f) => f.key));
+  const isClause = (c: unknown): c is FilterClause =>
+    Array.isArray(c) && c.length === 3 && typeof c[0] === 'string' && known.has(c[0]) && typeof c[1] === 'string';
+  const out: FilterNode[] = [];
+  for (const node of value) {
+    if (Array.isArray(node) && (node[0] === 'and' || node[0] === 'or') && Array.isArray(node[1])) {
+      const conds = (node[1] as unknown[]).filter(isClause);
+      if (conds.length > 0) out.push([node[0], conds]);
+    } else if (isClause(node)) {
+      out.push(node);
+    }
+  }
+  return out;
+}
 
 export interface RowTableQuery {
   filters?: FilterNode[];
@@ -25,8 +50,13 @@ export interface RowTableProps {
   model: ConsoleModelMeta;
   query: RowTableQuery;
   /** the collapsible filter section, revealed by the header's "Filter" toggle — `WorkspaceViewTable`
-   * passes its `FilterBar` here; `ModelListPage` leaves it unset (no toggle button then). */
+   * passes its own persist-on-Apply `FilterBar` here. When left unset (e.g. `ModelListPage`), the
+   * table renders its own built-in `FilterBar` instead (see `builtinFilters`), whose clauses live
+   * in the URL as an ad-hoc, non-persisted overlay on top of `query.filters`. */
   toolbar?: ReactNode;
+  /** set `false` to suppress the built-in ad-hoc filter builder even when no `toolbar` is passed —
+   * `WorkspaceViewTable` does this so a locked view shows no filter UI at all. Defaults to `true`. */
+  builtinFilters?: boolean;
   /** where the New/Edit links point, as a prefix for `/new` and `/:id` — defaults to
    * `/${model.name}` (`ModelListPage`'s own route). `WorkspaceViewTable` overrides this to
    * `/workspace/:workspaceId/${model.name}` so the form dialog opens (and stays) nested under the
@@ -35,24 +65,85 @@ export interface RowTableProps {
 }
 
 /** The table/pagination/New-Edit-Delete rendering shared by `ModelListPage` (plain "browse this
- * model", no filters, default sort) and `WorkspaceViewTable` (a saved filter/sort/columns
- * configuration) — same rendering logic, different `query`. */
-export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
+ * model", default sort, with a built-in ad-hoc `?filter=` builder) and `WorkspaceViewTable` (a
+ * saved filter/sort/columns configuration) — same rendering logic, different `query`. */
+export function RowTable({ model, query, toolbar, builtinFilters = true, basePath }: RowTableProps) {
   const { getModel } = useModels();
   const { user } = useAuth();
   const { search } = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const base = basePath ?? `/${model.name}`;
 
   const [offset, setOffset] = useState(0);
 
-  const activeFilterCount = useMemo(() => countFilters(query.filters), [query.filters]);
+  // the built-in ad-hoc filter builder — shown only when the caller isn't supplying its own
+  // `toolbar` and the model has at least one indexed (filterable) column.
+  const indexedFields = useMemo(() => model.fields.filter((f) => f.indexed), [model]);
+  const builtinFilterShown = builtinFilters && !toolbar && indexedFields.length > 0;
+
+  // ad-hoc clauses parsed from `?filter=<json>` — validated against this model's indexed fields so
+  // a stale param from another model's page (or a hand-edited URL) is simply ignored.
+  const adHocFilters = useMemo<FilterNode[]>(() => {
+    if (!builtinFilterShown) return [];
+    const raw = searchParams.get(AD_HOC_FILTER_PARAM);
+    if (!raw) return [];
+    try {
+      return keepKnownClauses(JSON.parse(raw), indexedFields);
+    } catch {
+      return [];
+    }
+  }, [builtinFilterShown, searchParams, indexedFields]);
+
+  // the in-progress builder draft, re-synced whenever the applied (URL) set changes out from under
+  // it — a back/forward nav, or this instance being reused for another model.
+  const [draftFilters, setDraftFilters] = useState<FilterNode[]>(adHocFilters);
+  const adHocKey = JSON.stringify(adHocFilters);
+  useEffect(() => {
+    setDraftFilters(adHocFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adHocKey]);
+
+  // `query.filters` (a saved base, from `WorkspaceViewTable`) AND the ad-hoc overlay — top-level
+  // clauses are implicitly AND'd by the query layer, so concatenation is the right merge.
+  const effectiveFilters = useMemo(
+    () => [...(query.filters ?? []), ...adHocFilters],
+    [query.filters, adHocFilters],
+  );
+
+  const activeFilterCount = useMemo(() => countFilters(effectiveFilters), [effectiveFilters]);
   // always collapsed on mount — the header toggle reveals it; the "Filter (n)" badge signals when
   // filters are active while it's closed.
   const [showFilters, setShowFilters] = useState(false);
 
   const limit = query.limit ?? DEFAULT_LIMIT;
-  const queryKeyString = useMemo(() => JSON.stringify([model.name, query]), [model.name, query]);
+  const queryKeyString = useMemo(
+    () => JSON.stringify([model.name, query, adHocKey]),
+    [model.name, query, adHocKey],
+  );
+
+  function applyAdHocFilters(next: FilterNode[]) {
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (next.length === 0) p.delete(AD_HOC_FILTER_PARAM);
+        else p.set(AD_HOC_FILTER_PARAM, JSON.stringify(next));
+        return p;
+      },
+      { replace: true },
+    );
+  }
+
+  const builtinFilterBar = builtinFilterShown ? (
+    <FilterBar
+      fields={model.fields}
+      value={draftFilters}
+      onChange={setDraftFilters}
+      onApply={applyAdHocFilters}
+      dirty={JSON.stringify(draftFilters) !== adHocKey}
+    />
+  ) : null;
+  const filterPanel = toolbar ?? builtinFilterBar;
 
   const columns = useMemo(() => model.fields.filter((f) => !f.sensitive), [model]);
   const includes = useMemo(
@@ -65,7 +156,7 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
   const sort = query.sortField ? `${query.sortDirection === 'desc' ? '-' : ''}${query.sortField}` : undefined;
   // incomplete clauses (a reference `=` with nothing picked, an empty number box) are stripped
   // here too — not just on Apply — so a stale/hand-built saved filter can't 500 the listing.
-  const filtersForQuery = useMemo(() => sanitizeFilters(query.filters ?? []), [query.filters]);
+  const filtersForQuery = useMemo(() => sanitizeFilters(effectiveFilters), [effectiveFilters]);
   const listParams = { limit, offset, include: includes, filters: filtersForQuery, sort };
 
   const {
@@ -109,7 +200,7 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-gray-900">{model.label}</h1>
         <div className="flex items-center gap-2">
-          {toolbar && (
+          {filterPanel && (
             <button
               type="button"
               onClick={() => setShowFilters((v) => !v)}
@@ -136,7 +227,7 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
         </div>
       </div>
 
-      {toolbar && showFilters && toolbar}
+      {filterPanel && showFilters && filterPanel}
 
       {errorMessage && <p className="mb-3 text-sm text-red-600">{errorMessage}</p>}
 

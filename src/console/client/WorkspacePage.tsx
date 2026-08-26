@@ -186,18 +186,14 @@ export function WorkspacePage() {
             <button
               type="button"
               onClick={() => void toggleLock()}
-              className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+              title={activeWorkspace.locked ? 'Unlock workspace' : 'Lock workspace'}
+              aria-label={activeWorkspace.locked ? 'Unlock workspace' : 'Lock workspace'}
+              className="flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700"
             >
               {activeWorkspace.locked ? (
-                <>
-                  <LockClosedIcon className="h-3.5 w-3.5" />
-                  Unlock workspace
-                </>
+                <LockClosedIcon className="h-4 w-4" />
               ) : (
-                <>
-                  <LockOpenIcon className="h-3.5 w-3.5" />
-                  Lock workspace
-                </>
+                <LockOpenIcon className="h-4 w-4" />
               )}
             </button>
           )}

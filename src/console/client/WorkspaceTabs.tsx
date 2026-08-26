@@ -205,7 +205,9 @@ export function WorkspaceTabs({
                     setEditingId(null);
                   }
                 }}
-                className="w-28 rounded border border-gray-300 px-1 py-0.5 text-sm"
+                // borderless / zero-padding so swapping the label button for this input doesn't
+                // resize the tab — it sits in the exact box the label text occupied, just editable.
+                className="w-28 bg-transparent p-0 text-sm font-medium text-gray-900 underline decoration-gray-300 outline-none"
               />
             ) : (
               <button
@@ -269,18 +271,13 @@ export function WorkspaceTabs({
               type="button"
               onClick={onToggleChat}
               title={chatOpen ? 'Hide chat' : 'Show chat'}
-              className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+              aria-label={chatOpen ? 'Hide chat' : 'Show chat'}
+              className="flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700"
             >
               {chatOpen ? (
-                <>
-                  Hide chat
-                  <ChevronRightIcon className="h-3.5 w-3.5" />
-                </>
+                <ChevronRightIcon className="h-4 w-4" />
               ) : (
-                <>
-                  <ChevronLeftIcon className="h-3.5 w-3.5" />
-                  Show chat
-                </>
+                <ChevronLeftIcon className="h-4 w-4" />
               )}
             </button>
           </div>

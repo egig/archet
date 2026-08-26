@@ -14,3 +14,4 @@ docs/.vitepress/dist/
 # ...except the deploy templates (docs/guide/deploy.md links to these) — reference code for
 # framework users, not disposable dogfooding output.
 !/example/deploy/
+local*

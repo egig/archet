@@ -77,6 +77,10 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
         limit: view.limit,
       }}
       basePath={`/workspace/${workspaceId}/${model.name}`}
+      // a View owns its filtering through the FilterBar below (persist-on-Apply); the shared
+      // RowTable's built-in ad-hoc filter must stay out of the way — including when `locked` drops
+      // the toolbar entirely.
+      builtinFilters={false}
       toolbar={
         !locked && hasFilterableFields ? (
           <FilterBar
