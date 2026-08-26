@@ -152,6 +152,22 @@ export function removeRow(model: string, id: string): Promise<Record<string, unk
   return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+/** `POST /api/:model/:id/:operation` — calls a custom operation (core/model.ts's
+ * `CustomOperationDefinition`, e.g. `lock`/`unlock`); `params` is omitted entirely for a
+ * param-less trigger. Returns the same shape `updateRow` does: the full updated resource, or
+ * `null` for an operation that didn't persist a write. */
+export function callOperation(
+  model: string,
+  id: string,
+  operation: string,
+  params?: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  return request(`/api/${encodeURIComponent(model)}/${encodeURIComponent(id)}/${encodeURIComponent(operation)}`, {
+    method: 'POST',
+    body: params ? JSON.stringify(params) : undefined,
+  });
+}
+
 export interface UploadedFile {
   key: string;
   filename: string;

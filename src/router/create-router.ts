@@ -1,12 +1,13 @@
 import { Hono, type Context } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { FileFieldDefinition, ReferenceFieldDefinition } from '../core/field.js';
-import type { ModelDefinition } from '../core/model.js';
+import type { CustomOperationDefinition, ModelDefinition } from '../core/model.js';
 import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
 import { generateId } from '../core/id.js';
 import { fetchRow } from '../core/persistence.js';
 import { deriveFileFields, redactSensitiveFields } from '../core/serialize.js';
+import { buildParamsSchema } from '../core/validation.js';
 import {
   DEFAULT_MAX_FILE_SIZE,
   matchesAccept,
@@ -130,12 +131,19 @@ function assertOwnsRow(model: ModelDefinition, row: Record<string, unknown>, use
   }
 }
 
+/** Checks `model.fields` first, then falls back to every custom operation's `params` (Q16: a
+ * `file`-kind operation param, e.g. an "attach" operation's `attachment` param, isn't a real model
+ * column — it only exists in `CustomOperationDefinition.params` — so it wouldn't otherwise be
+ * reachable through this same two-step upload flow the console's `FieldInput` always uses for a
+ * `kind: 'file'` value, model field or operation param alike). */
 function resolveFileField(model: ModelDefinition, key: string): FileFieldDefinition {
-  const f = model.fields[key];
-  if (!f || f.kind !== 'file') {
-    throw new PipelineError({ code: 'NOT_FOUND', status: 404, message: `'${key}' is not a file field on '${model.name}'` });
+  const direct = model.fields[key];
+  if (direct?.kind === 'file') return direct;
+  for (const entry of Object.values(model.operations)) {
+    const f = (typeof entry === 'function' ? undefined : entry.params?.[key]);
+    if (f?.kind === 'file') return f;
   }
-  return f;
+  throw new PipelineError({ code: 'NOT_FOUND', status: 404, message: `'${key}' is not a file field on '${model.name}'` });
 }
 
 /** Applies `redactSensitiveFields` + `deriveFileFields` to every row on its way out — the one
@@ -377,6 +385,63 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     };
     const result = await model.operations.update(ctx);
     if (result.doc) await cleanupReplacedFiles(storage, model, oldDoc, result.doc);
+    return c.json({ data: result.doc && toResponseRow(model, result.doc) });
+  });
+
+  // `POST /:model/:id/:operation` — the one generic route for every custom operation (core/
+  // model.ts's `CustomOperationDefinition`, e.g. `lock`/`unlock`): always POST, always record-
+  // scoped, regardless of what the operation's own pipeline does internally (Q12). Must be
+  // registered after `/:model/:field/upload` above — Hono resolves two routes with the same
+  // segment count by registration order, not by preferring the static ('upload') segment, so this
+  // route registered first would shadow every model's upload endpoint. `'upload'` is also a
+  // reserved operation name (`RESERVED_OPERATION_NAMES`, core/model.ts) as a second line of
+  // defense. `create`/`update`/`remove` 404 here too — they already have dedicated routes above
+  // that apply this router's own field-permission check (`assertWriteFieldsAllowed`); dispatching
+  // them through this route would run the raw builtin pipeline without it.
+  app.post('/:model/:id/:operation', async (c) => {
+    const model = resolveModel(registry, c.req.param('model'));
+    const operationName = c.req.param('operation');
+    if (operationName === 'create' || operationName === 'update' || operationName === 'remove') {
+      throw new PipelineError({ code: 'OPERATION_NOT_FOUND', status: 404 });
+    }
+    const entry = model.operations[operationName];
+    if (!entry) throw new PipelineError({ code: 'OPERATION_NOT_FOUND', status: 404 });
+    const def: CustomOperationDefinition | undefined = typeof entry === 'function' ? undefined : entry;
+    const pipelineFn = typeof entry === 'function' ? entry : entry.pipeline;
+
+    // Resource-level "can this role invoke this operation at all" gate (`resource:operationName`)
+    // — the operation's own field-level checks, for whatever it actually writes, are that
+    // operation's own job (see `presetFields`, ratchet/auth): a generic `PipelineFn` here isn't
+    // knowable up front the way a `PATCH` body already is.
+    const { user } = await resolveAccess(db, c.req.raw, model, operationName);
+
+    let input: Record<string, unknown> = {};
+    if (def?.params) {
+      const body = await readJsonBody(c);
+      const result = buildParamsSchema(def.params).safeParse(body);
+      if (!result.success) {
+        const fields: Record<string, string> = {};
+        for (const issue of result.error.issues) {
+          const key = issue.path.length > 0 ? issue.path.join('.') : '(root)';
+          if (!(key in fields)) fields[key] = issue.message;
+        }
+        throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields });
+      }
+      input = result.data as Record<string, unknown>;
+    }
+
+    const ctx: OperationContext = {
+      operation: operationName,
+      id: c.req.param('id'),
+      input,
+      doc: null,
+      model,
+      db,
+      request: c.req.raw,
+      registry,
+      user: toCtxUser(user),
+    };
+    const result = await pipelineFn(ctx);
     return c.json({ data: result.doc && toResponseRow(model, result.doc) });
   });
 

@@ -3,11 +3,11 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import type { OperationContext } from '../src/core/index.js';
+import type { CustomOperationDefinition, OperationContext } from '../src/core/index.js';
 import { generateId } from '../src/core/id.js';
 import { insertRow } from '../src/core/persistence.js';
 import { WorkTitle } from '../src/auth/models/work-title.model.js';
-import { Workspace, WorkspaceView, requireNotLocked } from '../src/workspace/models/index.js';
+import { Workspace, WorkspaceView, requireNotLocked, forbidLockedInUpdate } from '../src/workspace/models/index.js';
 import { assertOwnsWorkspace, requireWorkspaceOwnership } from '../src/workspace/pipeline.js';
 import { createDefaultWorkspace, DEFAULT_WORKSPACE_NAME } from '../src/workspace/provisioning.js';
 
@@ -43,21 +43,29 @@ describe('requireNotLocked (src/workspace/models/workspace.model.ts)', () => {
     expect(requireNotLocked(ctx)).toBe(ctx);
   });
 
-  it('throws FORBIDDEN when the doc is locked and the write touches anything but `locked`', () => {
+  it('throws FORBIDDEN for any write to a locked doc — no carve-out anymore, since unlocking is the `unlock` operation, not a plain update', () => {
     expect(() => requireNotLocked({ doc: { locked: true }, input: { name: 'x' } } as never)).toThrow(
       expect.objectContaining({ code: 'FORBIDDEN', status: 403 }),
     );
+    expect(() => requireNotLocked({ doc: { locked: true }, input: {} } as never)).toThrow(
+      expect.objectContaining({ code: 'FORBIDDEN', status: 403 }),
+    );
+  });
+});
+
+describe('forbidLockedInUpdate (src/workspace/models/workspace.model.ts)', () => {
+  it('passes an update that never touches `locked`', () => {
+    const ctx = { input: { name: 'x' } } as never;
+    expect(forbidLockedInUpdate(ctx)).toBe(ctx);
   });
 
-  it('throws FORBIDDEN when a locked-row write pairs `locked` with another field', () => {
-    expect(() =>
-      requireNotLocked({ doc: { locked: true }, input: { locked: false, name: 'x' } } as never),
-    ).toThrow(expect.objectContaining({ code: 'FORBIDDEN', status: 403 }));
-  });
-
-  it('passes a locked-row write whose only effect is to clear `locked` (how a `PATCH { locked: false }` unlocks)', () => {
-    const ctx = { doc: { locked: true }, input: { locked: false } } as never;
-    expect(requireNotLocked(ctx)).toBe(ctx);
+  it("rejects `locked` in the update body, even alongside other fields — that's what `lock`/`unlock` are for", () => {
+    expect(() => forbidLockedInUpdate({ input: { locked: true } } as never)).toThrow(
+      expect.objectContaining({ code: 'VALIDATION_ERROR', status: 400 }),
+    );
+    expect(() => forbidLockedInUpdate({ input: { name: 'x', locked: false } } as never)).toThrow(
+      expect.objectContaining({ code: 'VALIDATION_ERROR', status: 400 }),
+    );
   });
 });
 
@@ -142,6 +150,120 @@ describeIfDb('requireWorkspaceOwnership (against a live Postgres)', () => {
       code: 'FORBIDDEN',
       status: 403,
     });
+  });
+});
+
+describeIfDb('Workspace lock/unlock (custom operations, src/workspace/models/workspace.model.ts)', () => {
+  let client: postgres.Sql;
+  let db: PgDatabase<any, any, any>;
+
+  // Shared `workspaces` table, same reasoning as `requireWorkspaceOwnership` above — no
+  // beforeEach TRUNCATE / afterAll DROP; every test is scoped to its own freshly generated ids.
+  beforeAll(async () => {
+    client = postgres(connectionString!);
+    db = drizzle(client) as unknown as PgDatabase<any, any, any>;
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        user_id uuid NOT NULL, name varchar NOT NULL, locked boolean NOT NULL DEFAULT false
+      )`);
+    // `presetFields` (inside `lock`/`unlock`) checks the caller's *field* grant on `update` via
+    // `resolveGrantedFields` — a real DB lookup by `roleId`, independent of `requireOwnsRow`'s own
+    // ownership check — so this suite needs `roles`/`permissions` fixtures too, shared with
+    // `auth.test.ts`/`router.test.ts`'s own copies the same idempotent way `workspaces` already is.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS roles (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        name varchar NOT NULL, description text
+      )`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS permissions (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        role_id uuid NOT NULL, resource varchar NOT NULL, action varchar NOT NULL, field varchar
+      )`);
+  });
+
+  afterAll(async () => {
+    await client.end();
+  });
+
+  // `lock`/`unlock` are `CustomOperationDefinition` objects (they carry a `console` block), not
+  // bare `PipelineFn`s — `.pipeline` is what's actually callable, same as `create-router.ts`'s
+  // own dispatch (`typeof entry === 'function' ? entry : entry.pipeline`).
+  function operationPipeline(name: 'lock' | 'unlock') {
+    return (Workspace.operations[name] as CustomOperationDefinition).pipeline;
+  }
+
+  /** A role granted `workspaces:update` field access to `locked` — what `presetFields` itself
+   * checks (Q4/Q10's second gate); the *first* gate (`resource:lock`/`resource:unlock`) is the
+   * router's own job (`create-router.ts`'s `resolveAccess`), already covered end-to-end by
+   * `auth.test.ts`'s "two independent permission gates" suite, so this file only needs the
+   * field-grant half to exercise `Workspace`'s own pipeline composition in isolation. */
+  async function roleWithLockedFieldGrant(): Promise<string> {
+    const roleId = generateId();
+    const now = new Date().toISOString();
+    await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, ${`role-${roleId}`})`);
+    await db.execute(
+      sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
+          VALUES (${generateId()}, ${now}, ${now}, ${roleId}, 'workspaces', 'update', 'locked')`,
+    );
+    return roleId;
+  }
+
+  function opCtx(operation: string, id: string, userId: string, roleId: string | null): OperationContext {
+    return { operation, id, input: {}, doc: null, model: Workspace, db, user: { id: userId, roleId } };
+  }
+
+  it('the owner can lock and then unlock their own workspace once their role grants `update`+`locked`', async () => {
+    const userId = generateId();
+    const roleId = await roleWithLockedFieldGrant();
+    const workspace = await insertRow(db, Workspace, { userId, name: 'Mine' });
+
+    const locked = await operationPipeline('lock')(opCtx('lock', workspace.id as string, userId, roleId));
+    expect(locked.doc?.locked).toBe(true);
+
+    const unlocked = await operationPipeline('unlock')(opCtx('unlock', workspace.id as string, userId, roleId));
+    expect(unlocked.doc?.locked).toBe(false);
+  });
+
+  it("rejects the write when the owner's role has no `locked` field grant, even though they own the row", async () => {
+    const userId = generateId();
+    const workspace = await insertRow(db, Workspace, { userId, name: 'Mine' });
+
+    await expect(operationPipeline('lock')(opCtx('lock', workspace.id as string, userId, null))).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      status: 400,
+    });
+  });
+
+  it("404s (not a leakier error) when a non-owner tries to lock someone else's workspace, and doesn't write anything", async () => {
+    const ownerId = generateId();
+    const otherId = generateId();
+    const workspace = await insertRow(db, Workspace, { userId: ownerId, name: 'Mine' });
+
+    await expect(operationPipeline('lock')(opCtx('lock', workspace.id as string, otherId, null))).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      status: 404,
+    });
+
+    const row = await db.execute(sql`SELECT locked FROM workspaces WHERE id = ${workspace.id}`);
+    expect((row as unknown as { locked: boolean }[])[0]?.locked).toBe(false);
+  });
+
+  it("update rejects a `locked` key outright — locking/unlocking only happens through the dedicated operations", async () => {
+    const userId = generateId();
+    const workspace = await insertRow(db, Workspace, { userId, name: 'Mine' });
+
+    const ctx: OperationContext = {
+      operation: 'update',
+      id: workspace.id as string,
+      input: { locked: true },
+      doc: null,
+      model: Workspace,
+      db,
+      user: { id: userId, roleId: null },
+    };
+    await expect(Workspace.operations.update(ctx)).rejects.toMatchObject({ code: 'VALIDATION_ERROR', status: 400 });
   });
 });
 

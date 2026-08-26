@@ -4,6 +4,7 @@ import { useModels } from './models.js';
 import { useAuth } from './auth.js';
 import { hasPermission, listRows, removeRow, type OffsetPage } from './api.js';
 import { formatCellValue } from './format.js';
+import { OperationButton } from './OperationButton.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { FilterNode } from './FilterBar.js';
 
@@ -72,6 +73,12 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
   const canCreate = hasPermission(user?.permissions ?? [], model.name, 'create');
   const canUpdate = hasPermission(user?.permissions ?? [], model.name, 'update');
   const canRemove = hasPermission(user?.permissions ?? [], model.name, 'remove');
+  // Custom operations (core/model.ts's `CustomOperationDefinition`) placed in the row actions —
+  // permission-gated the same way Edit/Delete are (`resource:operationName`); `visibleWhen`
+  // (Q13, per-row data) is checked per row by `OperationButton` itself, not here.
+  const rowOperations = model.operations.filter(
+    (op) => op.placement.includes('row') && hasPermission(user?.permissions ?? [], model.name, op.name),
+  );
 
   async function refetch() {
     const sort = query.sortField ? `${query.sortDirection === 'desc' ? '-' : ''}${query.sortField}` : undefined;
@@ -109,7 +116,7 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
                   {f.label}
                 </th>
               ))}
-              {(canUpdate || canRemove) && <th className="px-3 py-2" />}
+              {(canUpdate || canRemove || rowOperations.length > 0) && <th className="px-3 py-2" />}
             </tr>
           </thead>
           <tbody>
@@ -149,13 +156,16 @@ export function RowTable({ model, query, toolbar, basePath }: RowTableProps) {
                       </td>
                     );
                   })}
-                  {(canUpdate || canRemove) && (
+                  {(canUpdate || canRemove || rowOperations.length > 0) && (
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {canUpdate && (
                         <Link to={{ pathname: `${base}/${id}`, search }} className="mr-3 text-gray-600 hover:underline">
                           Edit
                         </Link>
                       )}
+                      {rowOperations.map((op) => (
+                        <OperationButton key={op.name} modelName={model.name} id={id} row={row} operation={op} onDone={() => void refetch()} />
+                      ))}
                       {canRemove && (
                         <button type="button" onClick={() => void handleDelete(id)} className="text-red-600 hover:underline">
                           Delete

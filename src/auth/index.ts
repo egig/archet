@@ -7,6 +7,8 @@ export {
   requireValidPermissionTarget,
   authorizeRequest,
   resolveGrantedFields,
+  assertWriteFieldsAllowed,
+  presetFields,
   FIELDLESS_ACTIONS,
 } from './pipeline.js';
 export type { GrantedFields } from './pipeline.js';

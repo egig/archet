@@ -4,6 +4,7 @@ import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { defineModel, field } from '../src/core/index.js';
+import { presetFields } from '../src/auth/index.js';
 import { createApiRouter } from '../src/router/create-router.js';
 
 const connectionString = process.env.DATABASE_URL;
@@ -221,5 +222,123 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
     const res = await app.request('/books', { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'not json' });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe('VALIDATION_ERROR');
+  });
+
+  describe('custom operations (POST /:model/:id/:operation)', () => {
+    // `api: { public: true }` — same reasoning as `Author`/`Book` above: this suite is about the
+    // custom-operation dispatch mechanics (core/model.ts's `CustomOperationDefinition`), not
+    // permission gating (see test/auth.test.ts for the field-permission story, Q4/Q10).
+    const Document = defineModel('opdocs', {
+      fields: {
+        title: field.string({ required: true }),
+        locked: field.boolean({ default: false }),
+      },
+      operations: {
+        // the headline example (Q1's `lock`/`unlock`): a whole `update`-shaped write, built from
+        // the `presetFields` sugar helper instead of hand-writing `pipe(validate, persist)`.
+        lock: presetFields({ locked: true }),
+        unlock: { pipeline: presetFields({ locked: false }), console: { label: 'Unlock' } },
+        // a param-taking operation (Q2/Q14) — params merge into `ctx.input` the same way a preset
+        // value does, so `presetFields` picks it up without needing to know about "params" at all.
+        retitle: { pipeline: presetFields({}), params: { title: field.string({ required: true }) } },
+      },
+      api: { public: true },
+    });
+
+    let opsApp: ReturnType<typeof createApiRouter>;
+
+    beforeAll(async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS opdocs (
+          id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+          title varchar NOT NULL, locked boolean NOT NULL DEFAULT false
+        )`);
+      opsApp = createApiRouter({ opdocs: Document }, db);
+    });
+
+    beforeEach(async () => {
+      await db.execute(sql`TRUNCATE TABLE opdocs`);
+    });
+
+    afterAll(async () => {
+      await db.execute(sql`DROP TABLE IF EXISTS opdocs`);
+    });
+
+    async function createDoc(title: string): Promise<string> {
+      const res = await opsApp.request('/opdocs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title }) });
+      return ((await res.json()) as { data: { id: string } }).data.id;
+    }
+
+    it('a param-less custom operation performs its preset write and returns the full updated resource', async () => {
+      const id = await createDoc('Doc A');
+      const res = await opsApp.request(`/opdocs/${id}/lock`, { method: 'POST' });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: { id: string; title: string; locked: boolean } };
+      expect(body.data).toMatchObject({ id, title: 'Doc A', locked: true });
+
+      const unlockRes = await opsApp.request(`/opdocs/${id}/unlock`, { method: 'POST' });
+      expect(((await unlockRes.json()) as { data: { locked: boolean } }).data.locked).toBe(false);
+    });
+
+    it('a param-taking custom operation validates and applies its body', async () => {
+      const id = await createDoc('Old Title');
+      const res = await opsApp.request(`/opdocs/${id}/retitle`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'New Title' }),
+      });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { data: { title: string } }).data.title).toBe('New Title');
+
+      const badRes = await opsApp.request(`/opdocs/${id}/retitle`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(badRes.status).toBe(400);
+      expect(((await badRes.json()) as { error: { code: string } }).error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('an unknown operation name -> 404 OPERATION_NOT_FOUND', async () => {
+      const id = await createDoc('Doc B');
+      const res = await opsApp.request(`/opdocs/${id}/nope`, { method: 'POST' });
+      expect(res.status).toBe(404);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe('OPERATION_NOT_FOUND');
+    });
+
+    it("dispatching 'create'/'update'/'remove' through this route 404s — they keep their own dedicated verbs/field checks", async () => {
+      const id = await createDoc('Doc C');
+      const res = await opsApp.request(`/opdocs/${id}/update`, { method: 'POST' });
+      expect(res.status).toBe(404);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe('OPERATION_NOT_FOUND');
+    });
+
+    it("registering the custom-operation route doesn't shadow a model's own POST /:model/:field/upload", async () => {
+      const Photo = defineModel('opphotos', {
+        fields: { image: field.file() },
+        api: { public: true },
+      });
+      const blobs = new Map<string, { data: Uint8Array; mimeType: string }>();
+      const memoryStorage = {
+        put: async (key: string, data: Uint8Array, opts: { mimeType: string }) => {
+          blobs.set(key, { data, mimeType: opts.mimeType });
+        },
+        get: async (key: string) => blobs.get(key) ?? null,
+        delete: async (key: string) => {
+          blobs.delete(key);
+        },
+      };
+      const photoApp = createApiRouter({ opphotos: Photo }, db, memoryStorage);
+      const res = await photoApp.request('/opphotos/image/upload', {
+        method: 'POST',
+        body: (() => {
+          const form = new FormData();
+          form.append('file', new File([new Uint8Array([0xff, 0xd8, 0xff])], 'x.jpg', { type: 'image/jpeg' }));
+          return form;
+        })(),
+      });
+      expect(res.status).toBe(201);
+      expect(((await res.json()) as { data: { filename: string } }).data.filename).toBe('x.jpg');
+    });
   });
 });

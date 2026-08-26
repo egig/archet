@@ -1,10 +1,79 @@
 import type { FieldDefinition, ReferenceFieldDefinition } from './field.js';
 import { pipe, validate, persist, type PipelineFn } from './pipeline.js';
 
+/** Shows/hides a custom operation's console button based on the record's own current data — e.g.
+ * a `lock` operation is only offered while `locked === false`. Evaluated client-side against the
+ * row the console already has, since a `PipelineFn` can't cross the wire to the console SPA (see
+ * `console/serialize-model.ts`) — this has to stay a small, JSON-serializable shape instead of
+ * arbitrary code. Exactly one of `equals`/`notEquals`/`in` should be set. */
+export interface OperationVisibilityRule {
+  field: string;
+  equals?: unknown;
+  notEquals?: unknown;
+  in?: readonly unknown[];
+}
+
+/** Console-facing presentation for a custom operation — entirely optional; an operation with no
+ * `console` block still renders (as a row-action button with a humanized-name label), this just
+ * customizes it. Mirrors `ConsoleModelOptions`' role for a whole model. */
+export interface OperationConsoleOptions {
+  /** button label; defaults to the operation's key, humanized. */
+  label?: string;
+  /** `true` shows a generic "Are you sure?" browser confirm; a string is shown as the confirm
+   * message instead. Omit for no confirmation. */
+  confirm?: boolean | string;
+  /** where the button appears. `'bulk'` only takes effect for a param-less operation (Q17: a
+   * bulk-selected action re-invokes the single-record operation once per selected row, and there's
+   * no console UI yet for collecting one set of params to apply to every row). Defaults to `['row']`. */
+  placement?: readonly ('row' | 'detail' | 'bulk')[];
+  visibleWhen?: OperationVisibilityRule;
+}
+
+/**
+ * A developer-defined operation beyond the three builtins — the mechanism behind "convenient
+ * actions" like a `lock`/`unlock` button that's really an `update` with a fixed field value (see
+ * `presetFields()`, core/pipeline.ts). Lives as an extra key directly in a model's `operations`
+ * object (`OperationsConfig`) rather than a separate map, so it's picked up for free everywhere
+ * `Object.keys(model.operations)` already drives behavior: the console's operation list
+ * (`operationNames`/`operations` in `console/serialize-model.ts`), the `actionRef` field's
+ * dropdown (`console/client/fields.tsx`), and `requireValidPermissionTarget`'s action-name
+ * validation (ratchet/auth). Dispatched by one generic route, `POST /:model/:id/:operation`
+ * (router/create-router.ts) — always record-scoped, always POST, regardless of what `pipeline`
+ * does internally.
+ */
+export interface CustomOperationDefinition {
+  pipeline: PipelineFn;
+  /** input params, declared with the same `field.*()` builder DSL as model fields — optional; a
+   * paramless operation is a plain trigger (e.g. `lock`). When present, the console renders a
+   * small modal form built from these before calling the operation. */
+  params?: Record<string, FieldDefinition>;
+  console?: OperationConsoleOptions;
+}
+
+/** A value in `OperationsConfig` beyond the three builtins: either a plain `PipelineFn` (a fully
+ * custom operation with no params/console config) or a `CustomOperationDefinition` (adds params
+ * and/or console presentation). */
+export type OperationEntry = PipelineFn | CustomOperationDefinition;
+
+/** Operation names no model may declare a custom operation under — `create`/`update`/`remove` are
+ * the fixed builtin keys (typed separately below); `read` and `*` are reserved by the permission
+ * system (`ratchet/auth`'s `requireValidPermissionTarget`); `upload` is reserved because
+ * `POST /:model/:field/upload` (router/create-router.ts) already occupies that exact path shape
+ * for models with a `file` field. */
+export const RESERVED_OPERATION_NAMES: ReadonlySet<string> = new Set([
+  'create',
+  'update',
+  'remove',
+  'read',
+  'upload',
+  '*',
+]);
+
 export interface OperationsConfig {
   create: PipelineFn;
   update: PipelineFn;
   remove: PipelineFn;
+  [operationName: string]: OperationEntry;
 }
 
 export interface ConsoleModelOptions {
@@ -63,7 +132,11 @@ export interface ModelDefinition {
 
 export interface DefineModelConfig {
   fields: Record<string, FieldDefinition>;
-  operations?: Partial<OperationsConfig>;
+  operations?: {
+    create?: PipelineFn;
+    update?: PipelineFn;
+    remove?: PipelineFn;
+  } & Record<string, OperationEntry>;
   console?: ConsoleModelOptions;
   api?: ApiModelOptions;
 }
@@ -89,6 +162,25 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
     update: config.operations?.update ?? pipe(validate, persist),
     remove: config.operations?.remove ?? pipe(persist.remove),
   };
+
+  // Any other key in `operations` is a custom operation (Q11/Q19) — merged in as-is so
+  // `Object.keys(model.operations)` picks it up everywhere that already enumerates operation
+  // names (console metadata, the `actionRef` field, `requireValidPermissionTarget`).
+  for (const [opName, entry] of Object.entries(config.operations ?? {})) {
+    if (opName === 'create' || opName === 'update' || opName === 'remove') continue;
+    if (RESERVED_OPERATION_NAMES.has(opName)) {
+      throw new Error(`model '${name}': '${opName}' is a reserved operation name and can't be used for a custom operation`);
+    }
+    const def = typeof entry === 'function' ? undefined : entry;
+    const placement = def?.console?.placement ?? ['row'];
+    const hasParams = def?.params !== undefined && Object.keys(def.params).length > 0;
+    if (placement.includes('bulk') && hasParams) {
+      throw new Error(
+        `model '${name}': custom operation '${opName}' can't combine placement 'bulk' with params — bulk-select only supports param-less operations (Q17)`,
+      );
+    }
+    operations[opName] = entry as OperationEntry;
+  }
 
   return { name, tableName: name, fields: config.fields, operations, console: config.console, api: config.api };
 }
