@@ -1,6 +1,13 @@
-# Ratchet
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/public/logo-dark.png">
+    <img src="docs/public/logo.png" alt="Ratchet" width="120">
+  </picture>
+</p>
 
-Rails-inspired application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.
+<h1 align="center">Ratchet</h1>
+
+<p align="center">Model driven application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.</p>
 
 Ratchet turns a directory of TypeScript model files into a Postgres schema, a REST API, a console, and auth — with composable pipelines wherever you need custom logic.
 
