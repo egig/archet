@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import type { ModelDefinition, Operation, OperationContext } from '../core/index.js';
+import type { ModelDefinition, OperationContext } from '../core/index.js';
 import { buildCreateSchema, buildUpdateSchema } from '../core/index.js';
 import { authorizeRequest, resolveGrantedFields, assertWriteFieldsAllowed } from '../auth/pipeline.js';
 import { listPermissionsForAgent } from './lookup.js';
@@ -9,22 +9,28 @@ import type { ToolSpec } from './provider.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
-const OPERATIONS: Operation[] = ['create', 'update', 'remove'];
+// Narrower than `Operation` (which also has optional `lock`/`unlock`) — an agent tool call only
+// ever maps to one of these three, and `OperationsConfig` declares all three non-optional, so
+// keeping this file's own type that narrow (rather than the full `Operation`) is what lets
+// `tool.model.operations[tool.operation]` below type-check as always-defined, not `PipelineFn | undefined`.
+type ToolOperation = 'create' | 'update' | 'remove';
+
+const OPERATIONS: ToolOperation[] = ['create', 'update', 'remove'];
 
 export interface ModelOperationTool {
   spec: ToolSpec;
   model: ModelDefinition;
-  operation: Operation;
+  operation: ToolOperation;
 }
 
-function toolName(operation: Operation, resource: string): string {
+function toolName(operation: ToolOperation, resource: string): string {
   return `${operation}_${resource}`;
 }
 
 /** create's input is exactly the model's fields; update adds an `id` (there's no route param to
  * carry it here, unlike `/api/:model/:id`) to an otherwise-partial version of the same fields;
  * remove needs nothing but `id`. */
-function toolInputSchema(model: ModelDefinition, operation: Operation): z.ZodTypeAny {
+function toolInputSchema(model: ModelDefinition, operation: ToolOperation): z.ZodTypeAny {
   if (operation === 'create') return buildCreateSchema(model);
   if (operation === 'update') return (buildUpdateSchema(model) as z.ZodObject<z.ZodRawShape>).extend({ id: z.string().uuid() });
   return z.object({ id: z.string().uuid() });
@@ -37,9 +43,9 @@ function expandGrant(
   registry: Record<string, ModelDefinition>,
   resource: string,
   action: string,
-): Array<{ model: ModelDefinition; operation: Operation }> {
+): Array<{ model: ModelDefinition; operation: ToolOperation }> {
   const models = resource === '*' ? Object.values(registry) : registry[resource] ? [registry[resource]] : [];
-  const operations = action === '*' ? OPERATIONS : (OPERATIONS.filter((op) => op === action) as Operation[]);
+  const operations = action === '*' ? OPERATIONS : OPERATIONS.filter((op) => op === action);
   return models.flatMap((model) => operations.map((operation) => ({ model, operation })));
 }
 
