@@ -20,8 +20,17 @@ export type {
 export { DEFAULT_MAX_FILE_SIZE, sniffMimeType, matchesAccept } from './storage.js';
 export type { FileStorageAdapter, StoredFile } from './storage.js';
 
-export { defineModel } from './model.js';
-export type { ModelDefinition, OperationsConfig, DefineModelConfig, ConsoleModelOptions } from './model.js';
+export { defineModel, RESERVED_OPERATION_NAMES } from './model.js';
+export type {
+  ModelDefinition,
+  OperationsConfig,
+  DefineModelConfig,
+  ConsoleModelOptions,
+  CustomOperationDefinition,
+  OperationEntry,
+  OperationConsoleOptions,
+  OperationVisibilityRule,
+} from './model.js';
 
 export { defineDomain } from './domain.js';
 export type { DomainDefinition, DefineDomainConfig, ConsoleMenuItem } from './domain.js';
@@ -29,7 +38,7 @@ export type { DomainDefinition, DefineDomainConfig, ConsoleMenuItem } from './do
 export { pipe, validate, persist, requireOwnsRow, PipelineError } from './pipeline.js';
 export type { OperationContext, Operation, PipelineFn, PipelineErrorOptions } from './pipeline.js';
 
-export { buildCreateSchema, buildUpdateSchema, buildDomainSettingsSchema } from './validation.js';
+export { buildCreateSchema, buildUpdateSchema, buildDomainSettingsSchema, buildParamsSchema } from './validation.js';
 
 export { getDomainSettings, updateDomainSettings } from './domain-settings-persistence.js';
 

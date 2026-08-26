@@ -23,6 +23,7 @@ export default defineConfig({
         items: [
           { text: 'Models & Fields', link: '/guide/models' },
           { text: 'Pipelines', link: '/guide/pipelines' },
+          { text: 'Custom Operations', link: '/guide/custom-operations' },
         ],
       },
       {

@@ -54,11 +54,23 @@ function fieldToZod(f: FieldDefinition): ZodTypeAny {
 }
 
 export function buildCreateSchema(model: ModelDefinition): ZodTypeAny {
+  return buildFieldsSchema(model.fields);
+}
+
+function buildFieldsSchema(fields: Record<string, FieldDefinition>): ZodTypeAny {
   const shape: Record<string, ZodTypeAny> = {};
-  for (const [key, f] of Object.entries(model.fields)) {
+  for (const [key, f] of Object.entries(fields)) {
     shape[key] = fieldToZod(f);
   }
   return z.object(shape);
+}
+
+/** A custom operation's `params` (core/model.ts's `CustomOperationDefinition`) are declared with
+ * the same `field.*()` builder DSL as model fields, so validating a call's request body is exactly
+ * `buildCreateSchema` scoped to that param map instead of the model's own fields — every param is
+ * required/optional per its own `required` flag, same as create. */
+export function buildParamsSchema(params: Record<string, FieldDefinition>): ZodTypeAny {
+  return buildFieldsSchema(params);
 }
 
 export function buildUpdateSchema(model: ModelDefinition): ZodTypeAny {

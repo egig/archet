@@ -1,4 +1,4 @@
-import type { ModelDefinition } from '../core/model.js';
+import type { ModelDefinition, OperationVisibilityRule } from '../core/model.js';
 
 export interface ConsoleFieldMeta {
   key: string;
@@ -30,18 +30,55 @@ export interface ConsoleFieldMeta {
   customType?: string;
 }
 
+/** `ConsoleOperationMeta.placement`'s options — where a custom operation's button/predicate is
+ * offered in the console. Mirrors `OperationConsoleOptions.placement` (core/model.ts). */
+export type ConsoleOperationPlacement = 'row' | 'detail' | 'bulk';
+
+export interface ConsoleOperationMeta {
+  name: string;
+  label: string;
+  /** the operation's input params, serialized the same way a model's own fields are — empty for a
+   * param-less trigger (e.g. `lock`). Non-empty means the console renders a small modal form built
+   * from these before calling the operation, instead of firing immediately. */
+  params: ConsoleFieldMeta[];
+  /** `true` for a generic confirm, a string for a custom confirm message, absent for none. */
+  confirm?: string | true;
+  placement: ConsoleOperationPlacement[];
+  visibleWhen?: OperationVisibilityRule;
+}
+
 export interface ConsoleModelMeta {
   name: string;
   label: string;
   displayField: string;
   fields: ConsoleFieldMeta[];
-  /** this model's real operation names (`Object.keys(model.operations)`, always
-   * create/update/remove today) — read by an `actionRef` field's dropdown so it lists actual
-   * operations instead of a hardcoded set (see `console/client/fields.tsx`). */
+  /** this model's real operation names (`Object.keys(model.operations)`) — read by an `actionRef`
+   * field's dropdown so it lists actual operations, builtin and custom alike, instead of a
+   * hardcoded set (see `console/client/fields.tsx`). */
   operationNames: string[];
+  /** every operation beyond the three builtins (`create`/`update`/`remove` are never included
+   * here — they get their own dedicated Edit/Delete UI) — read by `RowTable`/`ModelFormPage` to
+   * render a button per custom operation (see `console/client/OperationButton.tsx`). */
+  operations: ConsoleOperationMeta[];
   /** this model's Domain (see CONTEXT.md), when it has one — the console sidebar
    * (`console/client/Layout.tsx`) groups models sharing a `domain` under one labeled section. */
   domain?: string;
+}
+
+const BUILTIN_OPERATION_NAMES: ReadonlySet<string> = new Set(['create', 'update', 'remove']);
+
+function serializeOperation(model: ModelDefinition, name: string): ConsoleOperationMeta {
+  const entry = model.operations[name];
+  const def = typeof entry === 'function' ? undefined : entry;
+  const console_ = def?.console;
+  return {
+    name,
+    label: console_?.label ?? humanize(name),
+    params: Object.entries(def?.params ?? {}).map(([key, f]) => serializeField(key, f)),
+    confirm: console_?.confirm === false ? undefined : console_?.confirm,
+    placement: [...(console_?.placement ?? ['row'])],
+    visibleWhen: console_?.visibleWhen,
+  };
 }
 
 export function humanize(name: string): string {
@@ -104,6 +141,9 @@ export function serializeModelMeta(model: ModelDefinition): ConsoleModelMeta {
     displayField: model.console?.displayField ?? inferDisplayField(model),
     fields: Object.entries(model.fields).map(([key, f]) => serializeField(key, f)),
     operationNames: Object.keys(model.operations),
+    operations: Object.keys(model.operations)
+      .filter((name) => !BUILTIN_OPERATION_NAMES.has(name))
+      .map((name) => serializeOperation(model, name)),
   };
   if (model.console?.domain) meta.domain = model.console.domain;
   return meta;

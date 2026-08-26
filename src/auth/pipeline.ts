@@ -1,6 +1,6 @@
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from '../core/model.js';
-import { PipelineError, type PipelineFn } from '../core/pipeline.js';
+import { pipe, validate, persist, PipelineError, type PipelineFn } from '../core/pipeline.js';
 import { hashPassword as hashPasswordValue } from './password.js';
 import { findSessionByToken, findUserById, listPermissionsForRole, type UserRow } from './lookup.js';
 import { resolveSessionToken } from './cookie.js';
@@ -147,10 +147,51 @@ export function assertWriteFieldsAllowed(model: ModelDefinition, input: Record<s
   if (Object.keys(fields).length > 0) throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields });
 }
 
+/**
+ * The sugar helper behind a "convenient action" custom operation (core/model.ts's
+ * `CustomOperationDefinition`) — e.g. `lock: presetFields({ locked: true })` is a whole `update`-
+ * shaped write, minus having to hand-write one. Merges `values` on top of whatever's already in
+ * `ctx.input` (a param-taking custom operation's already-validated params, or nothing for a plain
+ * trigger like `lock`), checks the *combined* set against the caller's field-write permission for
+ * `permissionAction` (default `'update'`) exactly as the generic router does for a real `PATCH`,
+ * then runs it through the same `validate`+`persist` any `update` operation uses.
+ *
+ * This is deliberately *not* a bypass: per Q4/Q10, a custom operation's own action-level grant
+ * (`resource:lock`) only gets you in the door — actually writing `locked` still needs the base
+ * operation's own field grant (`resource:update` + `field:locked`), the same as if the caller had
+ * PATCHed it directly. Must run where `ctx.user` is already set (i.e. after the router's own
+ * resource-level authorization, which every custom-operation call already goes through — see
+ * `create-router.ts`) so the right role's grants are resolved. `model.api?.public` skips the
+ * check entirely, same carve-out `resolveFieldAccess` (create-router.ts) applies for a public
+ * model's own create/update — there's no role to scope a grant by.
+ */
+export function presetFields(values: Record<string, unknown>, opts: { permissionAction?: string } = {}): PipelineFn {
+  const permissionAction = opts.permissionAction ?? 'update';
+  return async (ctx) => {
+    const merged = { ...ctx.input, ...values };
+    if (!ctx.model.api?.public) {
+      const roleId = (ctx.user as { roleId?: string } | null | undefined)?.roleId;
+      const granted = await resolveGrantedFields(ctx.db, roleId, ctx.model.name, permissionAction);
+      assertWriteFieldsAllowed(ctx.model, merged, granted);
+    }
+    return pipe(validate, persist)({ ...ctx, input: merged });
+  };
+}
+
 /** Actions that don't gate individual field values at all — currently just `remove`, which
  * deletes the whole row. A `Permission` row scoped to one of these must never carry a `field`
  * value. (Kept as a set so adding another whole-row action later is a one-line change.) */
 export const FIELDLESS_ACTIONS: ReadonlySet<string> = new Set(['remove']);
+
+/** The closed set of actions with a field-shaped permission concept at all. Everything else —
+ * `remove`, and every developer-defined custom operation (core/model.ts's
+ * `CustomOperationDefinition`, an open-ended, per-app vocabulary `FIELDLESS_ACTIONS` can't
+ * enumerate) — is fieldless by default: a `Permission` row for it must never carry a `field`
+ * value. A custom operation that does write specific fields (e.g. `presetFields()` below) gates
+ * those separately, against its own field-shaped `update`-style action — not against its own
+ * operation name — so e.g. `resource:lock` stays a whole-action grant while the actual `locked`
+ * write still needs `resource:update` + `field:locked` (Q10). */
+const FIELD_SHAPED_ACTIONS: ReadonlySet<string> = new Set(['read', 'create', 'update']);
 
 /** Requires `ctx.registry` (set by the router — see `OperationContext.registry`). Checks that
  * `input.resource` names a real model in the registry and `input.action` names a real operation
@@ -159,14 +200,15 @@ export const FIELDLESS_ACTIONS: ReadonlySet<string> = new Set(['remove']);
  * from the way there is for create/update/remove) — or is the `*` wildcard, for
  * either — since those are the only values `requirePermission` treats as meaningful. `action`'s
  * valid set is a registry-wide union rather than being scoped to the chosen `resource`: every
- * model's `operations` always has exactly the same keys (`defineModel` fills in a default
- * pipeline for any verb a model doesn't declare), so there's no real per-resource variation to
- * track, and scoping it would mean the check runs after resource resolution instead of
- * independently.
+ * model's `operations` always has the three builtin keys plus whichever custom operations it
+ * declares (core/model.ts's `CustomOperationDefinition`), so scoping this to one resource would
+ * mean the check runs after resource resolution instead of independently, for a distinction
+ * (`resource`'s own valid-name check already runs regardless) that doesn't buy much.
  *
  * `field`'s requiredness is a cross-field constraint `field.ts`'s static `required` flag can't
  * express — it depends on the row's own *effective* `action` (required for `read`/`create`/
- * `update`/`*`, forbidden for `FIELDLESS_ACTIONS`), so it's enforced here instead, against
+ * `update`/`*`, forbidden for `remove` and every custom operation — see `FIELD_SHAPED_ACTIONS`),
+ * so it's enforced here instead, against
  * whichever of `input`/`ctx.doc` last set each of `resource`/`action`/`field` — a partial update
  * that isn't touching any of the three is left alone entirely. Only applies at all when
  * `ctx.model` actually declares a `field.fieldRef()` column named `field` — `Permission` does,
@@ -212,7 +254,7 @@ export const requireValidPermissionTarget: PipelineFn = async (ctx) => {
     const effectiveField = field !== undefined ? field : ctx.doc?.field;
 
     if (effectiveAction !== undefined) {
-      const fieldApplicable = effectiveAction === '*' || !FIELDLESS_ACTIONS.has(effectiveAction);
+      const fieldApplicable = effectiveAction === '*' || FIELD_SHAPED_ACTIONS.has(effectiveAction);
 
       if (!fieldApplicable) {
         if (effectiveField !== undefined && effectiveField !== null) {

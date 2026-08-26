@@ -8,7 +8,7 @@ import { generateId } from '../src/core/id.js';
 import { insertRow } from '../src/core/persistence.js';
 import type { OperationContext } from '../src/core/pipeline.js';
 import { hashPassword, verifyPassword } from '../src/auth/password.js';
-import { hashPassword as hashPasswordPipeline } from '../src/auth/pipeline.js';
+import { hashPassword as hashPasswordPipeline, presetFields } from '../src/auth/pipeline.js';
 import { User, Role, Permission, Session } from '../src/auth/models/index.js';
 import { createAuthRouter } from '../src/auth/router.js';
 import { createApiRouter } from '../src/router/create-router.js';
@@ -77,6 +77,22 @@ describeIfDb('auth system (against a live Postgres)', () => {
     api: { ownerField: 'userId' },
   });
 
+  // Q4/Q10's two-gate story: `lock`/`unlock` (core/model.ts's `CustomOperationDefinition`, built
+  // from `presetFields` — ratchet/auth) each need their own action-level grant (`resource:lock`)
+  // *and* the base `update` operation's own field-level grant (`field:locked`) — neither alone is
+  // enough. Not `api.public`, unlike router.test.ts's custom-operation suite, precisely because
+  // this suite is testing that permission gate.
+  const LockableDoc = defineModel('lockable_docs', {
+    fields: {
+      title: field.string({ required: true }),
+      locked: field.boolean({ default: false }),
+    },
+    operations: {
+      lock: presetFields({ locked: true }),
+      unlock: presetFields({ locked: false }),
+    },
+  });
+
   beforeAll(async () => {
     client = postgres(connectionString!);
     db = drizzle(client) as unknown as PgDatabase<any, any, any>;
@@ -106,6 +122,11 @@ describeIfDb('auth system (against a live Postgres)', () => {
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         user_id uuid NOT NULL, text varchar NOT NULL
       )`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS lockable_docs (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        title varchar NOT NULL, locked boolean NOT NULL DEFAULT false
+      )`);
     // register/setup/admin-created-user all provision a default `Workspace` (see
     // `workspace/provisioning.ts`'s `createDefaultWorkspace`) — needed for those flows to work,
     // even though this suite otherwise has nothing to do with the workspace domain. No
@@ -121,7 +142,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
       )`);
 
     authApp = createAuthRouter(db);
-    apiApp = createApiRouter({ roles: Role, permissions: Permission, users: User, notes: Note }, db);
+    apiApp = createApiRouter({ roles: Role, permissions: Permission, users: User, notes: Note, lockable_docs: LockableDoc }, db);
     consoleApp = createConsoleRouter(
       createNodeFsAssetSource('.ratchet-test'),
       { users: User, roles: Role, permissions: Permission, sessions: Session, widgets: Widget },
@@ -132,10 +153,11 @@ describeIfDb('auth system (against a live Postgres)', () => {
 
   beforeEach(async () => {
     // `workspaces` is deliberately not truncated here — see the beforeAll note above.
-    await db.execute(sql`TRUNCATE TABLE notes, sessions, permissions, users, roles`);
+    await db.execute(sql`TRUNCATE TABLE notes, lockable_docs, sessions, permissions, users, roles`);
   });
 
   afterAll(async () => {
+    await db.execute(sql`DROP TABLE IF EXISTS lockable_docs`);
     await db.execute(sql`DROP TABLE IF EXISTS notes`);
     await db.execute(sql`DROP TABLE IF EXISTS sessions`);
     await db.execute(sql`DROP TABLE IF EXISTS users`);
@@ -445,15 +467,22 @@ describeIfDb('auth system (against a live Postgres)', () => {
       expect(users.displayField).toBe('email'); // no console.displayField declared -> infers first string field
     });
 
-    it("strips operations/zod-schema and exposes passwordHash's writeAs", async () => {
+    it("strips pipeline fns/zod-schema and exposes passwordHash's writeAs", async () => {
       const { token } = await registerUser('meta@example.com', 'pw');
       const res = await consoleApp.request('/meta/models/users', { headers: { authorization: `Bearer ${token}` } });
-      const body = (await res.json()) as { data: { fields: { key: string; sensitive: boolean; writeAs?: string }[] } };
+      const body = (await res.json()) as {
+        data: { fields: { key: string; sensitive: boolean; writeAs?: string }[]; operationNames: string[]; operations: unknown[] };
+      };
 
       const passwordHash = body.data.fields.find((f) => f.key === 'passwordHash')!;
       expect(passwordHash.sensitive).toBe(true);
       expect(passwordHash.writeAs).toBe('password');
-      expect(JSON.stringify(body.data)).not.toMatch(/operations/);
+      // `operationNames` (create/update/remove — a plain string list) is fine to cross the wire;
+      // `operations` (custom operations beyond the three builtins, Q19) is empty since `User`
+      // doesn't declare any — either way, only serializable data ever appears here, never a raw
+      // pipeline function (`ConsoleModelMeta`'s type wouldn't allow one through in the first place).
+      expect(body.data.operationNames.sort()).toEqual(['create', 'remove', 'update']);
+      expect(body.data.operations).toEqual([]);
     });
 
     it('GET /meta/models/:name 404s for a hidden model, matching an unknown model', async () => {
@@ -514,6 +543,77 @@ describeIfDb('auth system (against a live Postgres)', () => {
     it('GET without a valid session 401s on an ownerField-scoped model (unlike a plain model, which has no read gate at all)', async () => {
       const res = await apiApp.request('/notes');
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe('custom operations: two independent permission gates (Q4/Q10)', () => {
+    async function grantRole(userId: string, grants: { resource: string; action: string; field?: string }[]): Promise<void> {
+      const roleId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, ${`role-${roleId}`})`);
+      for (const g of grants) {
+        await db.execute(
+          sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
+              VALUES (${generateId()}, ${now}, ${now}, ${roleId}, ${g.resource}, ${g.action}, ${g.field ?? null})`,
+        );
+      }
+      await db.execute(sql`UPDATE users SET role_id = ${roleId} WHERE id = ${userId}`);
+    }
+
+    async function createDoc(title: string): Promise<string> {
+      return (await insertRow(db, LockableDoc, { title, locked: false })).id as string;
+    }
+
+    it("the operation's own action grant alone is not enough — the base `update` field grant is still required", async () => {
+      const { token, user } = await registerUser('lock-only@example.com', 'pw');
+      await grantRole(user.id as string, [{ resource: 'lockable_docs', action: 'lock' }]);
+      const id = await createDoc('Doc');
+
+      const res = await apiApp.request(`/lockable_docs/${id}/lock`, { method: 'POST', headers: { authorization: `Bearer ${token}` } });
+      expect(res.status).toBe(400); // presetFields' own assertWriteFieldsAllowed rejects `locked`
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('the base `update` field grant alone is not enough — the operation still needs its own action grant', async () => {
+      const { token, user } = await registerUser('update-only@example.com', 'pw');
+      await grantRole(user.id as string, [{ resource: 'lockable_docs', action: 'update', field: 'locked' }]);
+      const id = await createDoc('Doc');
+
+      const res = await apiApp.request(`/lockable_docs/${id}/lock`, { method: 'POST', headers: { authorization: `Bearer ${token}` } });
+      expect(res.status).toBe(403); // never reaches presetFields — resolveAccess denies 'lock' first
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe('FORBIDDEN');
+    });
+
+    it('both grants together let the operation through and actually write the field', async () => {
+      const { token, user } = await registerUser('lock-and-update@example.com', 'pw');
+      await grantRole(user.id as string, [
+        { resource: 'lockable_docs', action: 'lock' },
+        { resource: 'lockable_docs', action: 'update', field: 'locked' },
+      ]);
+      const id = await createDoc('Doc');
+
+      const res = await apiApp.request(`/lockable_docs/${id}/lock`, { method: 'POST', headers: { authorization: `Bearer ${token}` } });
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { data: { locked: boolean } }).data.locked).toBe(true);
+    });
+
+    it("a `Permission` row for a custom operation can't carry a `field` — it's fieldless, like `remove` (FIELD_SHAPED_ACTIONS)", async () => {
+      const { token, user } = await registerUser('fieldless@example.com', 'pw');
+      // grants this user `permissions:create` (field-shaped — `'*'` per the comment at this
+      // suite's admin-onboarding fixture above) so the POST below reaches
+      // `requireValidPermissionTarget` instead of 403ing on the outer resource:action check first.
+      await grantRole(user.id as string, [{ resource: 'permissions', action: 'create', field: '*' }]);
+      const targetRoleId = generateId();
+
+      const res = await apiApp.request('/permissions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ roleId: targetRoleId, resource: 'lockable_docs', action: 'lock', field: 'locked' }),
+      });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: { fields?: Record<string, string> } }).error.fields?.field).toMatch(
+        /not applicable for action 'lock'/,
+      );
     });
   });
 });

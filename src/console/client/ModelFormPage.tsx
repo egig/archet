@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router';
 import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { useModels } from './models.js';
-import { ApiRequestError, createRow, getRow, updateRow } from './api.js';
+import { useAuth } from './auth.js';
+import { ApiRequestError, createRow, getRow, hasPermission, updateRow } from './api.js';
 import { FieldInput, type FileFieldValue } from './fields.js';
+import { OperationButton } from './OperationButton.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
 
 type FormValues = Record<string, string | boolean | FileFieldValue>;
@@ -101,10 +103,12 @@ export interface ModelFormPageProps {
 export function ModelFormPage({ onDone }: ModelFormPageProps) {
   const { model: modelName, id } = useParams<{ model: string; id?: string }>();
   const { getModel, loading: modelsLoading } = useModels();
+  const { user } = useAuth();
   const model = modelName ? getModel(modelName) : undefined;
   const mode: 'create' | 'update' = id ? 'update' : 'create';
 
   const [values, setValues] = useState<FormValues>({});
+  const [row, setRow] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(mode === 'update');
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -119,7 +123,11 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
     let cancelled = false;
     setLoading(true);
     getRow(model.name, id!)
-      .then((row) => !cancelled && setValues(initialValues(model, row)))
+      .then((fetchedRow) => {
+        if (cancelled) return;
+        setValues(initialValues(model, fetchedRow));
+        setRow(fetchedRow);
+      })
       .catch((err: unknown) => !cancelled && setFormError(err instanceof Error ? err.message : 'failed to load record'))
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -161,6 +169,18 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
       setSubmitting(false);
     }
   }
+
+  async function refetchRow() {
+    if (mode !== 'update') return;
+    const fetchedRow = await getRow(model!.name, id!);
+    setValues(initialValues(model!, fetchedRow));
+    setRow(fetchedRow);
+  }
+
+  const detailOperations =
+    mode === 'update'
+      ? model.operations.filter((op) => op.placement.includes('detail') && hasPermission(user?.permissions ?? [], model.name, op.name))
+      : [];
 
   return (
     <div>
@@ -211,6 +231,22 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
           </button>
         </div>
       </form>
+
+      {detailOperations.length > 0 && (
+        <div className="mt-4 flex gap-4 border-t border-gray-200 pt-4">
+          {detailOperations.map((op) => (
+            <OperationButton
+              key={op.name}
+              modelName={model.name}
+              id={id!}
+              row={row}
+              operation={op}
+              onDone={() => void refetchRow()}
+              className="text-sm text-gray-600 hover:underline"
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

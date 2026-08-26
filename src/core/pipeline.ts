@@ -3,7 +3,12 @@ import type { ModelDefinition } from './model.js';
 import { buildCreateSchema, buildUpdateSchema } from './validation.js';
 import { fetchRow, hardRemoveRow, insertRow, softRemoveRow, updateRow } from './persistence.js';
 
-export type Operation = 'create' | 'update' | 'remove';
+// A custom operation (core/model.ts's `CustomOperationDefinition`) runs under its own name here —
+// `validate`/`persist` below only ever special-case `'create'` (everything else is treated as an
+// update-shaped write), and `pipe()`'s auto-prefetch only special-cases `'create'` too, so a custom
+// operation name naturally gets the same "fetch the existing row first" behavior as `update`. The
+// three literals stay for editor autocomplete on the common cases.
+export type Operation = 'create' | 'update' | 'remove' | (string & {});
 
 type AnyDb = PgDatabase<any, any, any>;
 
