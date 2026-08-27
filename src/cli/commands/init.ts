@@ -30,6 +30,12 @@ function packageJson(name: string): string {
         },
         devDependencies: {
           '@types/bun': '^1.4.0',
+          // `react`/`react-dom` are `@egig/ratchet`'s own `peerDependencies` (the console SPA needs
+          // exactly one copy, so it can't just bundle its own) — a consumer app provides them, even
+          // though it never imports React directly itself unless it authors a `*.form.tsx`/
+          // `*.input.tsx` (docs/guide/console.md's Custom forms/Custom field inputs), which does.
+          '@types/react': '^19.2.0',
+          react: '^19.2.0',
           'drizzle-kit': '^0.28.1',
           typescript: '^5.7.2',
         },
@@ -43,9 +49,10 @@ function packageJson(name: string): string {
 const TSCONFIG = `{
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
     "outDir": "dist",
     "rootDir": ".",
     "strict": true,

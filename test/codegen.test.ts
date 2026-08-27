@@ -272,14 +272,16 @@ describe('generate() against a self-contained model fixture', () => {
     }
   });
 
-  it('emits an empty customForms map to console-forms.ts when no *.form.tsx exists', async () => {
+  it("emits only the builtin RoleForm entry to console-forms.ts when the app declares no *.form.tsx of its own", async () => {
     const { formCount } = await generate({ modelsDir, generatedDir });
-    expect(formCount).toBe(0);
+    expect(formCount).toBe(1); // BUILTIN_FORMS' RoleForm (builtins.ts) — always present by default
     const formsSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'console-forms.ts'), 'utf8'),
     );
     expect(formsSrc).toContain('export const customForms: Record<string, ModelFormComponent> = {');
     expect(formsSrc).toContain("from '@egig/ratchet/console/client'");
+    expect(formsSrc).toContain(`import { RoleForm as rolesForm } from '@egig/ratchet/auth/console-forms';`);
+    expect(formsSrc).toContain(`"roles": rolesForm,`);
   });
 
   it("emits a customForms entry for a `<model.name>.form.tsx`, imported by relative path (not the file's own basename)", async () => {
@@ -291,13 +293,32 @@ describe('generate() against a self-contained model fixture', () => {
     });
     try {
       const { formCount } = await generate({ modelsDir: formsModelsDir, generatedDir });
-      expect(formCount).toBe(1);
+      expect(formCount).toBe(2); // the scanned customers form, plus the builtin RoleForm
       const formsSrc = await import('node:fs/promises').then((fs) =>
         fs.readFile(path.join(generatedDir, 'console-forms.ts'), 'utf8'),
       );
       expect(formsSrc).toContain(`import customersForm from '../`);
       expect(formsSrc).toContain(`customers.form.tsx';`);
       expect(formsSrc).toContain(`"customers": customersForm,`);
+    } finally {
+      await rm(formsModelsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("a scanned `roles.form.tsx` overrides the builtin RoleForm instead of colliding with it", async () => {
+    const formsModelsDir = await writeModelsDir({
+      'customer.model.ts': CUSTOMER_MODEL,
+      'roles.form.tsx': `export default function CustomRoleForm() { return null; }`,
+    });
+    try {
+      const { formCount } = await generate({ modelsDir: formsModelsDir, generatedDir });
+      expect(formCount).toBe(1); // the app's own roles.form.tsx, not also the builtin
+      const formsSrc = await import('node:fs/promises').then((fs) =>
+        fs.readFile(path.join(generatedDir, 'console-forms.ts'), 'utf8'),
+      );
+      expect(formsSrc).not.toContain('@egig/ratchet/auth/console-forms');
+      expect(formsSrc).toContain(`import rolesForm from '../`);
+      expect(formsSrc).toContain(`"roles": rolesForm,`);
     } finally {
       await rm(formsModelsDir, { recursive: true, force: true });
     }

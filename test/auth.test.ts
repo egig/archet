@@ -649,20 +649,23 @@ describeIfDb('auth system (against a live Postgres)', () => {
     });
   });
 
-  describe('custom operations: two independent permission gates (Q4/Q10)', () => {
-    async function grantRole(userId: string, grants: { resource: string; action: string; field?: string }[]): Promise<void> {
-      const roleId = generateId();
-      const now = new Date().toISOString();
-      await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, ${`role-${roleId}`})`);
-      for (const g of grants) {
-        await db.execute(
-          sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
-              VALUES (${generateId()}, ${now}, ${now}, ${roleId}, ${g.resource}, ${g.action}, ${g.field ?? null})`,
-        );
-      }
-      await db.execute(sql`UPDATE users SET role_id = ${roleId} WHERE id = ${userId}`);
+  // shared by every suite below that needs a fresh role with a specific grant list — the outer
+  // `describeIfDb` block, not any one inner `describe`, since both the Q4/Q10 custom-operation
+  // suite and `Role.setPermissions` (below) need it.
+  async function grantRole(userId: string, grants: { resource: string; action: string; field?: string }[]): Promise<void> {
+    const roleId = generateId();
+    const now = new Date().toISOString();
+    await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, ${`role-${roleId}`})`);
+    for (const g of grants) {
+      await db.execute(
+        sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
+            VALUES (${generateId()}, ${now}, ${now}, ${roleId}, ${g.resource}, ${g.action}, ${g.field ?? null})`,
+      );
     }
+    await db.execute(sql`UPDATE users SET role_id = ${roleId} WHERE id = ${userId}`);
+  }
 
+  describe('custom operations: two independent permission gates (Q4/Q10)', () => {
     async function createDoc(title: string): Promise<string> {
       return (await insertRow(db, LockableDoc, { title, locked: false })).id as string;
     }
@@ -717,6 +720,134 @@ describeIfDb('auth system (against a live Postgres)', () => {
       expect(((await res.json()) as { error: { fields?: Record<string, string> } }).error.fields?.field).toMatch(
         /not applicable for action 'lock'/,
       );
+    });
+  });
+
+  describe('Role.setPermissions custom operation (src/auth/pipeline.ts setRolePermissions) — the "edit role + manage permissions" console form', () => {
+    async function currentPermissions(roleId: string): Promise<{ resource: string; action: string; field: string | null }[]> {
+      const rows = (await db.execute(
+        sql`SELECT resource, action, field FROM permissions WHERE role_id = ${roleId} AND deleted_at IS NULL ORDER BY resource, action`,
+      )) as unknown as { resource: string; action: string; field: string | null }[];
+      return rows;
+    }
+
+    it("401s with no session, 403s missing the operation's own `roles:setPermissions` grant", async () => {
+      const roleId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, 'editor')`);
+
+      const noAuth = await apiApp.request(`/roles/${roleId}/setPermissions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ targets: [] }),
+      });
+      expect(noAuth.status).toBe(401);
+
+      const { token } = await registerUser('setperms-forbidden@example.com', 'pw');
+      const forbidden = await apiApp.request(`/roles/${roleId}/setPermissions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ targets: [] }),
+      });
+      expect(forbidden.status).toBe(403);
+    });
+
+    it("the operation's own action grant alone is not enough — the `permissions:create` field grant is still required", async () => {
+      const { token, user } = await registerUser('setperms-noupdate@example.com', 'pw');
+      await grantRole(user.id as string, [{ resource: 'roles', action: 'setPermissions' }]);
+      const roleId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, 'editor')`);
+
+      const res = await apiApp.request(`/roles/${roleId}/setPermissions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ targets: [{ resource: 'lockable_docs', action: 'read', field: '*' }] }),
+      });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe('VALIDATION_ERROR');
+      expect(await currentPermissions(roleId)).toEqual([]);
+    });
+
+    it('with both grants, replaces the whole permission set in one call: adds new grants, keeps unchanged ones, removes dropped ones', async () => {
+      const { token, user } = await registerUser('setperms-admin@example.com', 'pw');
+      await grantRole(user.id as string, [
+        { resource: 'roles', action: 'setPermissions' },
+        { resource: 'permissions', action: 'create', field: '*' },
+      ]);
+
+      const roleId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, 'editor')`);
+      // a permission this role already has, that the next call keeps ...
+      await db.execute(
+        sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
+            VALUES (${generateId()}, ${now}, ${now}, ${roleId}, 'notes', 'read', '*')`,
+      );
+      // ... and one it's about to lose.
+      await db.execute(
+        sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
+            VALUES (${generateId()}, ${now}, ${now}, ${roleId}, 'notes', 'remove', null)`,
+      );
+
+      const res = await apiApp.request(`/roles/${roleId}/setPermissions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          targets: [
+            { resource: 'notes', action: 'read', field: '*' }, // unchanged
+            { resource: 'lockable_docs', action: 'update', field: 'locked' }, // new
+          ],
+        }),
+      });
+      expect(res.status).toBe(200);
+      // the operation's own response is the (untouched) Role row, not the permission rows.
+      expect(((await res.json()) as { data: { id: string; name: string } }).data.name).toBe('editor');
+
+      expect(await currentPermissions(roleId)).toEqual([
+        { resource: 'lockable_docs', action: 'update', field: 'locked' },
+        { resource: 'notes', action: 'read', field: '*' },
+      ]);
+    });
+
+    it('rejects an invalid target (unknown resource) with a per-index field error, and writes nothing', async () => {
+      const { token, user } = await registerUser('setperms-invalid@example.com', 'pw');
+      await grantRole(user.id as string, [
+        { resource: 'roles', action: 'setPermissions' },
+        { resource: 'permissions', action: 'create', field: '*' },
+      ]);
+      const roleId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, 'editor')`);
+
+      const res = await apiApp.request(`/roles/${roleId}/setPermissions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ targets: [{ resource: 'not_a_real_model', action: 'read', field: '*' }] }),
+      });
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: { fields?: Record<string, string> } };
+      expect(body.error.fields?.['targets.0.resource']).toMatch(/unknown resource/);
+      expect(await currentPermissions(roleId)).toEqual([]);
+    });
+
+    it("accepts a `*`/`*`/`*` wildcard grant — the tree's top 'All resources' checkbox", async () => {
+      const { token, user } = await registerUser('setperms-wildcard@example.com', 'pw');
+      await grantRole(user.id as string, [
+        { resource: 'roles', action: 'setPermissions' },
+        { resource: 'permissions', action: 'create', field: '*' },
+      ]);
+      const roleId = generateId();
+      const now = new Date().toISOString();
+      await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, 'super')`);
+
+      const res = await apiApp.request(`/roles/${roleId}/setPermissions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ targets: [{ resource: '*', action: '*', field: '*' }] }),
+      });
+      expect(res.status).toBe(200);
+      expect(await currentPermissions(roleId)).toEqual([{ resource: '*', action: '*', field: '*' }]);
     });
   });
 });

@@ -1,6 +1,7 @@
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from '../core/model.js';
 import { pipe, validate, persist, PipelineError, type PipelineFn } from '../core/pipeline.js';
+import { insertRow, listRowsByField, softRemoveRow } from '../core/persistence.js';
 import { hashPassword as hashPasswordValue } from './password.js';
 import { findSessionByToken, findUserById, listPermissionsForRole, type UserRow } from './lookup.js';
 import { resolveSessionToken } from './cookie.js';
@@ -280,3 +281,100 @@ export const requireValidPermissionTarget: PipelineFn = async (ctx) => {
   }
   return ctx;
 };
+
+/** One desired grant, the shape `Role`'s `setPermissions` custom operation (below) takes a list of
+ * — mirrors a `Permission` row's own `resource`/`action`/`field` triple minus `roleId` (implied by
+ * which role the operation was called on) and the row's own `id` (this is a declarative "this is
+ * the whole desired set," not a patch to an existing row). */
+export interface PermissionTarget {
+  resource: string;
+  action: string;
+  field?: string | null;
+}
+
+/** Builds the same collapsed key `setRolePermissions` diffs by — two targets naming the same
+ * `(resource, action, field)` triple are the same grant regardless of object identity. `field`
+ * is normalized to `''` so a fieldless grant (e.g. `remove`, or a custom operation) and one
+ * explicitly carrying `field: null`/`undefined` collapse to the same key. */
+function permissionTargetKey(target: PermissionTarget): string {
+  return `${target.resource} ${target.action} ${target.field ?? ''}`;
+}
+
+/** The pipeline fn behind `Role`'s `setPermissions` custom operation (`role.model.ts`) — the
+ * mechanism behind the console's combined "edit role + manage its permissions" form (a
+ * tree-of-checkboxes over every registered resource/action/field, `*` collapsing a whole subtree
+ * into one wildcard row). Takes the *entire* desired grant list for this role in one call and
+ * diffs it against the role's current `Permission` rows — inserting what's newly granted,
+ * soft-removing what's no longer there — the same "desired set, not a patch" shape
+ * `syncManyToMany` (core/pipeline.ts) diffs a manyToMany field's target ids against its junction
+ * rows. Wrapped in `pipe()` (see `setRolePermissions` below) so the whole diff commits atomically
+ * and `ctx.doc` still auto-prefetches to the role being edited, the same as any other operation.
+ *
+ * Gated by two independent checks, mirroring the "two independent checks" a `presetFields`-based
+ * operation needs (docs/guide/custom-operations.md#permissions): the router's own resource-level
+ * check already required `roles:setPermissions` to reach this pipeline at all; the field-grant
+ * check below is this operation's field-grant-shaped counterpart — reusing `resolveGrantedFields`/
+ * `assertWriteFieldsAllowed`, the exact pair a direct `POST /permissions` is gated by, since the
+ * actual write here is a `Permission` row rather than one of `Role`'s own fields (there's no single
+ * `field` to gate the way `presetFields` gates `locked` — a `Permission` row's `resource`/`action`/
+ * `field` columns are checked together). A role trusted to grant permissions is trusted to revoke
+ * them too, so one check covers both the inserts and the soft-removes below.
+ */
+const syncRolePermissions: PipelineFn = async (ctx) => {
+  if (!ctx.registry) {
+    throw new PipelineError({ code: 'INTERNAL', status: 500, message: 'setPermissions requires ctx.registry' });
+  }
+  if (!ctx.id) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+  const permissionModel = ctx.registry.permissions;
+  if (!permissionModel) {
+    throw new PipelineError({ code: 'INTERNAL', status: 500, message: "setPermissions requires a registered 'permissions' model" });
+  }
+
+  if (!permissionModel.api?.public) {
+    const roleId = (ctx.user as { roleId?: string } | null | undefined)?.roleId;
+    const granted = await resolveGrantedFields(ctx.db, roleId, 'permissions', 'create');
+    assertWriteFieldsAllowed(permissionModel, { roleId: null, resource: null, action: null, field: null }, granted);
+  }
+
+  const targets = ((ctx.input.targets as PermissionTarget[] | undefined) ?? []).map((t) => ({ ...t, field: t.field ?? undefined }));
+  for (const [index, target] of targets.entries()) {
+    try {
+      await requireValidPermissionTarget({ ...ctx, model: permissionModel, input: target, doc: null });
+    } catch (err) {
+      if (err instanceof PipelineError && err.fields) {
+        const fields: Record<string, string> = {};
+        for (const [key, message] of Object.entries(err.fields)) fields[`targets.${index}.${key}`] = message;
+        throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields });
+      }
+      throw err;
+    }
+  }
+
+  const desired = new Map(targets.map((t) => [permissionTargetKey(t), t]));
+  const current = await listRowsByField(ctx.db, permissionModel, 'roleId', ctx.id);
+  const currentByKey = new Map(
+    current.map((row) => [
+      permissionTargetKey({ resource: row.resource as string, action: row.action as string, field: row.field as string | null }),
+      row,
+    ]),
+  );
+
+  const createdById = (ctx.user as { id?: string } | null | undefined)?.id ?? null;
+  for (const [key, target] of desired) {
+    if (!currentByKey.has(key)) {
+      await insertRow(ctx.db, permissionModel, { roleId: ctx.id, resource: target.resource, action: target.action, field: target.field ?? null }, createdById);
+    }
+  }
+  for (const [key, row] of currentByKey) {
+    if (!desired.has(key)) {
+      await softRemoveRow(ctx.db, permissionModel, row.id as string);
+    }
+  }
+
+  return ctx;
+};
+
+/** `pipe()`-wrapped so `Role`'s `setPermissions` operation gets the same transactional
+ * auto-prefetch every other operation does (see `core/pipeline.ts`'s `pipe()`) even though its
+ * own writes never touch `Role`'s own row. */
+export const setRolePermissions: PipelineFn = pipe(syncRolePermissions);

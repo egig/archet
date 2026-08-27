@@ -63,6 +63,8 @@ export const Announcement = defineModel('announcements', {
 
 `Role` and `Permission` are ordinary models, managed like any other through the generic REST API (or the console) — grant a role a permission by creating a `Permission` row with `{ roleId, resource, action, field }`, using `'*'` for `resource`/`action` to grant broadly.
 
+`Role` also declares a `setPermissions` [custom operation](/guide/custom-operations) (`src/auth/models/role.model.ts`, a real, worked example of both a custom operation *and* a [builtin console form](/guide/console#builtin-forms) working together): `POST /api/roles/:id/setPermissions` with `{ targets: [{ resource, action, field? }, ...] }` replaces the role's *entire* grant list in one call — inserting what's newly granted, soft-removing what's dropped — instead of creating/deleting individual `Permission` rows one at a time. It's what backs `Role`'s own console form (`src/auth/models/role.form.tsx`, shipped with the framework — a tree of resource/action/field checkboxes, `'*'` collapsing a whole subtree into one wildcard row) that edits a role's own fields and its grants in a single form/submit; the operation itself is gated the same "two independent checks" way any custom operation is (see [Permissions](/guide/custom-operations#permissions)) — the router's own `roles:setPermissions` grant, plus a `permissions:create` field grant (since the actual write is `Permission` rows, not one of `Role`'s own fields).
+
 ## Field-level permission
 
 `field` names one field of `resource` a role may read (`action: 'read'`) or write (`action: 'create'`/`'update'`) — or `'*'` for every field. It's required on a `read`/`create`/`update`/`'*'` row and doesn't apply at all to `remove` (which gates a whole row, never individual fields).

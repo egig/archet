@@ -18,6 +18,7 @@
     "./core": "./dist/core/index.js",
     "./router": "./dist/router/index.js",
     "./auth": "./dist/auth/index.js",
+    "./auth/console-forms": "./dist/auth/console-forms.js",
     "./automation": "./dist/automation/index.js",
     "./workspace": "./dist/workspace/index.js",
     "./console": "./dist/console/index.js",

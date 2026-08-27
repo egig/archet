@@ -171,11 +171,21 @@ export default function CustomersForm({ model, mode, id, fields, onDone }: Model
 }
 ```
 
-A custom form owns its data fetching and mutations entirely — there's no partial hand-off of just the field list. `@egig/ratchet/console/client` exports what the generated form itself is built from, so a custom one doesn't have to reinvent it: `getRow`/`createRow`/`updateRow`/`ApiRequestError`/`hasPermission` (`api.ts`), `useModels`/`useAuth`.
+A custom form owns its data fetching and mutations entirely — there's no partial hand-off of just the field list. `@egig/ratchet/console/client` exports what the generated form itself is built from, so a custom one doesn't have to reinvent it: `getRow`/`createRow`/`updateRow`/`listRows`/`callOperation`/`ApiRequestError`/`hasPermission` (`api.ts`), `useModels`/`useAuth`. `listRows` and `callOperation` matter beyond the form's own model too — a form that also manages a *related* model's rows (see `Role`'s `setPermissions` example below) uses them to query that related model and invoke a custom operation, the same way the generated list/detail views do.
 
 `fields` (`ModelFormProps.fields`) is the model's own fields, each already bound to its built-in editor — `fields[name].render({ value, onChange, error? })` renders that field's real control (a `reference`'s dropdown, `file`'s upload button, `manyToMany`'s multiselect, a `field.custom()` renderer, a plain input, whichever `kind` it is) without the custom form needing to know or switch on what kind of field it is. `fields[name].meta` is that field's metadata (`label`, `required`, `kind`, ...), for building a label/layout around `.render()`'s output. A field that's `sensitive` with no `writeAs` (never round-tripped to the client at all) has no entry. For a page that isn't a model form but still wants these — a custom bulk-edit dialog, say — `createModelFieldRenderers(model, mode)` builds the same map standalone. `FieldInput` (the lower-level component `.render()` itself calls) is also exported directly, for a form that wants to build the `field`/`inputKey`/`modelName` binding itself instead.
 
 Tailwind classes used in a `*.form.tsx` are picked up by the console build the same way the framework's own components are — no extra config needed.
+
+### A form that manages a related model too
+
+A custom form isn't limited to its own model's fields — it owns its data fetching/mutations entirely, so it can just as well read and write a *related* model alongside the one it was opened for. `Role`'s own console form (`src/auth/models/role.form.tsx`, shipped with the framework — see [Builtin forms](#builtin-forms) below) is a real, worked example: it edits `name`/`description` the normal way, and manages the role's entire `Permission` grant list — a tree of resource → action → field checkboxes, `'*'` collapsing a fully-granted subtree into one wildcard row — via the `setPermissions` [custom operation](/guide/custom-operations) (see [Auth](/guide/auth#roles-and-permissions)), which takes the whole desired grant list in one call. One Save button, one round trip for the grants, instead of a separate CRUD screen for `Permission` rows.
+
+## Builtin forms
+
+A handful of the framework's own built-in models (currently just `Role`) ship their own console form the same way a consuming app's `<name>.form.tsx` does — `generate()` (`src/codegen/generate.ts`) merges a fixed `BUILTIN_FORMS` list (`src/codegen/builtins.ts`) into the app's `customForms` map by default, so every app gets `Role`'s combined edit-role-and-permissions form with nothing to author. A builtin form is exposed through its own subpath (`@egig/ratchet/auth/console-forms`, not the package's main `@egig/ratchet/auth` entry) so a plain backend deploy that never touches the console isn't forced to resolve `react` just because it imported `createAuthRouter`/the model definitions.
+
+A builtin is only ever a *default* — an app's own `<name>.form.tsx` for the same model always takes precedence (dropping the builtin entirely, not conflicting with it the way two of the app's own forms for one model would). Nothing else about custom forms changes: same `ModelFormProps`, same `modelsDir` scan, same override mechanism, whether the model being replaced is one the app declared itself or one the framework did.
 
 ## Custom field inputs
 
