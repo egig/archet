@@ -144,18 +144,26 @@ The file's default export takes over the whole create/edit form for that model �
 import { useState } from 'react';
 import { createRow, updateRow, type ModelFormProps } from '@egig/ratchet/console/client';
 
-export default function CustomersForm({ model, mode, id, onDone }: ModelFormProps) {
-  const [name, setName] = useState('');
+export default function CustomersForm({ model, mode, id, fields, onDone }: ModelFormProps) {
+  const [values, setValues] = useState<Record<string, unknown>>({});
+  const onChange = (key: string, value: unknown) => setValues((v) => ({ ...v, [key]: value }));
 
   async function handleSubmit() {
-    if (mode === 'create') await createRow(model.name, { name });
-    else await updateRow(model.name, id!, { name });
+    if (mode === 'create') await createRow(model.name, values);
+    else await updateRow(model.name, id!, values);
     onDone();
   }
 
   return (
     <div>
-      <input value={name} onChange={(e) => setName(e.target.value)} />
+      <label>
+        {fields.name.meta.label}
+        {fields.name.render({ value: values.name, onChange })}
+      </label>
+      <label>
+        {fields.email.meta.label}
+        {fields.email.render({ value: values.email, onChange })}
+      </label>
       <button onClick={handleSubmit}>Save</button>
       <button onClick={onDone}>Cancel</button>
     </div>
@@ -163,7 +171,9 @@ export default function CustomersForm({ model, mode, id, onDone }: ModelFormProp
 }
 ```
 
-A custom form owns its data fetching and mutations entirely — there's no partial hand-off of just the field list. `@egig/ratchet/console/client` exports what the generated form itself is built from, so a custom one doesn't have to reinvent it: `getRow`/`createRow`/`updateRow`/`ApiRequestError`/`hasPermission` (`api.ts`), `useModels`/`useAuth`, and `FieldInput` (the same field-editor switch the generated form uses, for reusing its inputs — file upload, reference dropdowns, many-to-many — inside a custom layout).
+A custom form owns its data fetching and mutations entirely — there's no partial hand-off of just the field list. `@egig/ratchet/console/client` exports what the generated form itself is built from, so a custom one doesn't have to reinvent it: `getRow`/`createRow`/`updateRow`/`ApiRequestError`/`hasPermission` (`api.ts`), `useModels`/`useAuth`.
+
+`fields` (`ModelFormProps.fields`) is the model's own fields, each already bound to its built-in editor — `fields[name].render({ value, onChange, error? })` renders that field's real control (a `reference`'s dropdown, `file`'s upload button, `manyToMany`'s multiselect, a `field.custom()` renderer, a plain input, whichever `kind` it is) without the custom form needing to know or switch on what kind of field it is. `fields[name].meta` is that field's metadata (`label`, `required`, `kind`, ...), for building a label/layout around `.render()`'s output. A field that's `sensitive` with no `writeAs` (never round-tripped to the client at all) has no entry. For a page that isn't a model form but still wants these — a custom bulk-edit dialog, say — `createModelFieldRenderers(model, mode)` builds the same map standalone. `FieldInput` (the lower-level component `.render()` itself calls) is also exported directly, for a form that wants to build the `field`/`inputKey`/`modelName` binding itself instead.
 
 Tailwind classes used in a `*.form.tsx` are picked up by the console build the same way the framework's own components are — no extra config needed.
 

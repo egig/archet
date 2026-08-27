@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
@@ -10,7 +10,7 @@ import { OperationButton } from './OperationButton.js';
 import { queryKeys } from './query-keys.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
 import { CheckIcon, XMarkIcon } from './icons.js';
-import { useCustomForms } from './custom-forms.js';
+import { createModelFieldRenderers, useCustomForms } from './custom-forms.js';
 
 type FormValues = Record<string, string | boolean | FileFieldValue | string[]>;
 
@@ -126,6 +126,7 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
   // just be a wasted duplicate request in that case.
   const customForms = useCustomForms();
   const CustomForm = model ? customForms[model.name] : undefined;
+  const customFormFields = useMemo(() => (model ? createModelFieldRenderers(model, mode) : {}), [model, mode]);
 
   // manyToMany fields are never on the row's own JSON by default (round 4 of the design
   // discussion) — the edit form has to explicitly `?include=` each one to seed the multi-select
@@ -179,7 +180,7 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
 
   if (modelsLoading) return <p className="text-sm text-gray-500">Loading…</p>;
   if (!model) return <p className="text-sm text-red-600">Unknown model.</p>;
-  if (CustomForm) return <CustomForm model={model} mode={mode} id={id} onDone={onDone} />;
+  if (CustomForm) return <CustomForm model={model} mode={mode} id={id} onDone={onDone} fields={customFormFields} />;
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
   const resourceKey = resourceFieldKey(model);

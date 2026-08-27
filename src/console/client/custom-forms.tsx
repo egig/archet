@@ -1,5 +1,53 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
-import type { ConsoleModelMeta } from '../serialize-model.js';
+import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
+import { FieldInput, type FieldInputProps } from './fields.js';
+
+/** What `fields[name].render(...)` (`ModelFieldRenderers` below) still needs from the caller —
+ * everything else (`field`, `inputKey`, `modelName`, `mode`) is already bound by
+ * `createModelFieldRenderers`, since it's the same for every call a given custom form makes. */
+export type BoundFieldProps = Omit<FieldInputProps, 'field' | 'inputKey' | 'modelName' | 'mode'>;
+
+export interface BoundField {
+  /** this field's own metadata (label, kind, required, ...) — for a custom form that wants to
+   * build its own `<label>`/layout around `.render()`'s output instead of using it as-is. */
+  meta: ConsoleFieldMeta;
+  /** the key `value`/`onChange` (passed to `.render()`) and the eventual save payload should use
+   * for this field — `field.writeAs ?? field.key`. A `sensitive`+`writeAs` field (e.g. a
+   * password, reported as `passwordHash` with `writeAs: 'password'`) submits under a different
+   * key than its column name; every other field's `inputKey` is just its own `key`. */
+  inputKey: string;
+  /** renders this field's built-in editor — the same control the generated form uses (a
+   * `reference`'s dropdown, `file`'s upload button, `manyToMany`'s multiselect, a `field.custom()`
+   * registered against `FieldRenderersProvider`, ...) — so a custom form can reuse it inside its
+   * own layout instead of reimplementing every field kind by hand. */
+  render: (props: BoundFieldProps) => ReactNode;
+}
+
+/** `field.key` -> its bound renderer, one entry per field a form may actually submit — mirrors
+ * the generated form's own field list (`ModelFormPage.tsx`): a field that's `sensitive` with no
+ * `writeAs` is never round-tripped to the client at all, so it's left out here too. Built by
+ * `createModelFieldRenderers`, and handed to a custom form as `ModelFormProps.fields`. */
+export type ModelFieldRenderers = Record<string, BoundField>;
+
+/** Binds every field/model-level constant `FieldInput` needs (`field`, `inputKey`, `modelName`,
+ * `mode`) so a custom form's own `.render()` calls only ever have to supply what actually varies
+ * per render: `value`, `onChange`, `error`, and (for an `actionRef`/`fieldRef` sub-field)
+ * `formValues`/`formModel`. Exported standalone (not only reachable via `ModelFormProps.fields`)
+ * for a custom page that isn't a model form at all — a bulk-edit dialog, say — but still wants the
+ * same field editors. */
+export function createModelFieldRenderers(model: ConsoleModelMeta, mode: 'create' | 'update'): ModelFieldRenderers {
+  const renderers: ModelFieldRenderers = {};
+  for (const f of model.fields) {
+    if (f.sensitive && !f.writeAs) continue; // never writable through a declared key
+    const inputKey = f.writeAs ?? f.key;
+    renderers[f.key] = {
+      meta: f,
+      inputKey,
+      render: (props) => <FieldInput field={f} inputKey={inputKey} modelName={model.name} mode={mode} {...props} />,
+    };
+  }
+  return renderers;
+}
 
 /** Props a `<name>.form.tsx` component receives in place of the generated create/edit form —
  * see `ModelFormPage.tsx`, which renders it instead of its own field list once one is registered
@@ -16,6 +64,9 @@ export interface ModelFormProps {
    * generated form's own `onDone` (see `ModelFormPage.tsx`). Closes the dialog/returns to the
    * page it's layered over. */
   onDone: () => void;
+  /** this model's fields, each already bound to its own built-in editor — `fields.email.render({
+   * value, onChange })`, e.g., instead of rewiring `FieldInput` by hand for every field kind. */
+  fields: ModelFieldRenderers;
 }
 
 export type ModelFormComponent = ComponentType<ModelFormProps>;
