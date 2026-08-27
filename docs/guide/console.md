@@ -171,11 +171,67 @@ export default function CustomersForm({ model, mode, id, fields, onDone }: Model
 }
 ```
 
-A custom form owns its data fetching and mutations entirely — there's no partial hand-off of just the field list. `@egig/ratchet/console/client` exports what the generated form itself is built from, so a custom one doesn't have to reinvent it: `getRow`/`createRow`/`updateRow`/`ApiRequestError`/`hasPermission` (`api.ts`), `useModels`/`useAuth`.
+A custom form owns its data fetching and mutations entirely — there's no partial hand-off of just the field list. `@egig/ratchet/console/client` exports what the generated form itself is built from, so a custom one doesn't have to reinvent it: `getRow`/`createRow`/`updateRow`/`listRows`/`callOperation`/`ApiRequestError`/`hasPermission` (`api.ts`), `useModels`/`useAuth`. `listRows` and `callOperation` matter beyond the form's own model too — a form that also manages a *related* model's rows (see `Role`'s `setPermissions` example below) uses them to query that related model and invoke a custom operation, the same way the generated list/detail views do.
 
 `fields` (`ModelFormProps.fields`) is the model's own fields, each already bound to its built-in editor — `fields[name].render({ value, onChange, error? })` renders that field's real control (a `reference`'s dropdown, `file`'s upload button, `manyToMany`'s multiselect, a `field.custom()` renderer, a plain input, whichever `kind` it is) without the custom form needing to know or switch on what kind of field it is. `fields[name].meta` is that field's metadata (`label`, `required`, `kind`, ...), for building a label/layout around `.render()`'s output. A field that's `sensitive` with no `writeAs` (never round-tripped to the client at all) has no entry. For a page that isn't a model form but still wants these — a custom bulk-edit dialog, say — `createModelFieldRenderers(model, mode)` builds the same map standalone. `FieldInput` (the lower-level component `.render()` itself calls) is also exported directly, for a form that wants to build the `field`/`inputKey`/`modelName` binding itself instead.
 
 Tailwind classes used in a `*.form.tsx` are picked up by the console build the same way the framework's own components are — no extra config needed.
+
+### A form that manages a related model too
+
+A custom form isn't limited to its own model's fields — it owns its data fetching/mutations entirely, so it can just as well read and write a *related* model alongside the one it was opened for. `Role` (`src/auth/models/role.model.ts`) is a real, worked example: its `setPermissions` [custom operation](/guide/custom-operations) takes the role's whole desired `Permission` grant list in one call (see [Auth](/guide/auth#roles-and-permissions)), which is exactly what a combined "edit role + manage its permissions" form needs — one Save button, one round trip for the grants, instead of a separate CRUD screen for `Permission` rows. Sketched (a real one would build a fuller resource → action → field tree from `useModels()`'s model list, collapsing a fully-granted subtree into one `'*'` row):
+
+```tsx
+// models/roles.form.tsx
+import { useEffect, useState } from 'react';
+import { updateRow, listRows, callOperation, useModels, type ModelFormProps } from '@egig/ratchet/console/client';
+
+interface Target { resource: string; action: string; field?: string }
+
+export default function RolesForm({ model, id, fields, onDone }: ModelFormProps) {
+  const { models } = useModels(); // every resource this role could be granted access to
+  const [values, setValues] = useState<Record<string, unknown>>({});
+  const [targets, setTargets] = useState<Target[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    void listRows('permissions', { limit: 500, offset: 0, filters: [['roleId', '=', id]] }).then((page) =>
+      setTargets(page.rows.map((r) => ({ resource: r.resource, action: r.action, field: r.field ?? undefined } as Target))),
+    );
+  }, [id]);
+
+  function toggle(resource: string, action: string, checked: boolean) {
+    setTargets((prev) =>
+      checked
+        ? [...prev, { resource, action, field: '*' }]
+        : prev.filter((t) => !(t.resource === resource && t.action === action)),
+    );
+  }
+
+  async function handleSubmit() {
+    await updateRow(model.name, id!, values); // name/description, via the model's own fields
+    await callOperation(model.name, id!, 'setPermissions', { targets }); // the whole grant list, in one call
+    onDone();
+  }
+
+  return (
+    <div>
+      <label>{fields.name.meta.label}{fields.name.render({ value: values.name, onChange: (k, v) => setValues((s) => ({ ...s, [k]: v })) })}</label>
+      {models.map((resource) => (
+        <label key={resource.name}>
+          <input
+            type="checkbox"
+            checked={targets.some((t) => t.resource === resource.name && t.action === '*')}
+            onChange={(e) => toggle(resource.name, '*', e.target.checked)}
+          />
+          {resource.label}
+        </label>
+      ))}
+      <button onClick={handleSubmit}>Save</button>
+    </div>
+  );
+}
+```
 
 ## Custom field inputs
 

@@ -14,5 +14,5 @@ export type { ModelFormProps, ModelFormComponent, ModelFieldRenderers, BoundFiel
 export { createModelFieldRenderers } from './custom-forms.js';
 export { useModels } from './models.js';
 export { useAuth } from './auth.js';
-export type { AuthUser } from './api.js';
-export { getRow, createRow, updateRow, hasPermission, ApiRequestError } from './api.js';
+export type { AuthUser, OffsetPage } from './api.js';
+export { getRow, createRow, updateRow, listRows, callOperation, hasPermission, ApiRequestError } from './api.js';

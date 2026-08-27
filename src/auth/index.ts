@@ -9,8 +9,9 @@ export {
   resolveGrantedFields,
   assertWriteFieldsAllowed,
   presetFields,
+  setRolePermissions,
   FIELDLESS_ACTIONS,
 } from './pipeline.js';
-export type { GrantedFields } from './pipeline.js';
+export type { GrantedFields, PermissionTarget } from './pipeline.js';
 export { hashPassword, verifyPassword } from './password.js';
 export type { PermissionRow, UserRow } from './lookup.js';
