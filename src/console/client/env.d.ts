@@ -4,7 +4,7 @@ import type { ConsoleBrandConfig } from '../../core/config.js';
 // above makes this a module, and a module-scoped `declare const` wouldn't be visible from every
 // other file the way an ambient global script's declarations are.
 declare global {
-  /** Injected by esbuild's `define` at build time (see src/cli/build-console.ts) from
+  /** Injected by `Bun.build`'s `define` at build time (see src/cli/build-console.ts) from
    * `FrameworkConfig.consolePath` — the path this console client is mounted at, e.g. '/console'. */
   const __CONSOLE_PATH__: string;
 

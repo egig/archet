@@ -1,10 +1,8 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { serve as serveNode, type ServerType } from '@hono/node-server';
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { tsImport } from 'tsx/esm/api';
 import { createApiRouter } from '../../router/create-router.js';
 import { buildRegistryMap, buildDomainSettingsRegistryMap } from '../../router/registry-map.js';
 import { createAuthRouter } from '../../auth/router.js';
@@ -17,25 +15,19 @@ import { loadConfig, resolveDirs } from '../load-config.js';
 /**
  * §5/§6: the dynamic `/api/:model` router only needs a registry (name -> ModelDefinition) and a
  * db client — apps never need to hand-write a server entry file. `serve` builds both from
- * ratchet.config.ts and the generated registry, and boots a plain @hono/node-server listener.
+ * ratchet.config.ts and the generated registry, and boots a plain Bun.serve listener.
  */
-export async function runServe(cwd: string): Promise<ServerType> {
+export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve>> {
   const config = await loadConfig(cwd);
   const dirs = resolveDirs(cwd, config);
   const { generatedDir } = dirs;
 
   const registryFile = path.join(generatedDir, 'registry.ts');
-  const registryModule = (await tsImport(pathToFileURL(registryFile).href, import.meta.url)) as Record<
-    string,
-    unknown
-  >;
+  const registryModule = (await import(pathToFileURL(registryFile).href)) as Record<string, unknown>;
   const registry = buildRegistryMap(registryModule);
 
   const domainsFile = path.join(generatedDir, 'domains.ts');
-  const domainsModule = (await tsImport(pathToFileURL(domainsFile).href, import.meta.url)) as Record<
-    string,
-    unknown
-  >;
+  const domainsModule = (await import(pathToFileURL(domainsFile).href)) as Record<string, unknown>;
   const domainSettingsRegistry = buildDomainSettingsRegistryMap(domainsModule);
 
   const client = postgres(config.db.connectionString);
@@ -61,8 +53,8 @@ export async function runServe(cwd: string): Promise<ServerType> {
   );
 
   const port = Number(process.env.PORT ?? 3000);
-  return serveNode({ fetch: app.fetch, port }, (info) => {
-    console.log(`ratchet listening on http://localhost:${info.port}`);
-    console.log(`models: ${Object.keys(registry).join(', ')}`);
-  });
+  const server = Bun.serve({ fetch: app.fetch, port });
+  console.log(`ratchet listening on http://localhost:${server.port}`);
+  console.log(`models: ${Object.keys(registry).join(', ')}`);
+  return server;
 }

@@ -14,18 +14,18 @@ Ratchet turns a directory of TypeScript model files into a Postgres schema, a RE
 ## Install
 
 ```sh
-npm install @egig/ratchet
+bun add @egig/ratchet
 ```
 
 ## Prerequisites
 
-- Node.js 20+
+- [Bun](https://bun.sh) 1.3+
 - A Postgres database, reachable via a `DATABASE_URL` connection string
 
 ## Scaffold a project
 
 ```sh
-npx @egig/ratchet init
+bunx @egig/ratchet init
 ```
 
 This writes `package.json`, `tsconfig.json`, `ratchet.config.ts`, `models/example.model.ts`, `drizzle/migrations/`, and a `.gitignore` into the current directory. It never overwrites a file that's already there, so it's safe to re-run in a partially set-up directory.
@@ -45,9 +45,9 @@ export const Example = defineModel('examples', {
 ## Generate, migrate, serve
 
 ```sh
-npm run generate   # models/**/*.model.ts -> .ratchet/{schema,validators,registry}.ts
-npm run migrate    # regenerate, then drizzle-kit generate + migrate
-npm run serve       # boot the API + console
+bun run generate   # models/**/*.model.ts -> .ratchet/{schema,validators,registry}.ts
+bun run migrate    # regenerate, then drizzle-kit generate + migrate
+bun run serve       # boot the API + console
 ```
 
 `ratchet serve` reads `ratchet.config.ts` and the generated registry and boots a listening server. It mounts, in order:

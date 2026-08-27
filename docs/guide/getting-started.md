@@ -4,13 +4,13 @@ Ratchet turns a directory of TypeScript model files into a Postgres schema, a RE
 
 ## Prerequisites
 
-- Node.js 20+
+- [Bun](https://bun.sh) 1.3+
 - A Postgres database, reachable via a `DATABASE_URL` connection string
 
 ## Scaffold a project
 
 ```sh
-npx @egig/ratchet init
+bunx @egig/ratchet init
 ```
 
 This writes `package.json`, `tsconfig.json`, `ratchet.config.ts`, `models/example.model.ts`, `drizzle/migrations/`, and a `.gitignore` into the current directory. It never overwrites a file that's already there, so it's safe to re-run in a partially set-up directory.
@@ -31,7 +31,7 @@ export default defineConfig({
 ## Install and configure
 
 ```sh
-npm install
+bun install
 export DATABASE_URL=postgres://user:pass@localhost:5432/mydb
 ```
 
@@ -54,9 +54,9 @@ See [Models & Fields](/guide/models) for the full field vocabulary and how relat
 ## Generate, migrate, serve
 
 ```sh
-npm run generate   # models/**/*.model.ts -> .ratchet/{schema,validators,registry}.ts
-npm run migrate     # regenerate, then drizzle-kit generate + migrate
-npm run serve        # boot the API + console
+bun run generate   # models/**/*.model.ts -> .ratchet/{schema,validators,registry}.ts
+bun run migrate     # regenerate, then drizzle-kit generate + migrate
+bun run serve        # boot the API + console
 ```
 
 `ratchet serve` reads `ratchet.config.ts` and the generated registry and boots a listening server — there's no server entry file to hand-write. It mounts, in order:
@@ -65,7 +65,7 @@ npm run serve        # boot the API + console
 - `/api/:model` — the generic REST router, one route family for every model
 - `/console` — the generated console SPA (customize with `consolePath`; registered last since it can be mounted at `/`, see [Console](/guide/console))
 
-For local iteration, `npm run dev` watches `models/**/*.model.ts` and on every change regenerates, runs `drizzle-kit push`, and restarts the dev server — faster than the migration-file workflow, intended for development only.
+For local iteration, `bun run dev` watches `models/**/*.model.ts` and on every change regenerates, runs `drizzle-kit push`, and restarts the dev server — faster than the migration-file workflow, intended for development only.
 
 ## Next steps
 

@@ -1,7 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { tsImport } from 'tsx/esm/api';
 import type { DomainDefinition } from '../core/domain.js';
 import { folderDomainOf } from './domain-path.js';
 
@@ -44,7 +43,7 @@ export async function scanDomains(modelsDir: string): Promise<ScannedDomain[]> {
 
   for (const filePath of files) {
     const moduleUrl = pathToFileURL(filePath).href;
-    const mod = (await tsImport(moduleUrl, import.meta.url)) as Record<string, unknown>;
+    const mod = (await import(moduleUrl)) as Record<string, unknown>;
     for (const [exportName, value] of Object.entries(mod)) {
       if (isDomainDefinition(value)) {
         scanned.push({ filePath, exportName, domain: value });

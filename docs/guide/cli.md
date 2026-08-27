@@ -36,7 +36,7 @@ PORT=3000 DATABASE_URL=postgres://... ratchet serve
 
 ## `ratchet build`
 
-Builds the console client (esbuild + Tailwind, hashed assets + manifest) and a bundled server artifact, for deploying without `tsx`/dev tooling at runtime.
+Builds the console client (Bun's bundler + Tailwind, hashed assets + manifest) and a bundled server artifact, for deploying without dev tooling at runtime.
 
 ## `ratchet studio`
 
