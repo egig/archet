@@ -331,4 +331,93 @@ describe('generate() against a self-contained model fixture', () => {
       await rm(dupFormsDir, { recursive: true, force: true });
     }
   });
+
+  it('emits an empty fieldInputs map to console-field-inputs.ts when no *.input.tsx exists', async () => {
+    const { fieldInputCount } = await generate({ modelsDir, generatedDir });
+    expect(fieldInputCount).toBe(0);
+    const fieldInputsSrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'console-field-inputs.ts'), 'utf8'),
+    );
+    expect(fieldInputsSrc).toContain('export const fieldInputs: Record<string, Record<string, FieldRenderer>> = {');
+    expect(fieldInputsSrc).toContain("from '@egig/ratchet/console/client'");
+  });
+
+  it("emits a fieldInputs entry for a `<model>.<field>.input.tsx`, imported by relative path", async () => {
+    const fieldInputsModelsDir = await writeModelsDir({
+      'customer.model.ts': CUSTOMER_MODEL,
+      // CUSTOMER_MODEL's model name is 'customers' (defineModel('customers', ...)) with an
+      // 'email' field.
+      'customers.email.input.tsx': `export default function CustomersEmailInput() { return null; }`,
+    });
+    try {
+      const { fieldInputCount } = await generate({ modelsDir: fieldInputsModelsDir, generatedDir });
+      expect(fieldInputCount).toBe(1);
+      const fieldInputsSrc = await import('node:fs/promises').then((fs) =>
+        fs.readFile(path.join(generatedDir, 'console-field-inputs.ts'), 'utf8'),
+      );
+      expect(fieldInputsSrc).toContain(`import customers_emailInput from '../`);
+      expect(fieldInputsSrc).toContain(`customers.email.input.tsx';`);
+      expect(fieldInputsSrc).toContain(`"customers": {`);
+      expect(fieldInputsSrc).toContain(`"email": customers_emailInput,`);
+    } finally {
+      await rm(fieldInputsModelsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a console field input declared for a model that does not exist', async () => {
+    const badFieldInputsDir = await writeModelsDir({
+      'customer.model.ts': CUSTOMER_MODEL,
+      'orphan.email.input.tsx': `export default function OrphanEmailInput() { return null; }`,
+    });
+    try {
+      await expect(generate({ modelsDir: badFieldInputsDir, generatedDir })).rejects.toThrow(
+        /declares an input for unknown model 'orphan'/,
+      );
+    } finally {
+      await rm(badFieldInputsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a console field input declared for a field that does not exist on that model', async () => {
+    const badFieldInputsDir = await writeModelsDir({
+      'customer.model.ts': CUSTOMER_MODEL,
+      'customers.nickname.input.tsx': `export default function CustomersNicknameInput() { return null; }`,
+    });
+    try {
+      await expect(generate({ modelsDir: badFieldInputsDir, generatedDir })).rejects.toThrow(
+        /declares an input for unknown field 'nickname' on model 'customers'/,
+      );
+    } finally {
+      await rm(badFieldInputsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects two console field inputs declared for the same model+field', async () => {
+    const dupFieldInputsDir = await writeModelsDir({
+      'customer.model.ts': CUSTOMER_MODEL,
+      'customers.email.input.tsx': `export default function A() { return null; }`,
+      'billing/customers.email.input.tsx': `export default function B() { return null; }`,
+    });
+    try {
+      await expect(generate({ modelsDir: dupFieldInputsDir, generatedDir })).rejects.toThrow(
+        /duplicate console field input for 'customers.email'/,
+      );
+    } finally {
+      await rm(dupFieldInputsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a *.input.tsx not named '<model>.<field>.input.tsx'", async () => {
+    const badFieldInputsDir = await writeModelsDir({
+      'customer.model.ts': CUSTOMER_MODEL,
+      'customers.input.tsx': `export default function BadInput() { return null; }`,
+    });
+    try {
+      await expect(generate({ modelsDir: badFieldInputsDir, generatedDir })).rejects.toThrow(
+        /must be named '<model>\.<field>\.input\.tsx'/,
+      );
+    } finally {
+      await rm(badFieldInputsDir, { recursive: true, force: true });
+    }
+  });
 });

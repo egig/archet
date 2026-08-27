@@ -177,4 +177,38 @@ A custom form owns its data fetching and mutations entirely — there's no parti
 
 Tailwind classes used in a `*.form.tsx` are picked up by the console build the same way the framework's own components are — no extra config needed.
 
-Aside from custom forms and the [branding](#branding) config, every app gets the same console shell (model list/table views, settings tabs) — there's still no custom pages or custom field renderers, and no `console/client/main.tsx` to author; the entry point that mounts `<ConsoleApp />` lives in the framework.
+## Custom field inputs
+
+Replacing a whole form is sometimes more than a single field needs. Add a `<model>.<field>.input.tsx` under `modelsDir` and every place that field would normally render its `kind`-based input — the generated form, and `fields[name].render(...)` in a custom form (above) — renders this instead:
+
+```
+models/
+  customer.model.ts         # defineModel('customers', { fields: { email: field.string(...), ... } })
+  customers.email.input.tsx  # replaces the `email` field's input everywhere on `customers`
+```
+
+No change to the model definition is needed — this is purely a filename, unlike `field.custom(name, base)` (a separate, model-declared mechanism keyed by a custom type name, `core/field.ts`), which this takes priority over if both somehow apply to the same field. `ratchet generate` rejects a `<model>.<field>.input.tsx` that doesn't match a real model and one of its declared fields, a name with no `.` separating them, and two inputs declared for the same model+field.
+
+The file's default export receives the same props the generated switch itself uses (`FieldInputProps`, also what a `field.custom()` renderer receives) — `value`/`onChange`/`error`/`mode`, plus `field` (this field's own metadata), `inputKey` (the key to `onChange`/the save payload — usually `field.key`, but a `sensitive`+`writeAs` field like a password submits under its `writeAs` instead), and `modelName`:
+
+```tsx
+// models/customers.email.input.tsx
+import type { FieldInputProps } from '@egig/ratchet/console/client';
+
+export default function CustomersEmailInput({ value, onChange, inputKey, error }: FieldInputProps) {
+  return (
+    <div>
+      <input
+        type="email"
+        value={(value as string) ?? ''}
+        onChange={(e) => onChange(inputKey, e.target.value.toLowerCase())}
+      />
+      {error && <p className="text-red-600 text-xs">{error}</p>}
+    </div>
+  );
+}
+```
+
+Tailwind classes used in a `*.input.tsx` are picked up the same way `*.form.tsx`'s are — no extra config needed.
+
+Aside from custom forms, custom field inputs, and the [branding](#branding) config, every app gets the same console shell (model list/table views, settings tabs) — there's still no custom pages, and no `console/client/main.tsx` to author; the entry point that mounts `<ConsoleApp />` lives in the framework.

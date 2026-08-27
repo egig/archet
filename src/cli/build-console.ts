@@ -23,12 +23,12 @@ const NOOP_HANDLE: ConsoleClientHandle = { stop: async () => {} };
 
 /** The framework-owned console client entry (`main.tsx`) and its Tailwind source (`styles.css`) —
  * resolved relative to this module rather than a consumer path, since there's no per-app entry
- * file to author (a consumer's only extension point, `*.form.tsx`, is pulled in through the
- * `ratchet:custom-forms` specifier `main.tsx` imports — see `customFormsPlugin` below — not by
- * writing its own entry). Checks for `main.tsx` first (running from source under Bun, e.g. this
- * repo's own `example/`) and falls back to the compiled `main.js` (running from a published
- * `dist/`, e.g. a real consumer's `node_modules/@egig/ratchet`) — both live one directory up from
- * this file's own location. */
+ * file to author (a consumer's extension points, `*.form.tsx`/`*.input.tsx`, are pulled in
+ * through the `ratchet:*` specifiers `main.tsx`/`fields.tsx` import — see
+ * `ratchetVirtualModulesPlugin` below — not by writing its own entry). Checks for `main.tsx` first
+ * (running from source under Bun, e.g. this repo's own `example/`) and falls back to the compiled
+ * `main.js` (running from a published `dist/`, e.g. a real consumer's `node_modules/@egig/ratchet`)
+ * — both live one directory up from this file's own location. */
 function frameworkConsoleClientDir(): string {
   return path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'console', 'client');
 }
@@ -44,18 +44,23 @@ function frameworkCssEntry(): string | null {
   return existsSync(cssFile) ? cssFile : null;
 }
 
-/** Resolves the `ratchet:custom-forms` specifier `main.tsx` imports to the consuming project's
- * own generated `<generatedDir>/console-forms.ts` (written by `ratchet generate` — see
- * forms-gen.ts) — a virtual specifier, not a real package, since `main.tsx` lives in the framework
- * and can't hold a relative path to a file that only exists inside whichever consumer project
- * happens to be building it. */
-function customFormsPlugin(generatedDir: string): Bun.BunPlugin {
+/** `ratchet:*` specifiers `main.tsx`/`fields.tsx` import, resolved to the consuming project's own
+ * generated file (written by `ratchet generate`) — virtual specifiers, not real packages, since
+ * that framework source can't hold a relative path to a file that only exists inside whichever
+ * consumer project happens to be building it. */
+const VIRTUAL_MODULES: Record<string, string> = {
+  'ratchet:custom-forms': 'console-forms.ts', // forms-gen.ts
+  'ratchet:field-inputs': 'console-field-inputs.ts', // field-inputs-gen.ts
+};
+
+function ratchetVirtualModulesPlugin(generatedDir: string): Bun.BunPlugin {
   return {
-    name: 'ratchet-custom-forms',
+    name: 'ratchet-virtual-modules',
     setup(build) {
-      build.onResolve({ filter: /^ratchet:custom-forms$/ }, () => ({
-        path: path.join(generatedDir, 'console-forms.ts'),
-      }));
+      for (const [specifier, generatedFile] of Object.entries(VIRTUAL_MODULES)) {
+        const filter = new RegExp(`^${specifier}$`);
+        build.onResolve({ filter }, () => ({ path: path.join(generatedDir, generatedFile) }));
+      }
     },
   };
 }
@@ -134,7 +139,7 @@ async function bundleConsoleClient(dirs: Dirs, assetsDir: string, mode: 'dev' | 
     format: 'esm',
     sourcemap: mode === 'dev' ? 'linked' : 'none',
     minify: mode === 'prod',
-    plugins: [customFormsPlugin(dirs.generatedDir)],
+    plugins: [ratchetVirtualModulesPlugin(dirs.generatedDir)],
     define: {
       __CONSOLE_PATH__: JSON.stringify(dirs.consolePath),
       __CONSOLE_BRAND__: JSON.stringify(dirs.brand),
@@ -157,10 +162,11 @@ async function bundleConsoleClient(dirs: Dirs, assetsDir: string, mode: 'dev' | 
 
 /** Bundles the framework's own console client entry with `Bun.build` — every app gets the same
  * console UI (see ConsoleApp.tsx), so this always runs, unconditionally, and the only per-app
- * source it pulls in is whatever `console-forms.ts` (see forms-gen.ts) resolves to via the
- * `ratchet:custom-forms` specifier. Runs Tailwind's standalone CLI against a generated CSS entry
- * (`writeConsoleCssEntry`) that layers a `*.form.tsx` content scan on top of the framework's own
- * `styles.css`, and writes `<generatedDir>/console/manifest.json` mapping logical names to the actual (optionally
+ * source it pulls in is whatever the generated `console-forms.ts`/`console-field-inputs.ts` (see
+ * forms-gen.ts/field-inputs-gen.ts) resolve to via the `ratchet:*` specifiers in `VIRTUAL_MODULES`.
+ * Runs Tailwind's standalone CLI against a generated CSS entry (`writeConsoleCssEntry`) that
+ * layers a `*.form.tsx`/`*.input.tsx` content scan on top of the framework's own `styles.css`, and
+ * writes `<generatedDir>/console/manifest.json` mapping logical names to the actual (optionally
  * content-hashed) asset paths. `dirs.consolePath` and `dirs.brand` are inlined into the bundle via
  * `Bun.build`'s `define` (`__CONSOLE_PATH__`/`__CONSOLE_BRAND__`, declared ambiently in
  * src/console/client/env.d.ts) — the client needs them for the router `basename`/API prefix and
@@ -186,10 +192,11 @@ export async function buildConsoleClient(dirs: Dirs, options: BuildConsoleClient
     // `Bun.build` has no incremental watch-context API (unlike esbuild's `ctx.watch()`), so
     // rebuild by hand: watch the framework's own console client source tree and re-run the build
     // on any change, debounced the same way `dev.ts` debounces model-file changes. Also watches
-    // the generated `console-forms.ts` (see forms-gen.ts) — `dev.ts`'s own model-file watcher
-    // rewrites it whenever a `*.form.tsx` is added/changed/removed, and this is what turns that
-    // rewrite into an actual client rebuild (`ratchet:custom-forms` resolves to it — see
-    // `customFormsPlugin` above — so its content is exactly what the bundle needs to pick up).
+    // every generated virtual-module file (see `VIRTUAL_MODULES` above) — `dev.ts`'s own
+    // model-file watcher rewrites the matching one whenever a `*.form.tsx`/`*.input.tsx` is
+    // added/changed/removed, and this is what turns that rewrite into an actual client rebuild
+    // (`ratchetVirtualModulesPlugin` resolves the `ratchet:*` import to it, so its content is
+    // exactly what the bundle needs to pick up).
     let rebuilding = false;
     let pending = false;
     const rebuild = (): void => {
@@ -215,8 +222,10 @@ export async function buildConsoleClient(dirs: Dirs, options: BuildConsoleClient
       debounceTimer = setTimeout(rebuild, DEBOUNCE_MS);
     };
     const watcher = watch(frameworkConsoleClientDir(), { recursive: true }, scheduleRebuild);
-    const formsFile = path.join(dirs.generatedDir, 'console-forms.ts');
-    const formsWatcher = existsSync(formsFile) ? watch(formsFile, scheduleRebuild) : null;
+    const virtualModuleWatchers = Object.values(VIRTUAL_MODULES)
+      .map((generatedFile) => path.join(dirs.generatedDir, generatedFile))
+      .filter((generatedFile) => existsSync(generatedFile))
+      .map((generatedFile) => watch(generatedFile, scheduleRebuild));
 
     const tailwindChild = cssEntry ? spawnTailwindWatch(cssEntry, path.join(assetsDir, 'main.css')) : null;
 
@@ -224,7 +233,7 @@ export async function buildConsoleClient(dirs: Dirs, options: BuildConsoleClient
       stop: async () => {
         clearTimeout(debounceTimer);
         watcher.close();
-        formsWatcher?.close();
+        for (const w of virtualModuleWatchers) w.close();
         if (tailwindChild) await killChild(tailwindChild);
       },
     };

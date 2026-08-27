@@ -90,7 +90,7 @@ export async function runDev(cwd: string): Promise<void> {
 
   let debounceTimer: NodeJS.Timeout | undefined;
   watch(dirs.modelsDir, { recursive: true }, (_event, filename) => {
-    if (!filename || !(filename.endsWith('.model.ts') || filename.endsWith('.form.tsx'))) return;
+    if (!filename || !(filename.endsWith('.model.ts') || filename.endsWith('.form.tsx') || filename.endsWith('.input.tsx'))) return;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => void restart(`${filename} changed`), DEBOUNCE_MS);
   });

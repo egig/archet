@@ -3,6 +3,7 @@ export type { ConsoleAppProps } from './ConsoleApp.js';
 export type { FieldRenderer } from './field-renderers.js';
 export { FieldInput } from './fields.js';
 export type { FieldInputProps } from './fields.js';
+export type { FieldInputOverrides } from './field-input-overrides.js';
 
 // The surface a `<name>.form.tsx` (see docs/guide/console.md) authors against: `ModelFormProps`
 // is the props shape it receives (including `fields`, its per-field bound renderers — call

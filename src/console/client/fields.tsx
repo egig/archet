@@ -4,6 +4,7 @@ import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { listRows, uploadFile } from './api.js';
 import { useModels } from './models.js';
 import { useFieldRenderers } from './field-renderers.js';
+import { useFieldInputOverrides } from './field-input-overrides.js';
 import { queryKeys } from './query-keys.js';
 import { ReferenceCombobox } from './ReferenceCombobox.js';
 import { ManyToManyMultiSelect } from './ManyToManyMultiSelect.js';
@@ -74,6 +75,7 @@ export function FieldInput(props: FieldInputProps) {
   const { field, inputKey, value, onChange, error, mode, modelName } = props;
   const { models: modelRefOptions } = useModels();
   const fieldRenderers = useFieldRenderers();
+  const fieldInputOverrides = useFieldInputOverrides();
   const required = field.writeAs ? mode === 'create' && field.required : field.required;
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadFile(modelName!, field.key, file),
@@ -87,6 +89,12 @@ export function FieldInput(props: FieldInputProps) {
       {errorEl}
     </div>
   );
+
+  // a `<model>.<field>.input.tsx` (see field-input-overrides.tsx) is the most specific override —
+  // no model change needed to declare it, just a file on disk naming this exact field — so it
+  // wins over a `field.custom()` renderer, which itself wins over the kind-based switch below.
+  const fieldInputOverride = modelName ? fieldInputOverrides[modelName]?.[field.key] : undefined;
+  if (fieldInputOverride) return fieldInputOverride(props);
 
   const customRenderer = field.customType ? fieldRenderers[field.customType] : undefined;
   if (customRenderer) return customRenderer(props);

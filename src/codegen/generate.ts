@@ -3,12 +3,14 @@ import path from 'node:path';
 import { assertNoDuplicateNames, assertReferencesResolve, scanModels } from './scan.js';
 import { assertDomainMatchesFolder, assertNoDuplicateDomainNames, scanDomains } from './scan-domains.js';
 import { assertFormModelsResolve, assertNoDuplicateFormModels, scanForms } from './scan-forms.js';
+import { assertFieldInputsResolve, assertNoDuplicateFieldInputs, scanFieldInputs } from './scan-field-inputs.js';
 import { BUILTIN_DOMAINS, BUILTIN_MODELS } from './builtins.js';
 import { generateSchemaSource } from './schema-gen.js';
 import { generateValidatorsSource } from './validators-gen.js';
 import { generateRegistrySource } from './registry-gen.js';
 import { generateDomainsSource } from './domains-gen.js';
 import { generateCustomFormsSource } from './forms-gen.js';
+import { generateFieldInputsSource } from './field-inputs-gen.js';
 
 export interface GenerateOptions {
   modelsDir: string;
@@ -19,6 +21,7 @@ export interface GenerateResult {
   modelCount: number;
   domainCount: number;
   formCount: number;
+  fieldInputCount: number;
   files: string[];
 }
 
@@ -35,6 +38,10 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
   assertNoDuplicateFormModels(scannedForms);
   assertFormModelsResolve(scannedForms, new Set(scanned.map((s) => s.model.name)));
 
+  const scannedFieldInputs = await scanFieldInputs(opts.modelsDir);
+  assertNoDuplicateFieldInputs(scannedFieldInputs);
+  assertFieldInputsResolve(scannedFieldInputs, scanned);
+
   await mkdir(opts.generatedDir, { recursive: true });
 
   const schemaSrc = generateSchemaSource(scanned);
@@ -42,23 +49,27 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
   const registrySrc = generateRegistrySource(scanned, opts.generatedDir);
   const domainsSrc = generateDomainsSource(scannedDomains, opts.generatedDir);
   const customFormsSrc = generateCustomFormsSource(scannedForms, opts.generatedDir);
+  const fieldInputsSrc = generateFieldInputsSource(scannedFieldInputs, opts.generatedDir);
 
   const schemaFile = path.join(opts.generatedDir, 'schema.ts');
   const validatorsFile = path.join(opts.generatedDir, 'validators.ts');
   const registryFile = path.join(opts.generatedDir, 'registry.ts');
   const domainsFile = path.join(opts.generatedDir, 'domains.ts');
   const customFormsFile = path.join(opts.generatedDir, 'console-forms.ts');
+  const fieldInputsFile = path.join(opts.generatedDir, 'console-field-inputs.ts');
 
   await writeFile(schemaFile, schemaSrc, 'utf8');
   await writeFile(validatorsFile, validatorsSrc, 'utf8');
   await writeFile(registryFile, registrySrc, 'utf8');
   await writeFile(domainsFile, domainsSrc, 'utf8');
   await writeFile(customFormsFile, customFormsSrc, 'utf8');
+  await writeFile(fieldInputsFile, fieldInputsSrc, 'utf8');
 
   return {
     modelCount: scanned.length,
     domainCount: scannedDomains.length,
     formCount: scannedForms.length,
-    files: [schemaFile, validatorsFile, registryFile, domainsFile, customFormsFile],
+    fieldInputCount: scannedFieldInputs.length,
+    files: [schemaFile, validatorsFile, registryFile, domainsFile, customFormsFile, fieldInputsFile],
   };
 }

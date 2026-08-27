@@ -11,6 +11,7 @@ import { SettingsPage } from './SettingsPage.js';
 import { ProfilePage } from './ProfilePage.js';
 import { WorkspacePage } from './WorkspacePage.js';
 import { CustomFormsProvider, type ModelFormComponent } from './custom-forms.js';
+import { FieldInputOverridesProvider, type FieldInputOverrides } from './field-input-overrides.js';
 
 // One client for the whole SPA lifetime — `ConsoleApp` is mounted once by `main.tsx`, so this
 // never needs to be recreated per-render. Retries off: a failed request here is almost always an
@@ -27,34 +28,41 @@ export interface ConsoleAppProps {
    * other caller (e.g. a test rendering `<ConsoleApp />` directly) gets none, same as before this
    * prop existed. */
   customForms?: Record<string, ModelFormComponent>;
+  /** modelName -> fieldKey -> renderer, one entry per `<model>.<field>.input.tsx` under
+   * `modelsDir` (see `scan-field-inputs.ts`, `field-inputs-gen.ts`) — `FieldInput` (fields.tsx)
+   * renders the matching one instead of its own kind-based switch. Built by the generated
+   * `console-field-inputs.ts` and passed in by `console/client/main.tsx`. */
+  fieldInputs?: FieldInputOverrides;
 }
 
 /** The console SPA's root — every deployment gets the same shell (routes, sidebar, list/table
- * views) except for branding (`ratchet.config.ts`'s `brand`, see `BrandMark.tsx`) and per-model
- * create/edit forms (`customForms` above), both build-time config. Mounted by
- * `console/client/main.tsx`. */
-export function ConsoleApp({ customForms }: ConsoleAppProps) {
+ * views) except for branding (`ratchet.config.ts`'s `brand`, see `BrandMark.tsx`), per-model
+ * create/edit forms (`customForms`), and per-field inputs (`fieldInputs`), all build-time config.
+ * Mounted by `console/client/main.tsx`. */
+export function ConsoleApp({ customForms, fieldInputs }: ConsoleAppProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <CustomFormsProvider forms={customForms ?? {}}>
-        <BrowserRouter basename={__CONSOLE_PATH__}>
-          <AuthProvider>
-            <Routes>
-              <Route path="/setup" element={<SetupPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route element={<RequireAuth />}>
-                <Route path="workspace/:workspaceId/*" element={<WorkspacePage />} />
-                <Route path="profile" element={<ProfilePage />} />
-                <Route element={<Layout />}>
-                  <Route index element={<IndexRedirect />} />
-                  <Route path="settings" element={<SettingsPage />} />
-                  <Route path="settings/:domain" element={<SettingsPage />} />
-                  <Route path=":model/*" element={<ModelListPage />} />
+        <FieldInputOverridesProvider overrides={fieldInputs ?? {}}>
+          <BrowserRouter basename={__CONSOLE_PATH__}>
+            <AuthProvider>
+              <Routes>
+                <Route path="/setup" element={<SetupPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route element={<RequireAuth />}>
+                  <Route path="workspace/:workspaceId/*" element={<WorkspacePage />} />
+                  <Route path="profile" element={<ProfilePage />} />
+                  <Route element={<Layout />}>
+                    <Route index element={<IndexRedirect />} />
+                    <Route path="settings" element={<SettingsPage />} />
+                    <Route path="settings/:domain" element={<SettingsPage />} />
+                    <Route path=":model/*" element={<ModelListPage />} />
+                  </Route>
                 </Route>
-              </Route>
-            </Routes>
-          </AuthProvider>
-        </BrowserRouter>
+              </Routes>
+            </AuthProvider>
+          </BrowserRouter>
+        </FieldInputOverridesProvider>
       </CustomFormsProvider>
     </QueryClientProvider>
   );
