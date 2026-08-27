@@ -15,6 +15,7 @@ Reads `models/**/*.model.ts` and emits, into `generatedDir` (`.ratchet/` by defa
 - `schema.ts` — the Drizzle schema
 - `validators.ts` — Zod validators
 - `registry.ts` — the model registry `ratchet serve` and `ratchet build` read from
+- `console-forms.ts` — the [custom console form](/guide/console#custom-forms) registry, one entry per `models/**/*.form.tsx`
 
 Run this any time your models change and you're not using `ratchet dev`.
 

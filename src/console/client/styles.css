@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
-/* Scans this directory for the Tailwind classes the console client's own components use — the
-   only source of classes now that ConsoleApp has no consumer-supplied pages/fields to scan. */
+/* Scans this directory for the Tailwind classes the console client's own components use.
+   `build-console.ts`'s `writeConsoleCssEntry` wraps this file with an extra `@source` over
+   `modelsDir` at build time, so a consumer's `*.form.tsx` gets scanned too — see that function for
+   why a second `@source` can't just live here instead (this file has no way to know `modelsDir`,
+   a per-consumer-project path). */
 @source ".";
