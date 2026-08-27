@@ -4,6 +4,7 @@ import { AutomationDomain } from '../automation/domain.js';
 import { Workspace, WorkspaceView } from '../workspace/models/index.js';
 import type { ScannedModel } from './scan.js';
 import type { ScannedDomain } from './scan-domains.js';
+import type { ScannedForm } from './scan-forms.js';
 
 /**
  * The framework's own built-in models — always part of the model graph `generate()` builds
@@ -38,5 +39,24 @@ export const BUILTIN_DOMAINS: ScannedDomain[] = [
     exportName: 'AutomationDomain',
     domain: AutomationDomain,
     builtinPackage: '@egig/ratchet/automation',
+  },
+];
+
+/**
+ * The framework's own built-in console forms — `generate()` merges these into every consuming
+ * app's `customForms` map (`src/console/client/custom-forms.tsx`) by default, exactly as if the
+ * app had authored its own `<name>.form.tsx`, unless it actually does: a scanned form for the same
+ * model takes precedence and this entry is dropped (see `generate()`, generate.ts). Unlike
+ * `BUILTIN_MODELS` above, there's no live object to import here — a `.form.tsx` is never
+ * `import()`-ed by codegen itself (`scan-forms.ts`'s own doc comment), only ever referenced by the
+ * *generated* `console-forms.ts`, which the browser bundle build resolves — so this is pure
+ * metadata, the same shape a scanned form gets from `scanForms()`.
+ */
+export const BUILTIN_FORMS: ScannedForm[] = [
+  {
+    filePath: '@egig/ratchet/auth/console-forms (RoleForm)',
+    modelName: 'roles',
+    builtinPackage: '@egig/ratchet/auth/console-forms',
+    exportName: 'RoleForm',
   },
 ];

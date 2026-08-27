@@ -9,14 +9,24 @@ const HEADER =
   `// generated one.\n\n`;
 
 /** Emits \`customForms\`: a name -> component map, one entry per \`*.form.tsx\` under \`modelsDir\`
- * (see scan-forms.ts). Always written, even with zero custom forms, so the bundle entry's import
- * never dangles. */
+ * plus the framework's own \`BUILTIN_FORMS\` (builtins.ts) for any model a consumer app hasn't
+ * already covered itself (see \`generate()\`, generate.ts, for that precedence). Always written,
+ * even with zero custom forms, so the bundle entry's import never dangles. */
 export function generateCustomFormsSource(scanned: ScannedForm[], generatedDir: string): string {
   const lines = [`import type { ModelFormComponent } from '@egig/ratchet/console/client';`, ''];
 
-  for (const { modelName, filePath } of scanned) {
+  for (const { modelName, filePath, builtinPackage, exportName } of scanned) {
     const localName = `${modelName.replace(/[^a-zA-Z0-9_$]/g, '_')}Form`;
-    lines.push(`import ${localName} from '${relativeImportSpecifier(generatedDir, filePath)}';`);
+    // a builtin's own barrel module (e.g. `@egig/ratchet/auth/console-forms`) re-exports more than
+    // one form, so it can't use a `default` export the way a consumer's own `*.form.tsx` always
+    // does — a named import, aliased to the same local name either way, keeps everything below
+    // this loop oblivious to which case it's in.
+    const specifier = builtinPackage ?? relativeImportSpecifier(generatedDir, filePath);
+    lines.push(
+      builtinPackage
+        ? `import { ${exportName} as ${localName} } from '${specifier}';`
+        : `import ${localName} from '${specifier}';`,
+    );
   }
   lines.push('');
 
