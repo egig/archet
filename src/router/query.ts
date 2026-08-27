@@ -111,7 +111,7 @@ export function parseInclude(model: ModelDefinition, raw: string | null, registr
     if (findRelationsTargeting(registry, model.name).some((r) => r.sourceModel.name === trimmed)) return trimmed;
     const fieldKey = `${trimmed}Id`;
     const field = model.fields[fieldKey];
-    if (!field || field.kind !== 'reference') {
+    if (!field || (field.kind !== 'reference' && field.kind !== 'tree')) {
       throw new PipelineError({ code: 'INVALID_INCLUDE', status: 400, fields: { include: `unknown relation '${trimmed}'` } });
     }
     return trimmed;

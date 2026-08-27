@@ -7,6 +7,7 @@ import { useFieldRenderers } from './field-renderers.js';
 import { useFieldInputOverrides } from './field-input-overrides.js';
 import { queryKeys } from './query-keys.js';
 import { ReferenceCombobox } from './ReferenceCombobox.js';
+import { TreeCombobox } from './TreeCombobox.js';
 import { ManyToManyMultiSelect } from './ManyToManyMultiSelect.js';
 
 /** What a `file` field's form value looks like — either an existing record's read shape
@@ -56,6 +57,10 @@ export interface FieldInputProps {
   mode: 'create' | 'update';
   /** only needed by `kind: 'file'`, to build its upload URL (`POST /api/:modelName/:field/upload`). */
   modelName?: string;
+  /** the record being edited, for `kind: 'tree'` (`TreeCombobox` excludes it and its descendants
+   * from the parent picker — reparenting under either would create a cycle). Absent on create,
+   * where there's no id yet. */
+  recordId?: string;
   /** the whole form's current values + its model meta. Lets an `actionRef` sub-field scope its
    * option list to the sibling `modelRef` ("resource") chosen elsewhere on the same form (its
    * parent form also uses these to hide `actionRef`/`fieldRef` until a resource is picked).
@@ -72,7 +77,7 @@ export function resourceFieldKey(model: ConsoleModelMeta | undefined): string | 
 }
 
 export function FieldInput(props: FieldInputProps) {
-  const { field, inputKey, value, onChange, error, mode, modelName } = props;
+  const { field, inputKey, value, onChange, error, mode, modelName, recordId } = props;
   const { models: modelRefOptions } = useModels();
   const fieldRenderers = useFieldRenderers();
   const fieldInputOverrides = useFieldInputOverrides();
@@ -202,6 +207,17 @@ export function FieldInput(props: FieldInputProps) {
           value={(value as string) ?? ''}
           onChange={(v) => onChange(inputKey, v)}
           required={required}
+        />,
+      );
+
+    case 'tree':
+      return wrap(
+        <TreeCombobox
+          targetModel={field.targetModel ?? ''}
+          value={(value as string) ?? ''}
+          onChange={(v) => onChange(inputKey, v)}
+          required={required}
+          excludeId={recordId}
         />,
       );
 

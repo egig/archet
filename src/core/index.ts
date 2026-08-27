@@ -16,6 +16,7 @@ export type {
   FieldRefFieldDefinition,
   FileFieldDefinition,
   ManyToManyFieldDefinition,
+  TreeFieldDefinition,
 } from './field.js';
 
 export {
@@ -28,6 +29,9 @@ export {
   buildJunctionModel,
 } from './many-to-many.js';
 export type { ManyToManyRelation, JunctionColumns } from './many-to-many.js';
+
+export { treeFieldOf, wouldCreateTreeCycle } from './tree.js';
+export type { TreeField } from './tree.js';
 
 export { DEFAULT_MAX_FILE_SIZE, sniffMimeType, matchesAccept } from './storage.js';
 export type { FileStorageAdapter, StoredFile } from './storage.js';

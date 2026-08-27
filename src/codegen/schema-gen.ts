@@ -45,6 +45,15 @@ function columnExpr(key: string, f: FieldDefinition): string {
       // Q6: RESTRICT — refuse a hard-delete that would orphan referencing rows.
       expr = `uuid('${col}').references(() => ${tableVar(f.targetModel)}.id, { onDelete: 'restrict' })`;
       break;
+    case 'tree':
+      // Self-referencing FK — `f.targetModel` is always this same model (see `TreeFieldDefinition`
+      // in core/field.ts), so `tableVar(f.targetModel)` here resolves to the very table constant
+      // being defined; Drizzle supports this as long as the reference stays a lazy `() => ...`
+      // callback, same as any other `reference` column. RESTRICT for the same reason as `reference`
+      // above (Q6) — it only guards a real hard-delete, same caveat as `reference`, since the
+      // generic router's normal DELETE is a soft delete that never touches this FK either way.
+      expr = `uuid('${col}').references(() => ${tableVar(f.targetModel)}.id, { onDelete: 'restrict' })`;
+      break;
     case 'modelRef':
     case 'actionRef':
     case 'fieldRef':

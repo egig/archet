@@ -125,6 +125,23 @@ export interface ManyToManyFieldDefinition extends BaseFieldDefinition {
   targetModel: string;
 }
 
+/** A parent-pointer hierarchy on this model itself — e.g. a `Category` or Chart-of-Accounts
+ * `Account` whose `parentId` points at another row of the *same* model, forming a tree (root nodes
+ * carry a `null` parent). Structurally identical to a self-referencing `ReferenceFieldDefinition`
+ * (nullable uuid FK, `onDelete: 'restrict'` — see `codegen/schema-gen.ts`), but kept as its own
+ * `kind` rather than `field.reference(ownModelName)` so the console can render it as a tree picker
+ * instead of a flat dropdown, and so writes get cycle protection for free (see
+ * `core/tree.ts`'s `wouldCreateTreeCycle`, run by `persistWrite` in `core/pipeline.ts`) — a plain
+ * `reference` field has no such guard and shouldn't need one. `targetModel` is always the
+ * declaring model's own name; `field.tree()` can't know that at declaration time (the model isn't
+ * built yet), so it's left `''` here and filled in by `defineModel()` (core/model.ts), the same
+ * place a `field.tree()` field's key is checked for the `'Id'` suffix and a model is checked for
+ * declaring at most one. */
+export interface TreeFieldDefinition extends BaseFieldDefinition {
+  kind: 'tree';
+  targetModel: string;
+}
+
 /** Stores a reference to a blob held by a `FileStorageAdapter` (see `core/storage.ts`), not the
  * bytes themselves — the column is `{ key, filename, mimeType, size }` (jsonb). `accept` is a
  * comma-separated list of mime patterns (`'image/png'`, `'image/*'`) checked against the
@@ -154,7 +171,8 @@ export type FieldDefinition =
   | ActionRefFieldDefinition
   | FieldRefFieldDefinition
   | FileFieldDefinition
-  | ManyToManyFieldDefinition;
+  | ManyToManyFieldDefinition
+  | TreeFieldDefinition;
 
 function assertNoRequiredDefaultConflict(opts: FieldCommonOptions): void {
   if (opts.required && opts.default !== undefined) {
@@ -246,6 +264,14 @@ export const field = {
 
   manyToMany(targetModel: string, opts: { displayText?: string } = {}): ManyToManyFieldDefinition {
     return { ...base(opts), kind: 'manyToMany', targetModel };
+  },
+
+  /** Never `required` (a root node has no parent — there's nothing to require) and never `unique`
+   * (many children legitimately share one parent), so `opts` is narrowed to just `indexed`/
+   * `displayText`, the same way `manyToMany()`'s is. `targetModel` is a placeholder here — see
+   * `TreeFieldDefinition`'s doc comment for why `defineModel()` has to fill in the real value. */
+  tree(opts: { indexed?: boolean; displayText?: string } = {}): TreeFieldDefinition {
+    return { ...base(opts), kind: 'tree', targetModel: '' };
   },
 
   /** Tags an existing field definition with a `name` the console client can key a custom form

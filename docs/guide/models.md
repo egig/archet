@@ -31,6 +31,7 @@ All fields accept the common options below, plus any type-specific ones.
 | `field.enum(values, opts)` | `values` is a non-empty array of string literals |
 | `field.json(opts)` | `schema?: ZodTypeAny` — validates the JSON payload |
 | `field.reference(targetModel, opts)` | `targetModel: string` — see [Relations](#relations) |
+| `field.tree(opts)` | self-referencing parent pointer — see [Tree / hierarchy fields](#tree-hierarchy-fields) |
 | `field.file(opts)` | `accept?: string`, `preview?: 'image'`, `maxSize?: number` — see [Files & images](#files-images) |
 
 ### Common options
@@ -87,6 +88,45 @@ GET /api/invoices?include=customer
 ```
 
 Nested/dot-chained includes (`include=customer.company`) are rejected, not silently truncated.
+
+## Tree / hierarchy fields
+
+`field.tree(opts)` declares a parent-pointer hierarchy on the model itself — a `Category` whose
+`parentId` points at another `Category`, a Chart-of-Accounts `Account` nested under a parent
+`Account`, an org chart's `Employee.managerId`. It's a self-referencing `field.reference()` in
+storage terms (a nullable uuid FK, `key` ending in `Id`), but declared as its own kind so the
+console renders a tree-aware picker instead of a flat dropdown, and so writes get cycle protection
+that a plain `reference` doesn't:
+
+```ts
+export const Category = defineModel('categories', {
+  fields: {
+    name: field.string({ required: true }),
+    parentId: field.tree({ indexed: true }),
+  },
+  console: { displayField: 'name' },
+});
+```
+
+A model may declare at most one `field.tree()` — `defineModel()` throws if a second one is added.
+Unlike `field.reference()`, its target model is never passed explicitly (it's always the declaring
+model itself) and it's never `required`/`unique`: a root node's parent is simply `null`.
+
+```
+GET /api/categories?include=parent
+PATCH /api/categories/:id { "parentId": null }   // promote to a root node
+```
+
+`?include=` and `?filter=`/`?sort=` (when `indexed: true`) work exactly like `reference`'s. Every
+write is checked for cycles before it commits — reparenting a node under itself or under one of its
+own descendants is rejected with a `TREE_CYCLE` error rather than silently corrupting the
+hierarchy. There's no built-in "fetch the whole tree" or "list descendants" endpoint; a consumer
+app that needs one can fetch the full row set (`GET /api/categories?limit=...`) and assemble it
+client-side from each row's `parentId` — which is exactly what the console's own tree picker does.
+
+Like `reference`, this only guards a real hard delete (`persist.hardRemove`) — the normal
+`DELETE /api/:model/:id` is a soft delete (it just sets `deletedAt`), so it never touches the FK
+either way.
 
 ## Many-to-many relations
 
