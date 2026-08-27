@@ -100,6 +100,13 @@ function buildPayload(model: ConsoleModelMeta, values: FormValues, mode: 'create
         // syncManyToMany) replaces the whole relation against whatever array is sent.
         payload[key] = Array.isArray(raw) ? raw : [];
         break;
+      case 'tree':
+        // Unlike a plain optional field (the `default` branch below), an empty value here is
+        // never "leave unchanged" — `''` is `TreeCombobox`'s "Clear (make root)" choice, and has
+        // to reach the server as an explicit `null` (core/validation.ts's `tree` case is
+        // `.nullable()` for exactly this) or reparenting to root would silently no-op.
+        payload[key] = raw === '' || raw === undefined ? null : raw;
+        break;
       default:
         if ((raw === '' || raw === undefined) && !required) break;
         payload[key] = raw;
@@ -270,6 +277,7 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
                   error={fieldErrors[key] ?? (f.writeAs ? fieldErrors[f.key] : undefined)}
                   mode={mode}
                   modelName={model.name}
+                  recordId={mode === 'update' ? id : undefined}
                   formValues={values}
                   formModel={model}
                 />

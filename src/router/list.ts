@@ -1,6 +1,6 @@
 import { sql, type Name, type SQL } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import type { ReferenceFieldDefinition } from '../core/field.js';
+import type { ReferenceFieldDefinition, TreeFieldDefinition } from '../core/field.js';
 import type { ModelDefinition } from '../core/model.js';
 import {
   buildJunctionModel,
@@ -32,10 +32,15 @@ interface IncludePlan {
 
 /** manyToMany include names (forward or reverse — see `router/query.ts`'s `parseInclude`) are
  * handled entirely separately (`resolveManyToManyIncludes`/`attachManyToManyIncludes` below), so
- * this only ever needs to build plans for the `reference`/`createdBy` single-row includes it
- * already handled before manyToMany existed. */
+ * this only ever needs to build plans for the `reference`/`tree`/`createdBy` single-row includes it
+ * already handled before manyToMany existed. A `tree` field is a single-row FK like `reference` (to
+ * its own model, always) — same LEFT JOIN plan, just self-joined. */
 function referenceIncludeNames(model: ModelDefinition, includeNames: string[]): string[] {
-  return includeNames.filter((name) => name === 'createdBy' || model.fields[`${name}Id`]?.kind === 'reference');
+  return includeNames.filter((name) => {
+    if (name === 'createdBy') return true;
+    const kind = model.fields[`${name}Id`]?.kind;
+    return kind === 'reference' || kind === 'tree';
+  });
 }
 
 function buildIncludePlans(
@@ -53,7 +58,7 @@ function buildIncludePlans(
       return { relationName, fkField: 'createdById', targetModel };
     }
     const fkField = `${relationName}Id`;
-    const fieldDef = model.fields[fkField] as ReferenceFieldDefinition;
+    const fieldDef = model.fields[fkField] as ReferenceFieldDefinition | TreeFieldDefinition;
     const targetModel = registry[fieldDef.targetModel];
     if (!targetModel) {
       throw new Error(`include '${relationName}': target model '${fieldDef.targetModel}' is not in the registry`);

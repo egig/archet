@@ -59,6 +59,7 @@ const OPERATORS_BY_KIND: Record<string, string[]> = {
   datetime: ['=', '!=', '>', '>=', '<', '<=', 'is'],
   enum: ['=', '!=', 'is'],
   reference: ['=', '!=', 'is'],
+  tree: ['=', '!=', 'is'],
   modelRef: ['=', '!=', 'is'],
   actionRef: ['=', '!=', 'is'],
   file: ['is'],
@@ -75,7 +76,9 @@ function FilterValueInput({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
-  const referenceOptions = useReferenceOptions(field.kind === 'reference' ? field.targetModel : undefined);
+  const referenceOptions = useReferenceOptions(
+    field.kind === 'reference' || field.kind === 'tree' ? field.targetModel : undefined,
+  );
 
   if (field.kind === 'boolean') {
     return (
@@ -98,7 +101,7 @@ function FilterValueInput({
     );
   }
 
-  if (field.kind === 'reference') {
+  if (field.kind === 'reference' || field.kind === 'tree') {
     return (
       <select
         value={(value as string) ?? ''}

@@ -317,7 +317,9 @@ export function RowTable({
 
   const columns = useMemo(() => model.fields.filter((f) => !f.sensitive), [model]);
   const includes = useMemo(
-    () => query.include ?? columns.filter((f) => f.kind === 'reference').map((f) => f.key.replace(/Id$/, '')),
+    () =>
+      query.include ??
+      columns.filter((f) => f.kind === 'reference' || f.kind === 'tree').map((f) => f.key.replace(/Id$/, '')),
     [columns, query.include],
   );
 
@@ -450,7 +452,7 @@ export function RowTable({
                 <tr key={id} className="border-b border-gray-100 last:border-0">
                   <td className="px-3 py-2 font-mono text-xs text-gray-500">{id.slice(0, 8)}</td>
                   {columns.map((f) => {
-                    if (f.kind === 'reference') {
+                    if (f.kind === 'reference' || f.kind === 'tree') {
                       const relation = f.key.replace(/Id$/, '');
                       const related = row[relation] as Record<string, unknown> | null | undefined;
                       const targetDisplayField = getModel(f.targetModel ?? '')?.displayField ?? 'id';

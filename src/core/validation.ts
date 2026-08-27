@@ -26,6 +26,11 @@ function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
       return f.schema ?? z.record(z.unknown());
     case 'reference':
       return z.string().uuid();
+    case 'tree':
+      // like 'reference', but `.nullable()` too — re-parenting a node to the root is a normal,
+      // needed write (`null` means "no parent"), unlike a plain `reference` field, which is
+      // never expected to be cleared back to "nothing" once set.
+      return z.string().uuid().nullable();
     case 'modelRef':
     case 'actionRef':
     case 'fieldRef':

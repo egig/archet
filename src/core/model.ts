@@ -1,4 +1,4 @@
-import type { FieldDefinition, ReferenceFieldDefinition } from './field.js';
+import type { FieldDefinition, ReferenceFieldDefinition, TreeFieldDefinition } from './field.js';
 import { pipe, validate, persist, type PipelineFn } from './pipeline.js';
 
 /** Shows/hides a custom operation's console button based on the record's own current data — e.g.
@@ -141,17 +141,20 @@ export interface DefineModelConfig {
   api?: ApiModelOptions;
 }
 
-function isReferenceField(f: FieldDefinition): f is ReferenceFieldDefinition {
-  return f.kind === 'reference';
+function needsIdSuffix(f: FieldDefinition): f is ReferenceFieldDefinition | TreeFieldDefinition {
+  return f.kind === 'reference' || f.kind === 'tree';
 }
 
 export function defineModel(name: string, config: DefineModelConfig): ModelDefinition {
+  const fields: Record<string, FieldDefinition> = {};
+  let treeFieldKey: string | undefined;
+
   for (const [key, f] of Object.entries(config.fields)) {
     // Q5: relation naming convention — the FK column key must end in 'Id' so `?include=`
     // can derive the relation name by stripping the suffix.
-    if (isReferenceField(f) && !key.endsWith('Id')) {
+    if (needsIdSuffix(f) && !key.endsWith('Id')) {
       throw new Error(
-        `model '${name}': reference field '${key}' must have a key ending in 'Id' (e.g. 'customerId'), got '${key}'`,
+        `model '${name}': ${f.kind} field '${key}' must have a key ending in 'Id' (e.g. '${f.kind === 'tree' ? 'parentId' : 'customerId'}'), got '${key}'`,
       );
     }
     // Self-referential manyToMany (targetModel === this model) is out of scope for now — the
@@ -160,6 +163,23 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
     if (f.kind === 'manyToMany' && f.targetModel === name) {
       throw new Error(`model '${name}': self-referential field.manyToMany('${name}') on field '${key}' is not supported yet`);
     }
+    if (f.kind === 'tree') {
+      // A model's hierarchy is a single tree — a second `field.tree()` would mean two independent
+      // parent-pointer columns, and nothing downstream (console rendering, `core/tree.ts`'s cycle
+      // check) is built to pick between them.
+      if (treeFieldKey !== undefined) {
+        throw new Error(
+          `model '${name}': only one field.tree() is supported per model (found '${treeFieldKey}' and '${key}')`,
+        );
+      }
+      treeFieldKey = key;
+      // `field.tree()` can't know its own model's name yet (see `TreeFieldDefinition`'s doc
+      // comment in core/field.ts) — this is the one place it's known, so it's filled in here,
+      // same as every other model-level default this function already applies.
+      fields[key] = { ...f, targetModel: name };
+      continue;
+    }
+    fields[key] = f;
   }
 
   const operations: OperationsConfig = {
@@ -188,5 +208,5 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
     operations[opName] = entry as OperationEntry;
   }
 
-  return { name, tableName: name, fields: config.fields, operations, console: config.console, api: config.api };
+  return { name, tableName: name, fields, operations, console: config.console, api: config.api };
 }

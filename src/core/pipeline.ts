@@ -10,6 +10,7 @@ import {
   manyToManyFieldsOf,
   type ManyToManyRelation,
 } from './many-to-many.js';
+import { treeFieldOf, wouldCreateTreeCycle } from './tree.js';
 
 // A custom operation (core/model.ts's `CustomOperationDefinition`) runs under its own name here —
 // `validate`/`persist` below only ever special-case `'create'` (everything else is treated as an
@@ -204,6 +205,25 @@ async function syncManyToManyFields(
   }
 }
 
+/** Guards a `field.tree()` write against a cycle — re-parenting a node under itself or one of its
+ * own descendants. A no-op for a model with no tree field, or an update that doesn't touch the
+ * tree field's key at all (the common case — most updates don't reparent), and for `null` (root is
+ * never anyone's descendant, so it can never cycle). `create` never needs this: a fresh row's id
+ * doesn't exist yet, so it can't already be an ancestor of anything. */
+async function assertNoTreeCycle(db: AnyDb, model: ModelDefinition, id: string, input: Record<string, unknown>): Promise<void> {
+  const tree = treeFieldOf(model);
+  if (!tree || !(tree.key in input)) return;
+  const newParentId = input[tree.key] as string | null;
+  if (newParentId === null) return;
+  if (await wouldCreateTreeCycle(db, model, tree.key, id, newParentId)) {
+    throw new PipelineError({
+      code: 'TREE_CYCLE',
+      status: 400,
+      fields: { [tree.key]: 'cannot set a node as a descendant of itself' },
+    });
+  }
+}
+
 const persistWrite: PipelineFn = async (ctx) => {
   const createdById = (ctx.user as { id?: string } | null | undefined)?.id ?? null;
   if (ctx.operation === 'create') {
@@ -212,6 +232,7 @@ const persistWrite: PipelineFn = async (ctx) => {
     return { ...ctx, doc };
   }
   if (!ctx.id) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+  await assertNoTreeCycle(ctx.db, ctx.model, ctx.id, ctx.input);
   const doc = await updateRow(ctx.db, ctx.model, ctx.id, ctx.input);
   if (!doc) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
   await syncManyToManyFields(ctx.db, ctx.model, ctx.input, ctx.id, createdById);
