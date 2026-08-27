@@ -1,11 +1,10 @@
-import { existsSync } from 'node:fs';
+import { existsSync, watch } from 'node:fs';
 import { mkdir, writeFile, readFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import * as esbuild from 'esbuild';
 import type { resolveDirs } from './load-config.js';
 
 type Dirs = ReturnType<typeof resolveDirs>;
@@ -25,7 +24,7 @@ const NOOP_HANDLE: ConsoleClientHandle = { stop: async () => {} };
 /** The framework-owned console client entry (`main.tsx`) and its Tailwind source (`styles.css`) —
  * resolved relative to this module rather than a consumer path, since `ConsoleApp` has no
  * consumer-facing extension points left to author an entry around (see ConsoleApp.tsx). Checks for
- * `main.tsx` first (running from source under `tsx`, e.g. this repo's own `example/`) and falls
+ * `main.tsx` first (running from source under Bun, e.g. this repo's own `example/`) and falls
  * back to the compiled `main.js` (running from a published `dist/`, e.g. a real consumer's
  * `node_modules/@egig/ratchet`) — both live one directory up from this file's own location. */
 function frameworkConsoleClientDir(): string {
@@ -89,12 +88,41 @@ async function killChild(child: ChildProcess): Promise<void> {
   });
 }
 
-/** Bundles the framework's own console client entry with esbuild — every app gets the same
+async function bundleConsoleClient(dirs: Dirs, assetsDir: string, mode: 'dev' | 'prod'): Promise<Bun.BuildArtifact> {
+  const result = await Bun.build({
+    entrypoints: [frameworkConsoleEntry()],
+    outdir: assetsDir,
+    naming: mode === 'prod' ? '[dir]/[name]-[hash].[ext]' : '[dir]/[name].[ext]',
+    target: 'browser',
+    format: 'esm',
+    sourcemap: mode === 'dev' ? 'linked' : 'none',
+    minify: mode === 'prod',
+    define: {
+      __CONSOLE_PATH__: JSON.stringify(dirs.consolePath),
+      __CONSOLE_BRAND__: JSON.stringify(dirs.brand),
+      // `Bun.build`'s automatic JSX transform picks the dev-only `react/jsx-dev-runtime` unless
+      // it sees `process.env.NODE_ENV` resolve to `'production'` — mutating the actual env var at
+      // call time doesn't reach it (the check runs against the build's own snapshot), so `define`
+      // is the reliable lever. Always production here, in both dev and prod mode, matching the
+      // previous esbuild-based build (which never opted into the dev JSX transform either).
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    },
+  });
+  if (!result.success) {
+    for (const log of result.logs) console.error(log);
+    throw new Error('Bun.build produced no JS output for the console client entry');
+  }
+  const jsOutput = result.outputs.find((o) => o.kind === 'entry-point' && o.path.endsWith('.js'));
+  if (!jsOutput) throw new Error('Bun.build produced no JS output for the console client entry');
+  return jsOutput;
+}
+
+/** Bundles the framework's own console client entry with `Bun.build` — every app gets the same
  * console UI (see ConsoleApp.tsx), so this always runs, unconditionally. Runs Tailwind's
  * standalone CLI against the framework's `styles.css`, and writes
  * `<generatedDir>/console/manifest.json` mapping logical names to the actual (optionally
  * content-hashed) asset paths. `dirs.consolePath` and `dirs.brand` are inlined into the bundle via
- * esbuild's `define` (`__CONSOLE_PATH__`/`__CONSOLE_BRAND__`, declared ambiently in
+ * `Bun.build`'s `define` (`__CONSOLE_PATH__`/`__CONSOLE_BRAND__`, declared ambiently in
  * src/console/client/env.d.ts) — the client needs them for the router `basename`/API prefix and
  * the sidebar heading respectively, and has no other runtime config channel (it's served as a
  * static bundle, including from a pure edge CDN with no per-request server involved). Changing
@@ -107,50 +135,56 @@ export async function buildConsoleClient(dirs: Dirs, options: BuildConsoleClient
   const cssEntry = frameworkCssEntry();
   const manifest: Record<string, string> = {};
 
-  const esbuildOptions: esbuild.BuildOptions = {
-    entryPoints: { main: frameworkConsoleEntry() },
-    bundle: true,
-    outdir: assetsDir,
-    entryNames: options.mode === 'prod' ? '[name]-[hash]' : '[name]',
-    platform: 'browser',
-    format: 'esm',
-    jsx: 'automatic',
-    sourcemap: options.mode === 'dev',
-    minify: options.mode === 'prod',
-    metafile: true,
-    logLevel: 'info',
-    define: {
-      __CONSOLE_PATH__: JSON.stringify(dirs.consolePath),
-      __CONSOLE_BRAND__: JSON.stringify(dirs.brand),
-    },
-  };
-
   if (options.mode === 'dev') {
     // Fixed filenames in dev (Q5) — write the manifest once, up front, no metafile parsing needed.
     manifest['main.js'] = 'assets/main.js';
     if (cssEntry) manifest['main.css'] = 'assets/main.css';
     await writeFile(path.join(consoleDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
-    const ctx = await esbuild.context(esbuildOptions);
-    await ctx.watch();
+    await bundleConsoleClient(dirs, assetsDir, 'dev');
+
+    // `Bun.build` has no incremental watch-context API (unlike esbuild's `ctx.watch()`), so
+    // rebuild by hand: watch the framework's own console client source tree and re-run the build
+    // on any change, debounced the same way `dev.ts` debounces model-file changes.
+    let rebuilding = false;
+    let pending = false;
+    const rebuild = (): void => {
+      if (rebuilding) {
+        pending = true;
+        return;
+      }
+      rebuilding = true;
+      void bundleConsoleClient(dirs, assetsDir, 'dev')
+        .catch((err: unknown) => console.error('[console] rebuild failed:', err instanceof Error ? err.message : err))
+        .finally(() => {
+          rebuilding = false;
+          if (pending) {
+            pending = false;
+            rebuild();
+          }
+        });
+    };
+    const DEBOUNCE_MS = 200;
+    let debounceTimer: NodeJS.Timeout | undefined;
+    const watcher = watch(frameworkConsoleClientDir(), { recursive: true }, () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(rebuild, DEBOUNCE_MS);
+    });
 
     const tailwindChild = cssEntry ? spawnTailwindWatch(cssEntry, path.join(assetsDir, 'main.css')) : null;
 
     return {
       stop: async () => {
-        await ctx.dispose();
+        clearTimeout(debounceTimer);
+        watcher.close();
         if (tailwindChild) await killChild(tailwindChild);
       },
     };
   }
 
   // prod: one-shot build, hashed filenames, manifest derived from the actual output.
-  const result = await esbuild.build(esbuildOptions);
-  const jsOutput = Object.keys(result.metafile!.outputs).find(
-    (file) => file.endsWith('.js') && result.metafile!.outputs[file]!.entryPoint,
-  );
-  if (!jsOutput) throw new Error('esbuild produced no JS output for the console client entry');
-  manifest['main.js'] = path.relative(consoleDir, jsOutput);
+  const jsOutput = await bundleConsoleClient(dirs, assetsDir, 'prod');
+  manifest['main.js'] = path.relative(consoleDir, jsOutput.path);
 
   if (cssEntry) {
     const tmpCss = path.join(assetsDir, 'main.css');
@@ -167,7 +201,8 @@ export async function buildConsoleClient(dirs: Dirs, options: BuildConsoleClient
 
 /** Edge-runtime groundwork only (see plan Context) — bundles a generated, statically-importing
  * server entry into one file. Does NOT change `ratchet serve`/`ratchet dev`'s runtime behavior,
- * which keep loading the registry dynamically via tsx. `/api/auth` and `/api` are registered
+ * which keep loading the registry dynamically via a native `import()` (Bun transpiles `.ts` on
+ * the fly, no separate loader needed). `/api/auth` and `/api` are registered
  * before the console router so they keep precedence when `consolePath` is '/' (the console's own
  * catch-all would otherwise swallow every path — see `FrameworkConfig.consolePath`). */
 export async function buildServerBundle(cwd: string, dirs: Dirs): Promise<void> {
@@ -205,13 +240,16 @@ export async function buildServerBundle(cwd: string, dirs: Dirs): Promise<void> 
   const entryFile = path.join(dirs.generatedDir, 'server-entry.ts');
   await writeFile(entryFile, entrySrc, 'utf8');
 
-  await esbuild.build({
-    entryPoints: [entryFile],
-    bundle: true,
-    platform: 'node',
+  const result = await Bun.build({
+    entrypoints: [entryFile],
+    target: 'node',
     format: 'esm',
     packages: 'external',
-    outfile: path.join(cwd, 'dist', 'server.js'),
-    logLevel: 'info',
+    outdir: path.join(cwd, 'dist'),
+    naming: 'server.js',
   });
+  if (!result.success) {
+    for (const log of result.logs) console.error(log);
+    throw new Error('Bun.build failed to bundle the server entry');
+  }
 }

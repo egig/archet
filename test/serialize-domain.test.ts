@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { defineDomain, field } from '../src/core/index.js';
 import { serializeDomainSettingsMeta } from '../src/console/serialize-domain.js';
 

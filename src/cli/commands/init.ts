@@ -29,9 +29,8 @@ function packageJson(name: string): string {
           zod: '^3.24.1',
         },
         devDependencies: {
-          '@types/node': '^22.10.2',
+          '@types/bun': '^1.4.0',
           'drizzle-kit': '^0.28.1',
-          tsx: '^4.19.2',
           typescript: '^5.7.2',
         },
       },
@@ -150,8 +149,8 @@ export async function runInit(cwd: string): Promise<void> {
 
   console.log('');
   console.log('next steps:');
-  console.log('  1. npm install');
+  console.log('  1. bun install');
   console.log('  2. set DATABASE_URL');
-  console.log('  3. npm run generate   (writes .ratchet/*)');
-  console.log('  4. npm run migrate && npm run serve   (or `npm run dev` for local push-based iteration)');
+  console.log('  3. bun run generate   (writes .ratchet/*)');
+  console.log('  4. bun run migrate && bun run serve   (or `bun run dev` for local push-based iteration)');
 }

@@ -35,7 +35,7 @@ Both fields are optional. Like `consolePath`, `brand` is baked into the console 
 
 ## How it's built
 
-`ratchet build` (or `ratchet dev`, for local iteration) bundles the framework's own console client entry with esbuild + Tailwind into hashed assets plus a `manifest.json`, written under `<generatedDir>/console/`. This always runs — the console client is framework-owned, with no per-app entry file to author. `createConsoleRouter` serves that shell and its assets at `${consolePath}/*`, and falls back to a 503 with an instructive message if the console hasn't been built yet.
+`ratchet build` (or `ratchet dev`, for local iteration) bundles the framework's own console client entry with `Bun.build` + Tailwind into hashed assets plus a `manifest.json`, written under `<generatedDir>/console/`. This always runs — the console client is framework-owned, with no per-app entry file to author. `createConsoleRouter` serves that shell and its assets at `${consolePath}/*`, and falls back to a 503 with an instructive message if the console hasn't been built yet.
 
 Because the SPA uses client-side routing, every path under `consolePath` (not just `consolePath` itself) serves the same HTML shell — a hard refresh on `/console/customers/:id` needs to resolve to the shell too, since routing happens in the browser after it loads.
 

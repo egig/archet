@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { Command } from 'commander';
 import { runInit } from './commands/init.js';
 import { runGenerate } from './commands/generate.js';
@@ -8,13 +8,9 @@ import { runDev } from './commands/dev.js';
 import { runServe } from './commands/serve.js';
 import { runBuild } from './commands/build.js';
 
-// Every command below resolves paths off `process.cwd()` — load `.env` from that same directory
-// (e.g. `DATABASE_URL`) before any of them run. Silently a no-op for projects with no `.env`.
-try {
-  process.loadEnvFile();
-} catch (err) {
-  if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-}
+// Every command below resolves paths off `process.cwd()` — Bun automatically loads `.env` (and
+// `.env.local`, etc.) from that same directory (e.g. `DATABASE_URL`) at startup, before any
+// command runs. Silently a no-op for projects with no `.env`.
 
 const program = new Command();
 program.name('ratchet').description('Model -> Postgres schema, codegen, and composable pipelines.');
@@ -63,7 +59,7 @@ program
 
 program
   .command('build')
-  .description('Build the console client (esbuild + Tailwind, hashed + manifest) and a bundled server artifact')
+  .description('Build the console client (Bun.build + Tailwind, hashed + manifest) and a bundled server artifact')
   .action(async () => {
     await runBuild(process.cwd());
   });

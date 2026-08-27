@@ -1,7 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { tsImport } from 'tsx/esm/api';
 import type { ModelDefinition } from '../core/model.js';
 import { folderDomainOf } from './domain-path.js';
 
@@ -65,8 +64,9 @@ export function assertReferencesResolve(scanned: ScannedModel[]): void {
 }
 
 /**
- * Loads every models/**\/*.model.ts file via tsx's programmatic API (no separate tsc build
- * step) and collects every ModelDefinition each file exports. Does *not* validate the result —
+ * Loads every models/**\/*.model.ts file via a native dynamic `import()` — Bun transpiles .ts on
+ * the fly, no separate tsc build step or loader needed — and collects every ModelDefinition each
+ * file exports. Does *not* validate the result —
  * a user model may legitimately reference a built-in model (e.g. `field.reference('users', ...)`)
  * that isn't visible here, so `generate()` (src/codegen/generate.ts) runs
  * `assertNoDuplicateNames`/`assertReferencesResolve` itself, against this list merged with
@@ -78,7 +78,7 @@ export async function scanModels(modelsDir: string): Promise<ScannedModel[]> {
 
   for (const filePath of files) {
     const moduleUrl = pathToFileURL(filePath).href;
-    const mod = (await tsImport(moduleUrl, import.meta.url)) as Record<string, unknown>;
+    const mod = (await import(moduleUrl)) as Record<string, unknown>;
     for (const [exportName, value] of Object.entries(mod)) {
       if (isModelDefinition(value)) {
         scanned.push({ filePath, exportName, model: value, domain: folderDomainOf(modelsDir, path.dirname(filePath)) });

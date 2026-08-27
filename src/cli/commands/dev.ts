@@ -27,14 +27,15 @@ export async function runDev(cwd: string): Promise<void> {
   let pendingRestart = false;
   let shuttingDown = false;
 
-  // Re-invoke this same CLI entry point (whatever launched `dev` — the .ts source under tsx,
-  // or the built dist/cli/bin.js) with `serve` instead of `dev`, via `npx tsx` so both cases work
-  // uniformly. A child process, not an in-process restart, so a bad model change crashes the
-  // spawned server without taking `dev`'s watch loop down with it.
+  // Re-invoke this same CLI entry point (whatever launched `dev` — the .ts source under bun, or
+  // the built dist/cli/bin.js) with `serve` instead of `dev`, via `bun` so both cases work
+  // uniformly (Bun transpiles .ts natively, no separate loader needed). A child process, not an
+  // in-process restart, so a bad model change crashes the spawned server without taking `dev`'s
+  // watch loop down with it.
   const cliEntry = process.argv[1]!;
 
   function startServer(): void {
-    child = spawn('npx', ['tsx', cliEntry, 'serve'], { cwd, stdio: 'inherit' });
+    child = spawn('bun', [cliEntry, 'serve'], { cwd, stdio: 'inherit' });
     child.on('exit', (code, signal) => {
       // Ctrl-C reaches the child directly through the shared terminal process group, so it exits
       // with SIGINT (code 130) before `shutdown` gets a turn — that, a signal kill, and our own

@@ -1,7 +1,6 @@
 import { readdirSync, statSync, chmodSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SRC_DIRS = ['core', 'cli', 'codegen', 'router', 'auth', 'automation', 'workspace', 'console'];
@@ -19,24 +18,35 @@ function walk(dir: string, out: string[]): string[] {
 }
 
 async function main(): Promise<void> {
-  const entryPoints = SRC_DIRS.flatMap((dir) => walk(path.join(ROOT, 'src', dir), []));
+  const entrypoints = SRC_DIRS.flatMap((dir) => walk(path.join(ROOT, 'src', dir), []));
 
-  // Unbundled — one output file per source file, matching today's dist/ shape (Q2).
-  await esbuild.build({
-    entryPoints,
-    bundle: false,
+  // Unbundled — one output file per source file, matching today's dist/ shape (Q2). `external:
+  // ['*']` is the key: it stops Bun.build from resolving *any* specifier (bare package or
+  // relative sibling), so every import statement is emitted byte-for-byte as written in source —
+  // the same behavior esbuild's `bundle: false` + `packages: 'external'` gave us.
+  const result = await Bun.build({
+    entrypoints,
     outdir: path.join(ROOT, 'dist'),
-    outbase: path.join(ROOT, 'src'),
-    platform: 'node',
+    root: path.join(ROOT, 'src'),
+    target: 'node',
     format: 'esm',
-    packages: 'external',
-    jsx: 'automatic',
-    sourcemap: true,
-    logLevel: 'info',
+    external: ['*'],
+    sourcemap: 'linked',
+    define: {
+      // The automatic JSX transform (src/console/client/*.tsx) picks the dev-only
+      // `react/jsx-dev-runtime` unless it sees `process.env.NODE_ENV` resolve to `'production'` —
+      // setting the actual env var doesn't reach it (the check runs against a snapshot taken
+      // before this script's own top-level code runs), so `define` is the reliable lever.
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    },
   });
+  if (!result.success) {
+    for (const log of result.logs) console.error(log);
+    throw new Error('Bun.build failed');
+  }
 
   // Declarations only — tsc still owns type-checking and .d.ts emission (see plan Context).
-  const tsc = spawnSync('npx', ['tsc', '-p', 'tsconfig.build.json', '--emitDeclarationOnly'], {
+  const tsc = spawnSync('bunx', ['tsc', '-p', 'tsconfig.build.json', '--emitDeclarationOnly'], {
     cwd: ROOT,
     stdio: 'inherit',
   });
@@ -46,9 +56,9 @@ async function main(): Promise<void> {
 
   chmodSync(path.join(ROOT, 'dist', 'cli', 'bin.js'), 0o755);
 
-  // esbuild's walk above only picks up .ts/.tsx — the console client's Tailwind source is plain
-  // CSS, so `buildConsoleClient` (src/cli/build-console.ts) can find it alongside the compiled
-  // main.js in a published dist/, the same way it finds main.tsx/main.js when running from source.
+  // The walk above only picks up .ts/.tsx — the console client's Tailwind source is plain CSS, so
+  // `buildConsoleClient` (src/cli/build-console.ts) can find it alongside the compiled main.js in
+  // a published dist/, the same way it finds main.tsx/main.js when running from source.
   copyFileSync(
     path.join(ROOT, 'src', 'console', 'client', 'styles.css'),
     path.join(ROOT, 'dist', 'console', 'client', 'styles.css'),

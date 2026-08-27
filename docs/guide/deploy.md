@@ -1,6 +1,6 @@
 # Deploying
 
-`ratchet serve` and the bundle from `ratchet build` are Node — that covers local development and any VPS/container host. Beyond that, `/api`, `/api/auth`, and the console are built as plain [Hono](https://hono.dev) routers that take a `db` and a `registry` as arguments rather than constructing them internally, so they run on any runtime Hono supports. Nothing in `ratchet build`/`ratchet generate`/`ratchet migrate` targets those runtimes — they stay Node-only dev tooling. Deploying to one is a thin entry file you own, composing `createApiRouter`/`createAuthRouter`/`createConsoleRouter` yourself with a driver and asset source that fit the target — keeping whatever path you mount the console at in sync with `consolePath` in `ratchet.config.ts` is on you (see [Console](/guide/console)).
+`ratchet serve` runs on [Bun](https://bun.sh) — that's the CLI's own runtime, for local development. The bundle from `ratchet build` targets plain Node instead (`dist/server.js`, built with `@hono/node-server`), so a VPS/container host doesn't need Bun installed at all. Beyond that, `/api`, `/api/auth`, and the console are built as plain [Hono](https://hono.dev) routers that take a `db` and a `registry` as arguments rather than constructing them internally, so they run on any runtime Hono supports. Nothing in `ratchet build`/`ratchet generate`/`ratchet migrate` targets those runtimes — they stay Bun-only dev tooling. Deploying to one is a thin entry file you own, composing `createApiRouter`/`createAuthRouter`/`createConsoleRouter` yourself with a driver and asset source that fit the target — keeping whatever path you mount the console at in sync with `consolePath` in `ratchet.config.ts` is on you (see [Console](/guide/console)).
 
 ## Local development
 
@@ -19,7 +19,7 @@ ratchet build
 DATABASE_URL=postgres://... PORT=3000 node dist/server.js
 ```
 
-Same code path as `ratchet serve`, just without `tsx`/dev tooling at runtime.
+Same code path as `ratchet serve`, just without Bun/dev tooling at runtime — this bundle runs on plain Node.
 
 ## Vercel
 

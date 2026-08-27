@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { defineModel, field, type PipelineFn } from '../src/core/index.js';
 import { serializeModelMeta } from '../src/console/serialize-model.js';
 
