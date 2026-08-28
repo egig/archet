@@ -54,7 +54,7 @@ export const Announcement = defineModel('announcements', {
 
 `public` applies to every verb on that model — there's no per-operation granularity today.
 
-`requireAuth` and `requirePermission(resource, action)` still exist as ordinary [pipeline functions](/guide/pipelines), for a dedicated router that bypasses the generic one entirely (e.g. `Chat`/`Message`'s own `/api/automation/*` routes, or an agent tool call — `automation/tool.ts`'s `executeModelOperationTool` calls `authorizeRequest`, the same check under the hood, before ever touching a model's pipeline):
+`requireAuth` and `requirePermission(resource, action)` still exist as ordinary [pipeline functions](/guide/pipelines), for a dedicated router that bypasses the generic one entirely (e.g. `Chat`/`Message`'s own `/api/automation/*` routes, or an agent tool call — `automation/tool.ts`'s `executeAgentTool` calls `authorizeRequest`, the same check under the hood, before ever touching a model's pipeline):
 
 - `requireAuth` resolves the `Bearer` token or session cookie on `ctx.request` to a live, active user and stashes it on `ctx.user`. Throws `UNAUTHENTICATED` (401) otherwise.
 - `requirePermission(resource, action)` must run after `requireAuth`. It checks the user's role owns a permission matching `(resource, action)` — either side may be granted as `*`. Throws `FORBIDDEN` (403) otherwise, or `UNAUTHENTICATED` if `requireAuth` didn't run first.

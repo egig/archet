@@ -3,7 +3,9 @@ import type { FieldDefinition } from './field.js';
 import type { ModelDefinition } from './model.js';
 import type { DomainDefinition } from './domain.js';
 
-function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
+/** The Zod schema for a field's *value*, before optionality (`fieldToZod`) or a field's
+ * `description` (`baseSchemaForField`) is applied. */
+function schemaForFieldKind(f: FieldDefinition): ZodTypeAny {
   switch (f.kind) {
     case 'string':
       return f.maxLength !== undefined ? z.string().max(f.maxLength) : z.string();
@@ -55,6 +57,13 @@ function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
       // "leave this relation alone," matching how every other optional field behaves on update.
       return z.array(z.string().uuid());
   }
+}
+
+/** `schemaForFieldKind` plus the field's own `description` (`.describe()` — carried through to the
+ * JSON Schema `zod-to-json-schema` emits for agent tool params, and shown as console form help). */
+function baseSchemaForField(f: FieldDefinition): ZodTypeAny {
+  const schema = schemaForFieldKind(f);
+  return f.description ? schema.describe(f.description) : schema;
 }
 
 function fieldToZod(f: FieldDefinition): ZodTypeAny {

@@ -134,8 +134,8 @@ export function fieldKeyForInput(model: ModelDefinition, inputKey: string): stri
 
 /** Rejects the whole write (naming every offending key) if `input` touches a field outside
  * `granted` — used at every write boundary that enforces field-level permission: the generic
- * router's `POST`/`PATCH` (`create-router.ts`) and agent tool calls (`automation/tool.ts`'s
- * `executeModelOperationTool`, which invokes a model's `create`/`update` pipeline exactly like the
+ * router's `POST`/`PATCH` (`create-router.ts`) and builtin agent tool calls (`automation/tool.ts`'s
+ * `executeAgentTool`, which invokes a model's `create`/`update` pipeline exactly like the
  * REST route does and needs the identical check). Rejects rather than silently dropping disallowed
  * keys, so a caller's local state never disagrees with the server about what actually got written. */
 export function assertWriteFieldsAllowed(model: ModelDefinition, input: Record<string, unknown>, granted: GrantedFields): void {

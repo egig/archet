@@ -43,6 +43,11 @@ export interface OperationConsoleOptions {
  */
 export interface CustomOperationDefinition {
   pipeline: PipelineFn;
+  /** one-line explanation of what this operation does — shown as console help and, when the
+   * operation is exposed to an `Agent` as a tool (src/automation/tool.ts), used verbatim as the
+   * tool description a chatting model reads to decide when to call it. Falls back to
+   * `console.label` then a humanized operation name. */
+  description?: string;
   /** input params, declared with the same `field.*()` builder DSL as model fields — optional; a
    * paramless operation is a plain trigger (e.g. `lock`). When present, the console renders a
    * small modal form built from these before calling the operation. */
@@ -124,6 +129,11 @@ export interface ModelDefinition {
   /** also the table name and the REST route segment (§5 — no auto-pluralization) */
   name: string;
   tableName: string;
+  /** one-line explanation of what a row of this model represents — surfaced in `/meta/models` for
+   * the console, and prepended to the description of every `create_`/`update_`/`remove_` tool an
+   * `Agent` is granted for this model (src/automation/tool.ts) so a chatting model has context
+   * beyond the bare resource name. */
+  description?: string;
   fields: Record<string, FieldDefinition>;
   operations: OperationsConfig;
   console?: ConsoleModelOptions;
@@ -131,6 +141,7 @@ export interface ModelDefinition {
 }
 
 export interface DefineModelConfig {
+  description?: string;
   fields: Record<string, FieldDefinition>;
   operations?: {
     create?: PipelineFn;
@@ -208,5 +219,5 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
     operations[opName] = entry as OperationEntry;
   }
 
-  return { name, tableName: name, fields, operations, console: config.console, api: config.api };
+  return { name, tableName: name, description: config.description, fields, operations, console: config.console, api: config.api };
 }

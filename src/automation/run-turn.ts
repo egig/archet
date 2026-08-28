@@ -2,7 +2,7 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from '../core/index.js';
 import { fetchRow } from '../core/persistence.js';
 import { resolveProvider } from './providers/index.js';
-import { resolveAgentTools, executeModelOperationTool, type ModelOperationTool } from './tool.js';
+import { resolveAgentTools, executeAgentTool, type AgentTool } from './tool.js';
 import { Provider } from './models/index.js';
 import type { ChatEvent, ChatMessage, ChatStopReason, ChatToolCall, ChatToolResult, ChatUsage } from './provider.js';
 
@@ -89,14 +89,14 @@ export async function* runAgentTurn(opts: {
     const results: ChatToolResult[] = [];
     for (const call of calls) {
       let result: ChatToolResult;
-      const tool: ModelOperationTool | undefined = toolsByName.get(call.name);
+      const tool: AgentTool | undefined = toolsByName.get(call.name);
       if (!tool) {
         result = { toolCallId: call.id, content: `unknown tool '${call.name}'`, isError: true };
       } else if (typeof call.input !== 'object' || call.input === null) {
         result = { toolCallId: call.id, content: `'${call.name}' input must be an object`, isError: true };
       } else {
         try {
-          const output = await executeModelOperationTool(tool, call.input as Record<string, unknown>, {
+          const output = await executeAgentTool(tool, call.input as Record<string, unknown>, {
             db: opts.db,
             request: opts.request,
             registry: opts.registry,

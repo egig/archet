@@ -5,6 +5,8 @@ export interface ConsoleFieldMeta {
   /** human-readable label for list-view column headers and form field labels — the field's
    * `displayText` if declared, otherwise the key humanized (e.g. `roleId` -> "Role Id"). */
   label: string;
+  /** the field's `description` (core/field.ts), when declared — rendered as form help text. */
+  description?: string;
   kind: string;
   required: boolean;
   unique: boolean;
@@ -37,6 +39,8 @@ export type ConsoleOperationPlacement = 'row' | 'detail' | 'bulk';
 export interface ConsoleOperationMeta {
   name: string;
   label: string;
+  /** the operation's `description` (core/model.ts's `CustomOperationDefinition`), when declared. */
+  description?: string;
   /** the operation's input params, serialized the same way a model's own fields are — empty for a
    * param-less trigger (e.g. `lock`). Non-empty means the console renders a small modal form built
    * from these before calling the operation, instead of firing immediately. */
@@ -50,6 +54,8 @@ export interface ConsoleOperationMeta {
 export interface ConsoleModelMeta {
   name: string;
   label: string;
+  /** the model's `description` (core/model.ts), when declared. */
+  description?: string;
   displayField: string;
   fields: ConsoleFieldMeta[];
   /** this model's real operation names (`Object.keys(model.operations)`) — read by an `actionRef`
@@ -74,6 +80,7 @@ function serializeOperation(model: ModelDefinition, name: string): ConsoleOperat
   return {
     name,
     label: console_?.label ?? humanize(name),
+    ...(def?.description ? { description: def.description } : {}),
     params: Object.entries(def?.params ?? {}).map(([key, f]) => serializeField(key, f)),
     confirm: console_?.confirm === false ? undefined : console_?.confirm,
     placement: [...(console_?.placement ?? ['row'])],
@@ -98,6 +105,7 @@ export function serializeField(key: string, f: ModelDefinition['fields'][string]
     key,
     label: f.displayText ?? humanizeFieldKey(key),
     kind: f.kind,
+    ...(f.description ? { description: f.description } : {}),
     required: f.required,
     unique: f.unique,
     indexed: f.indexed,
@@ -138,6 +146,7 @@ export function serializeModelMeta(model: ModelDefinition): ConsoleModelMeta {
   const meta: ConsoleModelMeta = {
     name: model.name,
     label: model.console?.label ?? humanize(model.name),
+    ...(model.description ? { description: model.description } : {}),
     displayField: model.console?.displayField ?? inferDisplayField(model),
     fields: Object.entries(model.fields).map(([key, f]) => serializeField(key, f)),
     operationNames: Object.keys(model.operations),

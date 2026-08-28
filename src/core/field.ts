@@ -15,6 +15,10 @@ export interface FieldCommonOptions<T = unknown> {
   /** human-readable label for the console list/form views; defaults to a humanized field key
    * (e.g. `roleId` -> "Role Id") when omitted. */
   displayText?: string;
+  /** longer free-text help for this field — rendered as form help text in the console, and (more
+   * importantly) emitted into the JSON Schema for agent tool parameters (`.describe()`, see
+   * `core/validation.ts`) so a chatting model knows what a field means, not just its type. */
+  description?: string;
 }
 
 interface BaseFieldDefinition {
@@ -25,6 +29,7 @@ interface BaseFieldDefinition {
   sensitive: boolean;
   writeAs?: string;
   displayText?: string;
+  description?: string;
   /** set by `field.custom()` — a name the console client's `fieldRenderers` registry (see
    * `console/client/field-renderers.tsx`) can key a custom form editor off of. Storage and
    * validation are untouched: the field keeps its wrapped base kind's column type and Zod schema,
@@ -192,6 +197,7 @@ function base(opts: FieldCommonOptions): BaseFieldDefinition {
     sensitive: opts.sensitive ?? false,
     writeAs: opts.writeAs,
     displayText: opts.displayText,
+    description: opts.description,
   };
 }
 
@@ -262,7 +268,7 @@ export const field = {
     };
   },
 
-  manyToMany(targetModel: string, opts: { displayText?: string } = {}): ManyToManyFieldDefinition {
+  manyToMany(targetModel: string, opts: { displayText?: string; description?: string } = {}): ManyToManyFieldDefinition {
     return { ...base(opts), kind: 'manyToMany', targetModel };
   },
 
@@ -270,7 +276,7 @@ export const field = {
    * (many children legitimately share one parent), so `opts` is narrowed to just `indexed`/
    * `displayText`, the same way `manyToMany()`'s is. `targetModel` is a placeholder here — see
    * `TreeFieldDefinition`'s doc comment for why `defineModel()` has to fill in the real value. */
-  tree(opts: { indexed?: boolean; displayText?: string } = {}): TreeFieldDefinition {
+  tree(opts: { indexed?: boolean; displayText?: string; description?: string } = {}): TreeFieldDefinition {
     return { ...base(opts), kind: 'tree', targetModel: '' };
   },
 

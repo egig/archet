@@ -5,8 +5,10 @@ import { requireValidPermissionTarget } from '../../auth/pipeline.js';
  * Grants an `Agent` the ability to call one model operation as a tool — the same
  * `(resource, action)` shape as `Permission` (src/auth/models/permission.model.ts), but scoped to
  * an `Agent` instead of a `Role`. `src/automation/tool.ts` expands every grant for a given agent
- * into a callable `create_<resource>`/`update_<resource>`/`remove_<resource>` tool (wildcards
- * included) against the live model registry.
+ * into a callable tool against the live model registry — `create_<resource>`/`update_<resource>`/
+ * `remove_<resource>` for the builtins, plus `<operation>_<resource>` for any custom operation the
+ * model declares (e.g. `lock_invoice`). Wildcards included: `action: '*'` covers the builtins and
+ * every custom operation.
  *
  * This only decides which tools an agent is *offered* — the actual call still runs through the
  * target model's own `operations[action]` pipeline with the chat's authenticated user, so a grant
