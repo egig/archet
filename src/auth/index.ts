@@ -1,4 +1,4 @@
-export { User, Role, Session, WorkTitle } from './models/index.js';
+export { User, Role, Session } from './models/index.js';
 export { createAuthRouter } from './router.js';
 export {
   hashPassword as hashPasswordPipeline,

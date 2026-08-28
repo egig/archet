@@ -7,7 +7,7 @@ import { queryKeys } from './query-keys.js';
 import { WorkspaceViewTable, type WorkspaceViewRow } from './WorkspaceViewTable.js';
 import { Dialog } from './Dialog.js';
 import { FilterBar, sanitizeFilters, type FilterNode } from './FilterBar.js';
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, XMarkIcon } from './icons.js';
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SparklesIcon, XMarkIcon } from './icons.js';
 
 export interface WorkspaceTabsProps {
   workspaceId: string;
@@ -272,13 +272,12 @@ export function WorkspaceTabs({
               onClick={onToggleChat}
               title={chatOpen ? 'Hide chat' : 'Show chat'}
               aria-label={chatOpen ? 'Hide chat' : 'Show chat'}
-              className="flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700"
+              aria-pressed={chatOpen}
+              className={`flex h-7 w-7 items-center justify-center rounded ${
+                chatOpen ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'
+              }`}
             >
-              {chatOpen ? (
-                <ChevronRightIcon className="h-4 w-4" />
-              ) : (
-                <ChevronLeftIcon className="h-4 w-4" />
-              )}
+              <SparklesIcon className="h-4 w-4" />
             </button>
           </div>
         )}

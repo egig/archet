@@ -4,9 +4,14 @@ import { useAuth } from './auth.js';
 import { useModels } from './models.js';
 import { useDomains } from './domains.js';
 import { BrandMark } from './BrandMark.js';
-import { ChevronDownIcon, LogOutIcon, ProfileIcon, SettingsIcon, WorkspaceIcon } from './icons.js';
+import { ChevronDownIcon, LogOutIcon, ProfileIcon, SettingsIcon, SparklesIcon, WorkspaceIcon } from './icons.js';
+import { ConsoleChatPanel } from './ConsoleChatPanel.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { ConsoleDomainMeta } from '../serialize-domain.js';
+
+// the chat panel's open/closed state is a per-browser UI preference, shared with the workspace
+// screen's own toggle (same key) so it stays consistent across both surfaces.
+const CHAT_OPEN_STORAGE_KEY = 'ratchet:workspace-chat-open';
 
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
   `block truncate rounded-md px-3 py-1.5 text-sm ${
@@ -174,15 +179,30 @@ export function Layout() {
   const ungrouped = models.filter((model) => !model.domain);
   const hasModelSections = grouped.length > 0 || ungrouped.length > 0;
 
+  const [chatOpen, setChatOpen] = useState(() => {
+    try {
+      return localStorage.getItem(CHAT_OPEN_STORAGE_KEY) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_OPEN_STORAGE_KEY, String(chatOpen));
+    } catch {
+      // ignore — e.g. private browsing with storage disabled
+    }
+  }, [chatOpen]);
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <aside className="flex w-60 shrink-0 flex-col border-r border-gray-200 bg-white">
-        {/* 1. Header */}
+        {/* 1. Header — brand */}
         <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-4">
           <BrandMark />
         </div>
 
-        {/* 2. Sections of menus */}
+        {/* Sidebar nav sections */}
         <nav className="flex-1 overflow-y-auto">
           {ungrouped.length > 0 && (
             <NavSection>
@@ -228,9 +248,34 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-x-auto p-6">
-        <Outlet />
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Top header for the console content area — brand on the left, the chat toggle on the
+            right. The chat panel mounts to the right of <main> (below this header) when open. */}
+        <header className="flex items-center border-b border-gray-200 bg-white px-4 py-2">
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setChatOpen((v) => !v)}
+              aria-label="Toggle chat"
+              aria-pressed={chatOpen}
+              title="Toggle chat"
+              className={`flex h-7 w-7 items-center justify-center rounded ${
+                chatOpen ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'
+              }`}
+            >
+              <SparklesIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex min-h-0 flex-1">
+          <main className="min-w-0 flex-1 overflow-x-auto p-6">
+            <Outlet />
+          </main>
+
+          {chatOpen && <ConsoleChatPanel />}
+        </div>
+      </div>
     </div>
   );
 }

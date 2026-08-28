@@ -1,6 +1,6 @@
 import type { PipelineFn } from '../core/pipeline.js';
 import { fetchRow, insertRow, listRowsByField } from '../core/persistence.js';
-import { WorkTitle } from '../auth/models/work-title.model.js';
+import { WorkTitle } from './models/work-title.model.js';
 import { Workspace } from './models/workspace.model.js';
 import { WorkspaceView } from './models/workspace-view.model.js';
 
@@ -50,7 +50,7 @@ async function cloneWorkspaceViews(
  * `persist`, the pipeline's write boundary — core/pipeline.ts), so a failure here can't roll back
  * the user creation itself, and non-transactionally, so it can't be folded into the same insert.
  *
- * When the new user has a `workTitleId` (`WorkTitle`, `auth/models/work-title.model.ts` — every
+ * When the new user has a `workTitleId` (`WorkTitle`, `workspace/models/work-title.model.ts` — every
  * `WorkTitle` mandates a `workspaceTemplateId`), the provisioned `Workspace` is a clone of that
  * template's tabs rather than a blank one, so the user lands on a view suited to their role.
  * `workTitleId` is optional on `User` (e.g. a self-registered account has none yet), so the blank

@@ -3,7 +3,7 @@ import { useAui, useAuiState } from '@assistant-ui/react';
 import { ChatRuntimeProvider, Thread, NewChatBar } from './chat/index.js';
 
 /** Compact thread switcher for the narrow panel — a `<select>` over every non-archived thread,
- * plus whatever is active. The standalone `/automation/chats` page has the full rail (Q19). */
+ * plus whatever is active. The console shell's `ConsoleChatPanel` reuses this same body. */
 function CompactThreadSwitcher() {
   const aui = useAui();
   const items = useAuiState((s) => s.threads.threadItems);
@@ -25,19 +25,25 @@ function CompactThreadSwitcher() {
   );
 }
 
-function WorkspaceChatPanelInner({
+/** The shared inner body for every chat panel — `NewChatBar` (agent picker) + a compact thread
+ * switcher + the assistant-ui `Thread`. Reused by `WorkspaceChatPanel` (workspace-scoped) and the
+ * console shell's `ConsoleChatPanel` (no workspace) so both render the same chat UI. The
+ * `ChatRuntimeProvider` wrapper differs between them, so it lives in the caller. */
+export function ChatPanelBody({
   agentId,
   onAgentIdChange,
+  emptyHint = 'Send a message, or start a fresh chat with “New chat”.',
 }: {
   agentId: string | null;
   onAgentIdChange: (id: string) => void;
+  emptyHint?: string;
 }) {
   return (
     <>
       <NewChatBar agentId={agentId} onAgentIdChange={onAgentIdChange} />
       <CompactThreadSwitcher />
       <div className="min-h-0 flex-1">
-        <Thread emptyHint="Ask the agent about this workspace." />
+        <Thread emptyHint={emptyHint} />
       </div>
     </>
   );
@@ -51,7 +57,7 @@ export interface WorkspaceChatPanelProps {
 }
 
 /** The workspace screen's right-side chat panel. Built on the same `ChatRuntimeProvider` /
- * `Thread` as the standalone `/automation/chats` page, laid out narrow with a compact switcher
+ * `Thread` as the console shell's `ConsoleChatPanel`, laid out narrow with a compact switcher
  * instead of the full thread-list rail. `WorkspacePage` conditionally mounts this at all — the
  * open/closed toggle lives in `WorkspaceTabs`. */
 export function WorkspaceChatPanel({ workspaceId, onTurnDone }: WorkspaceChatPanelProps) {
@@ -59,7 +65,11 @@ export function WorkspaceChatPanel({ workspaceId, onTurnDone }: WorkspaceChatPan
   return (
     <aside className="flex w-96 shrink-0 flex-col border-l border-gray-200 bg-white">
       <ChatRuntimeProvider agentId={agentId} workspaceId={workspaceId} onTurnFinish={onTurnDone}>
-        <WorkspaceChatPanelInner agentId={agentId} onAgentIdChange={setAgentId} />
+        <ChatPanelBody
+          agentId={agentId}
+          onAgentIdChange={setAgentId}
+          emptyHint="Ask the agent about this workspace."
+        />
       </ChatRuntimeProvider>
     </aside>
   );

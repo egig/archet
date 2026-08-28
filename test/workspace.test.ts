@@ -6,7 +6,7 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { CustomOperationDefinition, OperationContext } from '../src/core/index.js';
 import { generateId } from '../src/core/id.js';
 import { insertRow } from '../src/core/persistence.js';
-import { WorkTitle } from '../src/auth/models/work-title.model.js';
+import { WorkTitle } from '../src/workspace/models/work-title.model.js';
 import { Workspace, WorkspaceView, requireNotLocked, forbidLockedInUpdate } from '../src/workspace/models/index.js';
 import { assertOwnsWorkspace, requireWorkspaceOwnership } from '../src/workspace/pipeline.js';
 import { createDefaultWorkspace, DEFAULT_WORKSPACE_NAME } from '../src/workspace/provisioning.js';
