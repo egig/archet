@@ -1,6 +1,7 @@
 import type { FieldDefinition } from '../core/field.js';
 import type { ModelDefinition } from '../core/model.js';
 import { buildJunctionModel, junctionColumnsOf, manyToManyFieldsOf, type ManyToManyRelation } from '../core/many-to-many.js';
+import { injectInverseReferenceFields } from '../core/reference-to-many.js';
 import { toSnakeCase } from '../core/naming.js';
 import type { ScannedModel } from './scan.js';
 
@@ -67,6 +68,11 @@ function columnExpr(key: string, f: FieldDefinition): string {
       // junction table, see `emitJunctionTable` below). Kept as an explicit throw, not folded into
       // a `default:`, so adding a future field kind without a case here is a compile error.
       throw new Error(`columnExpr: '${col}' is a manyToMany field — it has no column, see emitTable`);
+    case 'referenceToMany':
+      // never reaches here — `emitTable` filters referenceToMany fields out of `model.fields` before
+      // calling `columnExpr`: the FK column lives on the *target* model (injected by
+      // `injectInverseReferenceFields`), not on this declaring model. Explicit throw, not a `default:`.
+      throw new Error(`columnExpr: '${col}' is a referenceToMany field — its FK column lives on the target model`);
   }
   if (f.required || f.default !== undefined) expr += '.notNull()';
   if (f.default !== undefined) expr += `.default(${JSON.stringify(f.default)})`;
@@ -121,9 +127,11 @@ function emitTable(model: ModelDefinition, extraLines: string[] = []): string {
     // declarable via field.* and never touched by requireOwnsRow/updateRow.
     `  createdById: uuid('created_by_id').references(() => ${tableVar('users')}.id, { onDelete: 'restrict' }),`,
     // manyToMany has no column of its own — it's backed by a separate junction table instead
-    // (see emitJunctionTable), so it's excluded here rather than passed to columnExpr.
+    // (see emitJunctionTable), so it's excluded here rather than passed to columnExpr. referenceToMany
+    // is excluded for the same reason: its FK column lives on the *target* model (injected by
+    // `injectInverseReferenceFields` into `generateSchemaSource`'s augmented models), not here.
     ...Object.entries(model.fields)
-      .filter(([, f]) => f.kind !== 'manyToMany')
+      .filter(([, f]) => f.kind !== 'manyToMany' && f.kind !== 'referenceToMany')
       .map(([key, f]) => `  ${key}: ${columnExpr(key, f)},`),
   ];
   // Auto-indexed unconditionally: `id`, `createdAt`, `updatedAt`, `createdById` are treated as
@@ -201,7 +209,12 @@ export function generateSchemaSource(scanned: ScannedModel[]): string {
     ``,
   ].join('\n');
 
-  const tables = scanned.map(({ model }) => emitTable(model)).join('\n');
+  // Augment every model with the inverse `reference` field each `referenceToMany` declaration
+  // implies on its target (e.g. `Article.comments -> Comment.articleId`), so `emitTable` emits the
+  // FK column + index on the target table. The originals are untouched; these clones are codegen-only.
+  const augmentedModels = injectInverseReferenceFields(scanned.map((s) => s.model));
+
+  const tables = augmentedModels.map((model) => emitTable(model)).join('\n');
 
   // Every manyToMany field declared across every scanned model gets its own junction table — only
   // the declaring (source) side is scanned here, since the field key already namespaces the table

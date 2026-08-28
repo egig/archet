@@ -174,6 +174,12 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
     if (f.kind === 'manyToMany' && f.targetModel === name) {
       throw new Error(`model '${name}': self-referential field.manyToMany('${name}') on field '${key}' is not supported yet`);
     }
+    // A self one-to-many is a hierarchy — `field.tree()` already covers that (core/field.ts's
+    // `TreeFieldDefinition`), including cycle protection, so `referenceToMany` is parent→children
+    // across two distinct models only.
+    if (f.kind === 'referenceToMany' && f.targetModel === name) {
+      throw new Error(`model '${name}': self-referential field.referenceToMany('${name}') on field '${key}' is not supported — use field.tree() for a self hierarchy`);
+    }
     if (f.kind === 'tree') {
       // A model's hierarchy is a single tree — a second `field.tree()` would mean two independent
       // parent-pointer columns, and nothing downstream (console rendering, `core/tree.ts`'s cycle

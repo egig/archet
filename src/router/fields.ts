@@ -51,6 +51,10 @@ const OPERATORS_BY_KIND: Record<ColumnKind, ReadonlySet<string>> = {
   // kind whose filterability is gated purely by operator, not by `isFilterableOrSortable` — see
   // `assertFilterable`'s manyToMany bypass in router/query.ts.
   manyToMany: new Set(['has']),
+  // forward referenceToMany filters identically to manyToMany — "rows whose child-set includes id X"
+  // (a `has` over the target's inverse FK). Reverse direction is just the auto-injected `reference`
+  // field, filtered with the normal `=`/`in` operators.
+  referenceToMany: new Set(['has']),
   json: new Set([]),
   // Q13: a `file` field's value is an object — equality/ordering/text-search on it are
   // meaningless. `is` (null-check only, see router/list.ts's filterClauseSql) is the one

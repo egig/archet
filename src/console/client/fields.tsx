@@ -222,6 +222,10 @@ export function FieldInput(props: FieldInputProps) {
       );
 
     case 'manyToMany':
+    case 'referenceToMany':
+      // both hold an array of target-row ids and render identically — referenceToMany's children are
+      // stored as an FK column on the target (one parent per child), manyToMany's in a junction; the
+      // form input is the same multi-select either way.
       return wrap(
         <ManyToManyMultiSelect
           targetModel={field.targetModel ?? ''}

@@ -3,6 +3,7 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { FileFieldDefinition, ReferenceFieldDefinition } from '../core/field.js';
 import type { CustomOperationDefinition, ModelDefinition } from '../core/model.js';
 import { findRelationsTargeting } from '../core/many-to-many.js';
+import { findRelationsTargeting as findReferenceToManyTargeting } from '../core/reference-to-many.js';
 import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
 import { generateId } from '../core/id.js';
@@ -84,13 +85,17 @@ async function filterIncludedRelations(
     if (relValue === null || relValue === undefined) continue;
 
     if (Array.isArray(relValue)) {
-      // a manyToMany include (forward or reverse, router/list.ts's attachManyToManyIncludes) —
-      // resolve its target model the same way router/query.ts's parseInclude validated the name.
+      // a manyToMany or referenceToMany include (forward or reverse, router/list.ts's
+      // attachManyToManyIncludes/attachReferenceToManyIncludes) — resolve its target model the same
+      // way router/query.ts's parseInclude validated the name. Forward referenceToMany/manyToMany read
+      // `targetModel` straight off the field; the reverse (source-model-name) case searches the
+      // registry for a relation whose source is `name`.
       const forwardField = model.fields[name];
       const targetModelName =
-        forwardField?.kind === 'manyToMany'
+        forwardField?.kind === 'manyToMany' || forwardField?.kind === 'referenceToMany'
           ? forwardField.targetModel
-          : findRelationsTargeting(registry, model.name).find((r) => r.sourceModel.name === name)?.sourceModel.name;
+          : findRelationsTargeting(registry, model.name).find((r) => r.sourceModel.name === name)?.sourceModel.name ??
+            findReferenceToManyTargeting(registry, model.name).find((r) => r.sourceModel.name === name)?.sourceModel.name;
       const targetModel = targetModelName ? registry[targetModelName] : undefined;
       if (!targetModel) continue;
       const granted = targetModel.api?.public ? ('*' as const) : await resolveGrantedFields(db, roleId, targetModel.name, 'read');

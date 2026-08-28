@@ -130,6 +130,28 @@ export interface ManyToManyFieldDefinition extends BaseFieldDefinition {
   targetModel: string;
 }
 
+/** A normalized one-to-many relation: the *target* model physically stores a foreign key back to the
+ * declaring ("one") model, so each target row belongs to exactly one parent — the real relational
+ * one-to-many guarantee (a `manyToMany` junction or a `referenceToMany` array column can't enforce
+ * that). Unlike `manyToMany` (a synthetic junction table) or a `referenceToMany` stored as an array
+ * on the parent, storage is a single FK column on the target (`<declaringModelName>Id` by default,
+ * or `inverseColumn` when set — see `core/reference-to-many.ts`'s `inverseColumnName`), generated
+ * by codegen and surfaced on the target as a normal `reference` field. The only authored surface is
+ * the `referenceToMany` declaration on the parent; its console form (a multi-select, reusing
+ * `manyToMany`'s `<ManyToManyMultiSelect>`) is where the children are chosen, and writes sync the
+ * target rows' FK through `core/pipeline.ts`'s `syncReferenceToManyFields`. `required`/`default`/
+ * `unique`/`indexed` are meaningless here (there's no column on this model), so `field.referenceToMany()`
+ * never lets a caller set them, the same way `field.manyToMany()` doesn't. Self-reference is rejected
+ * by `defineModel` (see `core/model.ts`) — a self one-to-many is a `tree`, which already exists. */
+export interface ReferenceToManyFieldDefinition extends BaseFieldDefinition {
+  kind: 'referenceToMany';
+  targetModel: string;
+  /** overrides the auto-derived inverse FK column name (`<declaringModelName>Id`) on `targetModel`.
+   * Only needed when the target already has, or needs, a differently-named FK for this relation —
+   * e.g. two relations to the same target, or matching an explicitly-declared `reference` field. */
+  inverseColumn?: string;
+}
+
 /** A parent-pointer hierarchy on this model itself — e.g. a `Category` or Chart-of-Accounts
  * `Account` whose `parentId` points at another row of the *same* model, forming a tree (root nodes
  * carry a `null` parent). Structurally identical to a self-referencing `ReferenceFieldDefinition`
@@ -177,6 +199,7 @@ export type FieldDefinition =
   | FieldRefFieldDefinition
   | FileFieldDefinition
   | ManyToManyFieldDefinition
+  | ReferenceToManyFieldDefinition
   | TreeFieldDefinition;
 
 function assertNoRequiredDefaultConflict(opts: FieldCommonOptions): void {
@@ -270,6 +293,13 @@ export const field = {
 
   manyToMany(targetModel: string, opts: { displayText?: string; description?: string } = {}): ManyToManyFieldDefinition {
     return { ...base(opts), kind: 'manyToMany', targetModel };
+  },
+
+  referenceToMany(
+    targetModel: string,
+    opts: { displayText?: string; description?: string; inverseColumn?: string } = {},
+  ): ReferenceToManyFieldDefinition {
+    return { ...base(opts), kind: 'referenceToMany', targetModel, inverseColumn: opts.inverseColumn };
   },
 
   /** Never `required` (a root node has no parent — there's nothing to require) and never `unique`

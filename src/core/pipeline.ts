@@ -1,7 +1,7 @@
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from './model.js';
 import { buildCreateSchema, buildUpdateSchema } from './validation.js';
-import { fetchRow, hardRemoveRow, insertRow, listRowsByField, softRemoveRow, updateRow } from './persistence.js';
+import { fetchRow, hardRemoveRow, insertRow, listChildIds, listRowsByField, setInverseForeignKey, softRemoveRow, updateRow } from './persistence.js';
 import {
   allManyToManyRelationsInvolving,
   buildJunctionModel,
@@ -10,6 +10,11 @@ import {
   manyToManyFieldsOf,
   type ManyToManyRelation,
 } from './many-to-many.js';
+import {
+  inverseColumnName,
+  referenceToManyFieldsOf,
+  type ReferenceToManyRelation,
+} from './reference-to-many.js';
 import { treeFieldOf, wouldCreateTreeCycle } from './tree.js';
 
 // A custom operation (core/model.ts's `CustomOperationDefinition`) runs under its own name here —
@@ -206,6 +211,64 @@ async function syncManyToManyFields(
   }
 }
 
+/** Diffs one `referenceToMany` field's desired child-id list against the target rows' current
+ * inverse-FK values and writes exactly the difference — adding each newly-listed child (setting its
+ * inverse FK to `sourceId`, which reassigns it from any prior parent since a child has exactly one),
+ * and clearing the inverse FK to `null` on each current child that's no longer listed. Runs on the
+ * same `db` handle `persistWrite`/`persistRemove` were given (the enclosing `pipe()` transaction's
+ * `tx`), so a partial diff can never commit. */
+async function syncReferenceToMany(
+  db: AnyDb,
+  relation: ReferenceToManyRelation,
+  sourceId: string,
+  desiredChildIds: readonly string[],
+): Promise<void> {
+  const targetModelName = relation.fieldDef.targetModel;
+  const inverseCol = inverseColumnName(relation);
+  const current = await listChildIds(db, targetModelName, inverseCol, sourceId);
+  const currentSet = new Set(current);
+  const desired = new Set(desiredChildIds);
+
+  for (const childId of desiredChildIds) {
+    if (!currentSet.has(childId)) {
+      await setInverseForeignKey(db, targetModelName, inverseCol, childId, sourceId);
+    }
+  }
+  for (const childId of current) {
+    if (!desired.has(childId)) {
+      await setInverseForeignKey(db, targetModelName, inverseCol, childId, null);
+    }
+  }
+}
+
+/** Applies `syncReferenceToMany` to every referenceToMany field this model declares that's actually
+ * present in `input` — a field omitted from the create/update body is left untouched (as with
+ * manyToMany), matching every other optional field on a PATCH-shaped update. */
+async function syncReferenceToManyFields(
+  db: AnyDb,
+  model: ModelDefinition,
+  input: Record<string, unknown>,
+  sourceId: string,
+): Promise<void> {
+  for (const relation of referenceToManyFieldsOf(model)) {
+    if (!(relation.fieldKey in input)) continue;
+    await syncReferenceToMany(db, relation, sourceId, (input[relation.fieldKey] as string[]) ?? []);
+  }
+}
+
+/** Detaches every child of a removed parent by nulling the inverse FK (`onDelete: 'restrict'` on the
+ * column would otherwise refuse a hard delete that left orphans). Called from both `persist.remove`
+ * (soft) and `persist.hardRemove` so a deleted parent never keeps a dangling FK — a soft-removed
+ * parent's children become freely reassignable rather than stranded. */
+async function detachReferenceToManyChildren(db: AnyDb, model: ModelDefinition, id: string): Promise<void> {
+  for (const relation of referenceToManyFieldsOf(model)) {
+    const childIds = await listChildIds(db, relation.fieldDef.targetModel, inverseColumnName(relation), id);
+    for (const childId of childIds) {
+      await setInverseForeignKey(db, relation.fieldDef.targetModel, inverseColumnName(relation), childId, null);
+    }
+  }
+}
+
 /** Guards a `field.tree()` write against a cycle — re-parenting a node under itself or one of its
  * own descendants. A no-op for a model with no tree field, or an update that doesn't touch the
  * tree field's key at all (the common case — most updates don't reparent), and for `null` (root is
@@ -230,6 +293,7 @@ const persistWrite: PipelineFn = async (ctx) => {
   if (ctx.operation === 'create') {
     const doc = await insertRow(ctx.db, ctx.model, ctx.input, createdById);
     await syncManyToManyFields(ctx.db, ctx.model, ctx.input, doc.id as string, createdById);
+    await syncReferenceToManyFields(ctx.db, ctx.model, ctx.input, doc.id as string);
     return { ...ctx, doc };
   }
   if (!ctx.id) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
@@ -237,6 +301,7 @@ const persistWrite: PipelineFn = async (ctx) => {
   const doc = await updateRow(ctx.db, ctx.model, ctx.id, ctx.input);
   if (!doc) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
   await syncManyToManyFields(ctx.db, ctx.model, ctx.input, ctx.id, createdById);
+  await syncReferenceToManyFields(ctx.db, ctx.model, ctx.input, ctx.id);
   return { ...ctx, doc };
 };
 
@@ -261,11 +326,15 @@ const persistRemove: PipelineFn = async (ctx) => {
       }
     }
   }
+  // a soft-deleted parent should not keep owning children — detach them so they're reassignable.
+  await detachReferenceToManyChildren(ctx.db, ctx.model, ctx.id);
   return { ...ctx, doc };
 };
 
 const persistHardRemove: PipelineFn = async (ctx) => {
   if (!ctx.id) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+  // clear the inverse FK first so the column's `onDelete: 'restrict'` doesn't refuse the delete.
+  await detachReferenceToManyChildren(ctx.db, ctx.model, ctx.id);
   await hardRemoveRow(ctx.db, ctx.model, ctx.id);
   return { ...ctx, doc: null };
 };

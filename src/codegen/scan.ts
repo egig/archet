@@ -53,7 +53,7 @@ export function assertReferencesResolve(scanned: ScannedModel[]): void {
   const names = new Set(scanned.map((s) => s.model.name));
   for (const { model } of scanned) {
     for (const [key, f] of Object.entries(model.fields)) {
-      if ((f.kind === 'reference' || f.kind === 'manyToMany' || f.kind === 'tree') && !names.has(f.targetModel)) {
+      if ((f.kind === 'reference' || f.kind === 'manyToMany' || f.kind === 'tree' || f.kind === 'referenceToMany') && !names.has(f.targetModel)) {
         throw new Error(
           `model '${model.name}': field '${key}' references unknown model '${f.targetModel}'. ` +
             `Known models: ${[...names].join(', ') || '(none)'}`,

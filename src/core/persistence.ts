@@ -63,6 +63,40 @@ export async function listRowsByField(
   return rows.map((row) => normalizeTimestamps(model, rowToCamelCase(row)));
 }
 
+/** The ids of `targetModelName`'s rows whose `inverseCol` (e.g. `article_id`) equals `parentId`
+ * (soft-deleted rows excluded) — i.e. the current children of a one-to-many parent. Uses the raw
+ * table name (which equals the model name) directly so callers don't need the target's
+ * `ModelDefinition` in hand; used by `core/pipeline.ts`'s `syncReferenceToManyFields`. */
+export async function listChildIds(
+  db: AnyDb,
+  targetModelName: string,
+  inverseCol: string,
+  parentId: string,
+): Promise<string[]> {
+  const rows = await execRows(
+    db,
+    sql`SELECT id FROM ${sql.identifier(targetModelName)} WHERE ${sql.identifier(toSnakeCase(inverseCol))} = ${parentId} AND ${sql.identifier('deleted_at')} IS NULL`,
+  );
+  return rows.map((row) => String(row.id));
+}
+
+/** Sets/clears `targetModelName`'s `inverseCol` FK (e.g. `article_id`) on one child row. Passing
+ * `null` detaches the child from its parent; any non-null `parentId` reassigns it (a child belongs to
+ * exactly one parent, so this naturally enforces the one-to-many invariant). Only touches non-deleted
+ * rows. Raw-SQL on purpose: the inverse column isn't a field on *this* model, so `updateRow` wouldn't
+ * write it — see `core/reference-to-many.ts`. */
+export async function setInverseForeignKey(
+  db: AnyDb,
+  targetModelName: string,
+  inverseCol: string,
+  childId: string,
+  parentId: string | null,
+): Promise<void> {
+  await db.execute(
+    sql`UPDATE ${sql.identifier(targetModelName)} SET ${sql.identifier(toSnakeCase(inverseCol))} = ${parentId} WHERE ${sql.identifier('id')} = ${childId} AND ${sql.identifier('deleted_at')} IS NULL`,
+  );
+}
+
 export async function insertRow(
   db: AnyDb,
   model: ModelDefinition,
@@ -82,7 +116,9 @@ export async function insertRow(
   for (const [key, fieldDef] of Object.entries(model.fields)) {
     // manyToMany has no backing column — its value is diffed into junction rows separately,
     // after this insert, by `persistWrite` (core/pipeline.ts), once the new row's id is known.
-    if (fieldDef.kind === 'manyToMany') continue;
+    // referenceToMany is the same: its value is synced onto the *target* model's inverse FK column
+    // by `syncReferenceToManyFields`, also after this insert — there's no column on this model.
+    if (fieldDef.kind === 'manyToMany' || fieldDef.kind === 'referenceToMany') continue;
     const value = key in input ? input[key] : fieldDef.default;
     if (value === undefined) continue;
     columns.push(sql.identifier(toSnakeCase(key)));
@@ -108,7 +144,7 @@ export async function updateRow(
   const setParts: SQL[] = [sql`${sql.identifier('updated_at')} = ${now.toISOString()}`];
 
   for (const [key, fieldDef] of Object.entries(model.fields)) {
-    if (fieldDef.kind === 'manyToMany') continue; // see insertRow's matching skip
+    if (fieldDef.kind === 'manyToMany' || fieldDef.kind === 'referenceToMany') continue; // see insertRow's matching skip
     if (!(key in input)) continue;
     setParts.push(sql`${sql.identifier(toSnakeCase(key))} = ${toDriverValue(fieldDef, input[key])}`);
   }

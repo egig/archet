@@ -56,6 +56,12 @@ function schemaForFieldKind(f: FieldDefinition): ZodTypeAny {
       // `f.required` (see `fieldToZod`/`buildUpdateSchema` below): omitting the key entirely means
       // "leave this relation alone," matching how every other optional field behaves on update.
       return z.array(z.string().uuid());
+    case 'referenceToMany':
+      // the full desired set of target-row ids, diffed against the target's inverse FK column by
+      // `syncReferenceToManyFields` (core/pipeline.ts) — never a partial patch. Always optional, same
+      // as manyToMany: omitting the key means "leave this relation alone," and a target id appearing
+      // in two parents' lists would be a data error only if the FK were unique, which it isn't.
+      return z.array(z.string().uuid());
   }
 }
 
@@ -72,7 +78,10 @@ function fieldToZod(f: FieldDefinition): ZodTypeAny {
   // together), so `required` is the only signal needed to decide optionality here — except
   // manyToMany, which is never required (`field.manyToMany()` never sets it) but is spelled out
   // for clarity anyway, since a model author can't accidentally make one required.
-  return f.required && f.kind !== 'manyToMany' ? schema : schema.optional();
+  // Q13: manyToMany/referenceToMany are never required (`field.manyToMany()`/`field.referenceToMany()`
+  // never set it) but are spelled out for clarity anyway, since a model author can't accidentally make
+  // one required — they're always optional so omitting the key means "leave this relation alone."
+  return f.required && f.kind !== 'manyToMany' && f.kind !== 'referenceToMany' ? schema : schema.optional();
 }
 
 export function buildCreateSchema(model: ModelDefinition): ZodTypeAny {

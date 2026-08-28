@@ -38,10 +38,11 @@ function initialValues(model: ConsoleModelMeta, row: Record<string, unknown> | n
       // an existing record's `{ url, filename, mimeType, size }` (display-only — buildPayload
       // never resubmits this, only a fresh upload's `{ key, ... }`); absent entirely for "no file yet".
       if (raw && typeof raw === 'object') values[key] = raw as FileFieldValue;
-    } else if (f.kind === 'manyToMany') {
+    } else if (f.kind === 'manyToMany' || f.kind === 'referenceToMany') {
       // `raw` is the array of full target rows the edit form's `?include=` fetch returned (see
       // ModelFormPage's rowQuery below); absent (create mode, or a row with none attached yet) ->
-      // empty selection.
+      // empty selection. referenceToMany's children arrive the same way from the server's
+      // `attachReferenceToManyIncludes` (router/list.ts).
       values[key] = Array.isArray(raw) ? raw.map((item) => String((item as Record<string, unknown>).id)) : [];
     } else if (f.writeAs) {
       values[key] = ''; // password et al: never round-tripped from a read
@@ -96,8 +97,10 @@ function buildPayload(model: ConsoleModelMeta, values: FormValues, mode: 'create
         break;
       }
       case 'manyToMany':
+      case 'referenceToMany':
         // always the full desired set, never a diff — the server (core/pipeline.ts's
-        // syncManyToMany) replaces the whole relation against whatever array is sent.
+        // syncManyToMany / syncReferenceToManyFields) replaces the whole relation against whatever
+        // array is sent.
         payload[key] = Array.isArray(raw) ? raw : [];
         break;
       case 'tree':
@@ -135,10 +138,10 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
   const CustomForm = model ? customForms[model.name] : undefined;
   const customFormFields = useMemo(() => (model ? createModelFieldRenderers(model, mode) : {}), [model, mode]);
 
-  // manyToMany fields are never on the row's own JSON by default (round 4 of the design
-  // discussion) — the edit form has to explicitly `?include=` each one to seed the multi-select
-  // with the record's current selection.
-  const manyToManyIncludes = model?.fields.filter((f) => f.kind === 'manyToMany').map((f) => f.key) ?? [];
+  // manyToMany / referenceToMany fields are never on the row's own JSON by default — the edit form
+  // has to explicitly `?include=` each one to seed the multi-select with the record's current
+  // selection. referenceToMany children arrive the same way (router/list.ts attaches them as an array).
+  const manyToManyIncludes = model?.fields.filter((f) => f.kind === 'manyToMany' || f.kind === 'referenceToMany').map((f) => f.key) ?? [];
   const rowQuery = useQuery({
     queryKey: queryKeys.row(modelName ?? '', id ?? ''),
     queryFn: () => getRow(model!.name, id!, { include: manyToManyIncludes }),

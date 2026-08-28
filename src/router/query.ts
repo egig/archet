@@ -104,6 +104,9 @@ export function parseInclude(model: ModelDefinition, raw: string | null, registr
     if (trimmed === 'createdBy') return trimmed;
     // forward manyToMany: declared directly on this model, include name === the field key.
     if (model.fields[trimmed]?.kind === 'manyToMany') return trimmed;
+    // forward referenceToMany: declared directly on this model, include name === the field key
+    // (it expands to the array of target rows whose inverse FK points at this row).
+    if (model.fields[trimmed]?.kind === 'referenceToMany') return trimmed;
     // reverse manyToMany: declared on some *other* model targeting this one — no matching
     // declaration needed here (round 3 of the design discussion: declaring once makes both
     // directions queryable). The include name is that other model's own name, e.g. `?include=posts`
@@ -160,6 +163,9 @@ function assertFilterable(model: ModelDefinition, field: string): void {
   // manyToMany has no `indexed` flag to gate on (there's no column) — its filterability is gated
   // purely by operator instead (`has` only, enforced by assertValidOperator/OPERATORS_BY_KIND).
   if (columnKind(model, field) === 'manyToMany') return;
+  // referenceToMany is the same: no column on this model, filterable only via `has`
+  // (router/list.ts's filterClauseSql issues an EXISTS over the target's inverse FK).
+  if (columnKind(model, field) === 'referenceToMany') return;
   if (!isFilterableOrSortable(model, field)) {
     throw new PipelineError({ code: 'UNFILTERABLE_FIELD', status: 400, fields: { [field]: 'not indexed — cannot be filtered on' } });
   }
@@ -244,14 +250,14 @@ export function parseListQuery(
   for (const [key, value] of searchParams.entries()) {
     if (RESERVED_PARAMS.has(key)) continue;
     assertFilterable(model, key);
-    if (columnKind(model, key) === 'manyToMany') {
+    if (columnKind(model, key) === 'manyToMany' || columnKind(model, key) === 'referenceToMany') {
       // a bare `?tags=x` has no operator to carry `has` — reject it with a clear message rather
       // than silently falling through to `=`, which would try (and fail) to compare a nonexistent
       // `tags` column.
       throw new PipelineError({
         code: 'INVALID_OPERATOR',
         status: 400,
-        fields: { [key]: `manyToMany field requires the structured filter syntax, e.g. ?filter=[["${key}","has","<id>"]]` },
+        fields: { [key]: `${columnKind(model, key)} field requires the structured filter syntax, e.g. ?filter=[["${key}","has","<id>"]]` },
       });
     }
     filters.push({ field: key, op: '=', value });
