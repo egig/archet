@@ -5,10 +5,9 @@
  * `roles.form.tsx` (docs/guide/console.md#custom-forms), unless it actually does (a consumer's own
  * `roles.form.tsx` takes precedence — see `generate()`, src/codegen/generate.ts).
  *
- * Combines editing the role's own fields with managing its entire `Permission` grant list in one
- * Save, via the `setPermissions` custom operation (`role.model.ts`, `setRolePermissions` in
- * `../pipeline.ts`) — the two features' real, worked example together. Permissions render as a
- * tree of checkboxes:
+ * Combines editing the role's own fields with managing its entire `permissions` grant array
+ * (`role.model.ts`) in one Save — a plain `POST`/`PATCH` write like any other field, no custom
+ * operation involved. Permissions render as a tree of checkboxes:
  *
  *   *  (All resources)      <- checking this grants everything; nothing else matters
  *     -> <resource>          <- checking this grants every action (and field) on it
@@ -19,7 +18,7 @@
  * rather than one row per child — the same shape a hand-written grant would use.
  */
 import { useEffect, useRef, useState } from 'react';
-import { callOperation, getRow, listRows, updateRow, useModels, type ModelFormProps } from '../../console/client/index.js';
+import { createRow, getRow, updateRow, type ModelFormProps } from '../../console/client/index.js';
 
 interface Target {
   resource: string;
@@ -58,8 +57,8 @@ function actionState(targets: Target[], resource: string, action: string, fieldS
 
 /** Replaces every field-level row for one `(resource, action)` with a fresh set — collapsing back
  * to a single `field: '*'` row when the new set covers every field, dropping the action's rows
- * entirely when it's empty, same "desired set, not a patch" shape the server-side diff itself
- * takes (`setRolePermissions`, `../pipeline.ts`). */
+ * entirely when it's empty, same "desired set, not a patch" shape the whole `permissions` array
+ * is saved as (one `PATCH`/`POST` write of the entire array, not a per-row diff). */
 function replaceActionFields(targets: Target[], resource: string, action: string, fieldKeys: string[], allFieldKeys: string[]): Target[] {
   const rest = targets.filter((t) => !(t.resource === resource && t.action === action));
   if (fieldKeys.length === 0) return rest;
@@ -92,8 +91,7 @@ function TriCheckbox({
   );
 }
 
-export default function RoleForm({ model, mode, id, fields, onDone }: ModelFormProps) {
-  const { models } = useModels();
+export default function RoleForm({ model, mode, id, fields, onDone, models }: ModelFormProps) {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(mode === 'update');
@@ -104,17 +102,14 @@ export default function RoleForm({ model, mode, id, fields, onDone }: ModelFormP
     if (mode !== 'update' || !id) return;
     let cancelled = false;
     void (async () => {
-      const [row, page] = await Promise.all([
-        getRow(model.name, id),
-        listRows('permissions', { limit: 500, offset: 0, filters: [['roleId', '=', id]] }),
-      ]);
+      const row = await getRow(model.name, id);
       if (cancelled) return;
       setValues({ name: row.name, description: row.description });
       setTargets(
-        page.rows.map((r) => ({
-          resource: r.resource as string,
-          action: r.action as string,
-          field: (r.field as string | null) ?? undefined,
+        ((row.permissions as { resource: string; action: string; field?: string | null }[] | null) ?? []).map((r) => ({
+          resource: r.resource,
+          action: r.action,
+          field: r.field ?? undefined,
         })),
       );
       setLoading(false);
@@ -163,11 +158,10 @@ export default function RoleForm({ model, mode, id, fields, onDone }: ModelFormP
     setError(null);
     try {
       if (mode === 'create') {
-        setError('Save the role first, then reopen it to manage permissions.');
-        return;
+        await createRow(model.name, { ...values, permissions: targets });
+      } else {
+        await updateRow(model.name, id!, { ...values, permissions: targets });
       }
-      await updateRow(model.name, id!, values);
-      await callOperation(model.name, id!, 'setPermissions', { targets });
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'save failed');
@@ -194,85 +188,83 @@ export default function RoleForm({ model, mode, id, fields, onDone }: ModelFormP
         {fields.description!.render({ value: values.description, onChange: onFieldChange })}
       </label>
 
-      {mode === 'update' && (
-        <fieldset className="rounded border border-gray-200 p-3">
-          <legend className="px-1 text-sm font-medium text-gray-700">Permissions</legend>
+      <fieldset className="rounded border border-gray-200 p-3">
+        <legend className="px-1 text-sm font-medium text-gray-700">Permissions</legend>
 
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <TriCheckbox state={globalGranted ? 'checked' : 'unchecked'} onChange={toggleGlobal} />
-            * — All resources
-          </label>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <TriCheckbox state={globalGranted ? 'checked' : 'unchecked'} onChange={toggleGlobal} />
+          * — All resources
+        </label>
 
-          <ul className="mt-2 space-y-1 pl-5">
-            {models.map((resource) => {
-              const resourceGranted = isResourceGranted(targets, resource.name);
-              const actions = [
-                { name: 'read', label: 'Read', fieldShaped: true },
-                { name: 'create', label: 'Create', fieldShaped: true },
-                { name: 'update', label: 'Update', fieldShaped: true },
-                { name: 'remove', label: 'Remove', fieldShaped: false },
-                ...resource.operations.map((op) => ({ name: op.name, label: op.label, fieldShaped: false })),
-              ];
-              const allFieldKeys = resource.fields.map((f) => f.key);
+        <ul className="mt-2 space-y-1 pl-5">
+          {models.map((resource) => {
+            const resourceGranted = isResourceGranted(targets, resource.name);
+            const actions = [
+              { name: 'read', label: 'Read', fieldShaped: true },
+              { name: 'create', label: 'Create', fieldShaped: true },
+              { name: 'update', label: 'Update', fieldShaped: true },
+              { name: 'remove', label: 'Remove', fieldShaped: false },
+              ...resource.operations.map((op) => ({ name: op.name, label: op.label, fieldShaped: false })),
+            ];
+            const allFieldKeys = resource.fields.map((f) => f.key);
 
-              return (
-                <li key={resource.name}>
-                  <label className="flex items-center gap-2 text-sm">
-                    <TriCheckbox
-                      state={resourceGranted ? 'checked' : 'unchecked'}
-                      disabled={globalGranted}
-                      onChange={(checked) => toggleResource(resource.name, checked)}
-                    />
-                    {resource.label}
-                  </label>
+            return (
+              <li key={resource.name}>
+                <label className="flex items-center gap-2 text-sm">
+                  <TriCheckbox
+                    state={resourceGranted ? 'checked' : 'unchecked'}
+                    disabled={globalGranted}
+                    onChange={(checked) => toggleResource(resource.name, checked)}
+                  />
+                  {resource.label}
+                </label>
 
-                  <ul className="mt-1 space-y-1 pl-5">
-                    {actions.map((action) => {
-                      const state = actionState(targets, resource.name, action.name, action.fieldShaped, allFieldKeys);
-                      return (
-                        <li key={action.name}>
-                          <label className="flex items-center gap-2 text-sm text-gray-700">
-                            <TriCheckbox
-                              state={state}
-                              disabled={globalGranted || resourceGranted}
-                              onChange={(checked) => toggleAction(resource.name, action.name, action.fieldShaped, allFieldKeys, checked)}
-                            />
-                            {action.label}
-                          </label>
+                <ul className="mt-1 space-y-1 pl-5">
+                  {actions.map((action) => {
+                    const state = actionState(targets, resource.name, action.name, action.fieldShaped, allFieldKeys);
+                    return (
+                      <li key={action.name}>
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                          <TriCheckbox
+                            state={state}
+                            disabled={globalGranted || resourceGranted}
+                            onChange={(checked) => toggleAction(resource.name, action.name, action.fieldShaped, allFieldKeys, checked)}
+                          />
+                          {action.label}
+                        </label>
 
-                          {action.fieldShaped && allFieldKeys.length > 0 && (
-                            <details className="pl-5">
-                              <summary className="cursor-pointer text-xs text-gray-500">fields</summary>
-                              <ul className="mt-1 space-y-1">
-                                {resource.fields.map((f) => (
-                                  <li key={f.key}>
-                                    <label className="flex items-center gap-2 text-xs text-gray-600">
-                                      <TriCheckbox
-                                        state={
-                                          grantedFieldKeys(targets, resource.name, action.name, allFieldKeys).includes(f.key)
-                                            ? 'checked'
-                                            : 'unchecked'
-                                        }
-                                        disabled={globalGranted || resourceGranted}
-                                        onChange={(checked) => toggleField(resource.name, action.name, f.key, allFieldKeys, checked)}
-                                      />
-                                      {f.label}
-                                    </label>
-                                  </li>
-                                ))}
-                              </ul>
-                            </details>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </li>
-              );
-            })}
-          </ul>
-        </fieldset>
-      )}
+                        {action.fieldShaped && allFieldKeys.length > 0 && (
+                          <details className="pl-5">
+                            <summary className="cursor-pointer text-xs text-gray-500">fields</summary>
+                            <ul className="mt-1 space-y-1">
+                              {resource.fields.map((f) => (
+                                <li key={f.key}>
+                                  <label className="flex items-center gap-2 text-xs text-gray-600">
+                                    <TriCheckbox
+                                      state={
+                                        grantedFieldKeys(targets, resource.name, action.name, allFieldKeys).includes(f.key)
+                                          ? 'checked'
+                                          : 'unchecked'
+                                      }
+                                      disabled={globalGranted || resourceGranted}
+                                      onChange={(checked) => toggleField(resource.name, action.name, f.key, allFieldKeys, checked)}
+                                    />
+                                    {f.label}
+                                  </label>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </li>
+            );
+          })}
+        </ul>
+      </fieldset>
 
       <div className="flex gap-2 pt-2">
         <button

@@ -1,5 +1,5 @@
-import { User, Role, Permission, Session, WorkTitle } from '../auth/models/index.js';
-import { Agent, AgentPermission, Chat, Message, Provider } from '../automation/models/index.js';
+import { User, Role, Session, WorkTitle } from '../auth/models/index.js';
+import { Agent, Chat, Message, Provider } from '../automation/models/index.js';
 import { AutomationDomain } from '../automation/domain.js';
 import { Workspace, WorkspaceView } from '../workspace/models/index.js';
 import type { ScannedModel } from './scan.js';
@@ -17,12 +17,10 @@ import type { ScannedForm } from './scan-forms.js';
 export const BUILTIN_MODELS: ScannedModel[] = [
   { filePath: '@egig/ratchet/auth (User)', exportName: 'User', model: User, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
   { filePath: '@egig/ratchet/auth (Role)', exportName: 'Role', model: Role, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
-  { filePath: '@egig/ratchet/auth (Permission)', exportName: 'Permission', model: Permission, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
   { filePath: '@egig/ratchet/auth (Session)', exportName: 'Session', model: Session, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
   { filePath: '@egig/ratchet/auth (WorkTitle)', exportName: 'WorkTitle', model: WorkTitle, builtinPackage: '@egig/ratchet/auth', domain: 'auth' },
   { filePath: '@egig/ratchet/automation (Provider)', exportName: 'Provider', model: Provider, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (Agent)', exportName: 'Agent', model: Agent, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
-  { filePath: '@egig/ratchet/automation (AgentPermission)', exportName: 'AgentPermission', model: AgentPermission, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (Chat)', exportName: 'Chat', model: Chat, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/automation (Message)', exportName: 'Message', model: Message, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/workspace (Workspace)', exportName: 'Workspace', model: Workspace, builtinPackage: '@egig/ratchet/workspace', domain: 'workspace' },

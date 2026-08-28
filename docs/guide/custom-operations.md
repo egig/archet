@@ -70,7 +70,7 @@ curl -X POST http://localhost:3000/api/documents/<id>/reject \
 
 A custom operation is gated by **two independent checks**, both of which must pass:
 
-1. **The operation's own action grant** — `{ resource: 'documents', action: 'lock' }` — checked by the router before the pipeline ever runs, the same way a `GET` checks its implicit `read` action. This is a whole-operation grant with no field concept (like `remove`), so a `Permission` row for it must never carry a `field`.
+1. **The operation's own action grant** — `{ resource: 'documents', action: 'lock' }` — checked by the router before the pipeline ever runs, the same way a `GET` checks its implicit `read` action. This is a whole-operation grant with no field concept (like `remove`), so a permission entry (an element of `Role.permissions`) for it must never carry a `field`.
 2. **Whatever field grant the operation's own writes need** — for `presetFields({ locked: true })`, that's `{ resource: 'documents', action: 'update', field: 'locked' }` (or `field: '*'`), checked *inside* `presetFields` itself, exactly as if the caller had `PATCH`ed `{ locked: true }` directly.
 
 Neither grant alone is enough. This is deliberate: it keeps "can perform this convenience action" and "can freely edit this field" separately grantable — a support role can be handed `lockable_docs:lock` without also getting general `update` access to `locked`, but the underlying write is never weaker than a real `PATCH` would require.

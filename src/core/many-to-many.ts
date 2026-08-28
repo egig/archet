@@ -84,7 +84,7 @@ export function junctionColumnFor(relation: ManyToManyRelation, roleModelName: s
 
 /** Synthesizes the hidden join model backing one manyToMany relation — a normal model (two
  * `reference` columns, plus the usual id/createdAt/updatedAt/deletedAt/createdById every model
- * gets) with `api.hidden` (no public routes — so it needs no `Permission` rows of its own, round 5
+ * gets) with `api.hidden` (no public routes — so it needs no permission grants of its own, round 5
  * of the design discussion) and `console: { hidden: true }` (no sidebar entry — the real editing
  * surface is the source model's own tag-picker/`tagIds` write). Pure function of its inputs,
  * deliberately never registered anywhere: every caller (schema-gen at codegen time, the write/

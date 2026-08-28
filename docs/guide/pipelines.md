@@ -83,7 +83,7 @@ export const notify: PipelineFn = async (ctx) => {
 
 ## Auth-related pipeline functions
 
-`requireAuth` and `requirePermission(resource, action)` (from `ratchet/auth`) are ordinary pipeline functions and compose the same way — see [Auth](/guide/auth#guarding-your-own-pipelines).
+`requireAuth` and `requirePermission(resource, action)` (from `ratchet/auth`) are ordinary pipeline functions and compose the same way — see [Auth](/guide/auth#auth--permission-is-implicit-on-the-generic-router).
 
 ## Beyond create/update/remove
 

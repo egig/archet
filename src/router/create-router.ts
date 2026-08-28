@@ -38,8 +38,8 @@ function toCtxUser(user: UserRow | null): Record<string, unknown> | null {
   return user as unknown as Record<string, unknown> | null;
 }
 
-/** Every route on the generic router requires a matching `Permission` row by default — including
- * reads (the implicit `'read'` action, see `ratchet/auth`'s `requireValidPermissionTarget`) — with
+/** Every route on the generic router requires a matching role grant by default — including
+ * reads (the implicit `'read'` action, see `ratchet/auth`'s `Role.permissions`) — with
  * no way to opt individual models back in to their old always-open behavior except `api.public`
  * (`core/model.ts`). Skips auth entirely for a `public` model; otherwise defers to
  * `authorizeRequest`, which 401s (no/expired session) or 403s (session valid, permission missing). */

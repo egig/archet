@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { defineModel, field } from '../../core/index.js';
-import { setRolePermissions } from '../pipeline.js';
+import { defineModel, field, pipe, validate, persist } from '../../core/index.js';
+import { requireValidPermissions } from '../pipeline.js';
 
-// a bare `field.json()` defaults to an object schema (z.record) — `targets` is an array, so it
-// needs its own explicit shape (core/validation.ts's `baseSchemaForField` can't infer one). Mirrors
-// `Permission`'s own `resource`/`action`/`field` columns (permission.model.ts) minus `roleId`
-// (implied by which role `setPermissions` was called on); `requireValidPermissionTarget`
-// (ratchet/auth) — not this schema — is what actually checks each triple against the live
-// registry, the same split `Permission.create`/`.update` already rely on.
+// a bare `field.json()` defaults to an object schema (z.record) — `permissions` is an array, so
+// it needs its own explicit shape (core/validation.ts's `baseSchemaForField` can't infer one).
+// One entry names a single grant: `resource`/`action` may each independently be `'*'`; `field` is
+// required for a field-shaped action (`read`/`create`/`update`/`*`) and forbidden for `remove` or
+// a custom operation — a cross-field rule `validatePermissionTarget` (ratchet/auth) enforces
+// against the live registry at request time, not this schema.
 const permissionTargetSchema = z.object({
   resource: z.string(),
   action: z.string(),
@@ -18,19 +18,16 @@ export const Role = defineModel('roles', {
   fields: {
     name: field.string({ required: true, unique: true, indexed: true, maxLength: 100 }),
     description: field.text({ required: false }),
+    // The role's entire grant list — one JSON column instead of a `Permission` junction table
+    // (docs/guide/auth.md). NOT `required: true` — `field.ts`'s `assertNoRequiredDefaultConflict`
+    // forbids `required` + `default` together, and a `default: []` column is never absent; every
+    // consumer already treats a missing/empty array as "no grants" (secure-by-default). Edited via
+    // a plain `PATCH /api/roles/:id` — see `role.form.tsx`'s tree UI — not a custom operation.
+    permissions: field.json({ schema: z.array(permissionTargetSchema), default: [] }),
   },
   operations: {
-    // The custom operation behind the console's combined "edit role + manage permissions" form
-    // (see docs/guide/console.md#custom-forms) — takes this role's *entire* desired grant list in
-    // one call (a tree of resource/action/field checkboxes, `*` collapsing a whole subtree into one
-    // wildcard row) and diffs it against the role's current `Permission` rows. `console: { placement: [] }`
-    // — no default row/detail button — because the raw JSON-params modal the console would
-    // otherwise render for this is a poor stand-in for the tree UI; it's only ever meant to be
-    // called from that custom form, not invoked generically.
-    setPermissions: {
-      pipeline: setRolePermissions,
-      params: { targets: field.json({ required: true, schema: z.array(permissionTargetSchema) }) },
-      console: { label: 'Set Permissions', placement: [] },
-    },
+    create: pipe(validate, requireValidPermissions, persist),
+    update: pipe(validate, requireValidPermissions, persist),
   },
+  console: {},
 });

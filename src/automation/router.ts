@@ -230,7 +230,7 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
   //
   // `useDataStreamRuntime` POSTs to this one fixed URL with `{ threadId, messages, system,
   // tools, workspaceId? }`. Security boundary (Q17): `system` and `tools` from the body are
-  // ignored outright (the agent's system prompt and `AgentPermission`-derived tools are
+  // ignored outright (the agent's system prompt and role-derived tools are
   // authoritative); `messages` is read only for the latest user turn's text — the rest of the
   // history is rebuilt from the DB.
   app.post('/chat', async (c) => {

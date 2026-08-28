@@ -123,7 +123,7 @@ export interface ModelFormPageProps {
 
 export function ModelFormPage({ onDone }: ModelFormPageProps) {
   const { model: modelName, id } = useParams<{ model: string; id?: string }>();
-  const { getModel, loading: modelsLoading } = useModels();
+  const { getModel, models, loading: modelsLoading } = useModels();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const model = modelName ? getModel(modelName) : undefined;
@@ -187,7 +187,10 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
 
   if (modelsLoading) return <p className="text-sm text-gray-500">Loading…</p>;
   if (!model) return <p className="text-sm text-red-600">Unknown model.</p>;
-  if (CustomForm) return <CustomForm model={model} mode={mode} id={id} onDone={onDone} fields={customFormFields} />;
+  if (CustomForm) return <CustomForm model={model} mode={mode} id={id} onDone={() => {
+    refetchRows();
+    onDone()
+  }} fields={customFormFields} models={models} />;
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
   const resourceKey = resourceFieldKey(model);

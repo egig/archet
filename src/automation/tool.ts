@@ -4,7 +4,7 @@ import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { CustomOperationDefinition, ModelDefinition, OperationContext, PipelineFn } from '../core/index.js';
 import { buildCreateSchema, buildUpdateSchema, buildParamsSchema } from '../core/index.js';
 import { authorizeRequest, resolveGrantedFields, assertWriteFieldsAllowed } from '../auth/pipeline.js';
-import { listPermissionsForAgent } from './lookup.js';
+import { listPermissionsForRole } from '../auth/lookup.js';
 import type { ToolSpec } from './provider.js';
 
 type AnyDb = PgDatabase<any, any, any>;
@@ -75,11 +75,11 @@ function toolDescription(model: ModelDefinition, operation: string): string {
   return base + suffix;
 }
 
-/** Expands one `AgentPermission` grant's `(resource, action)` — either of which may be `'*'`,
- * same wildcard semantics `requirePermission` checks at call time (src/auth/pipeline.ts) — into
- * concrete `(model, operation)` pairs against the live registry. `action: '*'` covers the three
- * builtins *and* every custom operation each matched model declares; a concrete `action` matches
- * a builtin verb or a custom operation of that exact name. */
+/** Expands one grant's `(resource, action)` — either of which may be `'*'`, same wildcard
+ * semantics `requirePermission` checks at call time (src/auth/pipeline.ts) — into concrete
+ * `(model, operation)` pairs against the live registry. `action: '*'` covers the three builtins
+ * *and* every custom operation each matched model declares; a concrete `action` matches a builtin
+ * verb or a custom operation of that exact name. */
 function expandGrant(
   registry: Record<string, ModelDefinition>,
   resource: string,
@@ -98,18 +98,20 @@ function expandGrant(
 }
 
 /**
- * Resolves an `Agent`'s `AgentPermission` grants (src/automation/models/agent-permission.model.ts)
+ * Resolves an `Agent`'s tools from its `Role`'s `permissions` array (src/auth/models/role.model.ts)
  * into callable tools — one per (model, operation) pair the grants expand to, deduplicated by
  * tool name (`<operation>_<resource>`, e.g. `create_invoice`, `lock_invoice`). A builtin tool's
  * input schema is exactly the target model's create/update Zod schema; a custom operation's is its
- * declared `params` plus a record `id`.
+ * declared `params` plus a record `id`. An agent with no `roleId` (`null`/absent) is offered no
+ * tools at all.
  */
 export async function resolveAgentTools(
   db: AnyDb,
   registry: Record<string, ModelDefinition>,
-  agentId: string,
+  roleId: string | null,
 ): Promise<AgentTool[]> {
-  const grants = await listPermissionsForAgent(db, agentId);
+  if (!roleId) return [];
+  const grants = await listPermissionsForRole(db, roleId);
   const byName = new Map<string, AgentTool>();
 
   for (const grant of grants) {
@@ -154,8 +156,8 @@ function buildOpContext(
  * `/api/:model` (builtin) or `/api/:model/:id/:operation` (custom) would make. Model pipelines no
  * longer carry their own `requireAuth`/`requirePermission` steps (the generic router applies both
  * implicitly — see `create-router.ts`), so this — the *other* caller that bypasses that router —
- * performs the identical checks itself, against the chat's own `request` (never `AgentPermission`
- * alone):
+ * performs the identical checks itself, against the chat's own `request` (never the agent's own
+ * role alone):
  *
  * - builtin: `authorizeRequest` for the `resource:action` grant, then `resolveGrantedFields` +
  *   `assertWriteFieldsAllowed` for create/update's field-level grant (`remove` has no field
@@ -165,7 +167,7 @@ function buildOpContext(
  *   pipeline writes is gated by that pipeline (e.g. `presetFields` re-checks the `update` field
  *   grant), not here.
  *
- * `AgentPermission` only decided which tools the agent was offered; this is what stops it from
+ * The agent's own `Role` only decided which tools it was offered; this is what stops it from
  * doing more than the chat's own user could already do via the REST API.
  */
 export async function executeAgentTool(

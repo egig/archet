@@ -36,7 +36,7 @@ export interface OperationConsoleOptions {
  * object (`OperationsConfig`) rather than a separate map, so it's picked up for free everywhere
  * `Object.keys(model.operations)` already drives behavior: the console's operation list
  * (`operationNames`/`operations` in `console/serialize-model.ts`), the `actionRef` field's
- * dropdown (`console/client/fields.tsx`), and `requireValidPermissionTarget`'s action-name
+ * dropdown (`console/client/fields.tsx`), and `validatePermissionTarget`'s action-name
  * validation (ratchet/auth). Dispatched by one generic route, `POST /:model/:id/:operation`
  * (router/create-router.ts) — always record-scoped, always POST, regardless of what `pipeline`
  * does internally.
@@ -62,7 +62,7 @@ export type OperationEntry = PipelineFn | CustomOperationDefinition;
 
 /** Operation names no model may declare a custom operation under — `create`/`update`/`remove` are
  * the fixed builtin keys (typed separately below); `read` and `*` are reserved by the permission
- * system (`ratchet/auth`'s `requireValidPermissionTarget`); `upload` is reserved because
+ * system (`ratchet/auth`'s `validatePermissionTarget`); `upload` is reserved because
  * `POST /:model/:field/upload` (router/create-router.ts) already occupies that exact path shape
  * for models with a `file` field. */
 export const RESERVED_OPERATION_NAMES: ReadonlySet<string> = new Set([
@@ -106,7 +106,7 @@ export interface ApiModelOptions {
    * `Chat`/`Message` (src/automation/models) because the generic router has no per-row ownership
    * check — only `Chat`/`Message`'s own `/api/automation/chats/*` router (src/automation/router.ts)
    * enforces that a chat and its messages are only readable by their owner. `Agent` stays generic-
-   * REST-readable since it's shared config with no owner, the same as `Role`/`Permission`. */
+   * REST-readable since it's shared config with no owner, the same as `Role`. */
   hidden?: boolean;
   /** names the field that must equal the requesting user's id for a row to be readable/writable
    * through the generic `/api/:model` router — the alternative to `hidden` for a model that *does*
@@ -117,7 +117,7 @@ export interface ApiModelOptions {
    * doesn't touch POST/PATCH/DELETE. */
   ownerField?: string;
   /** opts this model out of the generic `/api/:model` router's implicit auth+permission gate
-   * (every route on every model otherwise requires a matching `Permission` row, including reads —
+   * (every route on every model otherwise requires a matching role grant, including reads —
    * see `ratchet/auth`) — for a model that's genuinely meant to be reachable with no session at
    * all, e.g. a public read-only catalog. `true` applies to every verb; there's no per-operation
    * granularity today. Doesn't affect a model's own hand-rolled router (`api.hidden`), which was
@@ -202,7 +202,7 @@ export function defineModel(name: string, config: DefineModelConfig): ModelDefin
 
   // Any other key in `operations` is a custom operation (Q11/Q19) — merged in as-is so
   // `Object.keys(model.operations)` picks it up everywhere that already enumerates operation
-  // names (console metadata, the `actionRef` field, `requireValidPermissionTarget`).
+  // names (console metadata, the `actionRef` field, `validatePermissionTarget`).
   for (const [opName, entry] of Object.entries(config.operations ?? {})) {
     if (opName === 'create' || opName === 'update' || opName === 'remove') continue;
     if (RESERVED_OPERATION_NAMES.has(opName)) {

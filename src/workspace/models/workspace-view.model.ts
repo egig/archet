@@ -33,7 +33,7 @@ const sortSchema = z.array(z.object({ field: z.string(), direction: z.enum(['asc
  *
  * `console: { hidden: true }`: managed only through the Workspace screen (console/client's
  * WorkspaceTabs/FilterBar) and agent tool calls (create_workspace_views/... — automation/tool.ts
- * derives these automatically from an AgentPermission grant on 'workspace_views'), never the
+ * derives these automatically from a role grant on 'workspace_views'), never the
  * generic sidebar.
  */
 export const WorkspaceView = defineModel('workspace_views', {

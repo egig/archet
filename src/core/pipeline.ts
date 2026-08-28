@@ -36,9 +36,10 @@ export interface OperationContext {
    * `requirePermission`/business logic — absent until an auth pipeline step sets it. */
   user?: Record<string, unknown> | null;
   /** name -> ModelDefinition lookup for the whole app, set by the router that builds this ctx
-   * (src/router/create-router.ts). Read by `requireValidPermissionTarget` (ratchet/auth) to check
-   * a `Permission` row's `resource`/`action` against what actually exists. Optional because call sites
-   * outside the generic `/api/:model` router (e.g. `/api/auth/register`) don't need it. */
+   * (src/router/create-router.ts). Read by `requireValidPermissions`/`validatePermissionTarget`
+   * (ratchet/auth) to check a permission target's `resource`/`action` against what actually
+   * exists. Optional because call sites outside the generic `/api/:model` router (e.g.
+   * `/api/auth/register`) don't need it. */
   registry?: Record<string, ModelDefinition>;
 }
 

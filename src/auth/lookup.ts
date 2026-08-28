@@ -75,18 +75,23 @@ export async function findUserByEmail(db: AnyDb, email: string): Promise<UserRow
 export interface PermissionRow {
   resource: string;
   action: string;
-  /** null for a row scoped to a fieldless action (`remove`) — see `requireValidPermissionTarget`,
-   * which enforces that a `read`/`create`/`update`/`*` row always has one and a `remove` row
+  /** null for a row scoped to a fieldless action (`remove`) — see `validatePermissionTarget`,
+   * which enforces that a `read`/`create`/`update`/`*` entry always has one and a `remove` entry
    * never does. */
   field: string | null;
 }
 
+/** Reads one role's entire grant list off its `permissions` jsonb column (`Role.permissions`,
+ * src/auth/models/role.model.ts) — no junction table anymore. A grant entry that omits `field`
+ * entirely (rather than carrying an explicit `null`) is normalized to `field: null` here so every
+ * caller (`resolveGrantedFields`, tests) can rely on `field: string | null`, never `undefined`. */
 export async function listPermissionsForRole(db: AnyDb, roleId: string): Promise<PermissionRow[]> {
   const rows = await execRows(
     db,
-    sql`SELECT resource, action, field FROM permissions WHERE role_id = ${roleId} AND deleted_at IS NULL`,
+    sql`SELECT permissions FROM roles WHERE id = ${roleId} AND deleted_at IS NULL LIMIT 1`,
   );
-  return rows.map((r) => rowToCamelCase(r) as unknown as PermissionRow);
+  const raw = (rows[0]?.permissions as Array<{ resource: string; action: string; field?: string | null }> | null) ?? [];
+  return raw.map((p) => ({ resource: p.resource, action: p.action, field: p.field ?? null }));
 }
 
 export interface RoleRow {
@@ -103,15 +108,17 @@ export async function findRoleByName(db: AnyDb, name: string): Promise<RoleRow |
  * True once *any* user — active or not — holds a `*:*` permission through their role. Used to
  * decide whether `/api/auth/setup` (root-admin onboarding) is still open. Deliberately ignores
  * `active`: gating on it would let deactivating the sole root admin reopen unauthenticated root
- * creation to anyone who hits the console UI.
+ * creation to anyone who hits the console UI. `@>` is a jsonb "contains" check — true as soon as
+ * *any* element of `roles.permissions` matches `{"resource":"*","action":"*"}`, regardless of
+ * that element's own `field` value or how many other grants sit alongside it.
  */
 export async function hasRootAdmin(db: AnyDb): Promise<boolean> {
   const rows = await execRows(
     db,
     sql`SELECT 1
         FROM users u
-        JOIN permissions p ON p.role_id = u.role_id AND p.deleted_at IS NULL
-        WHERE u.deleted_at IS NULL AND p.resource = '*' AND p.action = '*'
+        JOIN roles r ON r.id = u.role_id AND r.deleted_at IS NULL
+        WHERE u.deleted_at IS NULL AND r.permissions @> '[{"resource":"*","action":"*"}]'::jsonb
         LIMIT 1`,
   );
   return rows.length > 0;

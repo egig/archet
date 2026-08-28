@@ -1,15 +1,15 @@
-export { User, Role, Permission, Session, WorkTitle } from './models/index.js';
+export { User, Role, Session, WorkTitle } from './models/index.js';
 export { createAuthRouter } from './router.js';
 export {
   hashPassword as hashPasswordPipeline,
   requireAuth,
   requirePermission,
-  requireValidPermissionTarget,
+  requireValidPermissions,
+  validatePermissionTarget,
   authorizeRequest,
   resolveGrantedFields,
   assertWriteFieldsAllowed,
   presetFields,
-  setRolePermissions,
   FIELDLESS_ACTIONS,
 } from './pipeline.js';
 export type { GrantedFields, PermissionTarget } from './pipeline.js';

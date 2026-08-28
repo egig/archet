@@ -69,9 +69,9 @@ export interface FieldInputProps {
   formModel?: ConsoleModelMeta;
 }
 
-/** The key of the form's `modelRef` field (`resource` on `Permission`/`AgentPermission`,
- * `targetModel` on `WorkspaceView`) — the field an `actionRef`/`fieldRef` sub-selector depends
- * on. `undefined` when the form has no `modelRef` field at all. */
+/** The key of the form's `modelRef` field (e.g. `targetModel` on `WorkspaceView`) — the field an
+ * `actionRef`/`fieldRef` sub-selector depends on. `undefined` when the form has no `modelRef`
+ * field at all. */
 export function resourceFieldKey(model: ConsoleModelMeta | undefined): string | undefined {
   return model?.fields.find((f) => f.kind === 'modelRef')?.key;
 }
@@ -250,7 +250,7 @@ export function FieldInput(props: FieldInputProps) {
 
     case 'actionRef': {
       // when a concrete resource is chosen, only offer *its* operations; otherwise ('' or '*')
-      // fall back to the registry-wide union, matching `requireValidPermissionTarget`'s check.
+      // fall back to the registry-wide union, matching `validatePermissionTarget`'s check.
       const scopedModel =
         selectedResource && selectedResource !== '*'
           ? modelRefOptions.find((m) => m.name === selectedResource)

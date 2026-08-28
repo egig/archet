@@ -179,17 +179,12 @@ describeIfDb('Workspace lock/unlock (custom operations, src/workspace/models/wor
       )`);
     // `presetFields` (inside `lock`/`unlock`) checks the caller's *field* grant on `update` via
     // `resolveGrantedFields` — a real DB lookup by `roleId`, independent of `requireOwnsRow`'s own
-    // ownership check — so this suite needs `roles`/`permissions` fixtures too, shared with
-    // `auth.test.ts`/`router.test.ts`'s own copies the same idempotent way `workspaces` already is.
+    // ownership check — so this suite needs a `roles` fixture too, shared with
+    // `auth.test.ts`/`router.test.ts`'s own copy the same idempotent way `workspaces` already is.
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS roles (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
-        name varchar NOT NULL, description text
-      )`);
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS permissions (
-        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
-        role_id uuid NOT NULL, resource varchar NOT NULL, action varchar NOT NULL, field varchar
+        name varchar NOT NULL, description text, permissions jsonb NOT NULL DEFAULT '[]'
       )`);
   });
 
@@ -212,10 +207,9 @@ describeIfDb('Workspace lock/unlock (custom operations, src/workspace/models/wor
   async function roleWithLockedFieldGrant(): Promise<string> {
     const roleId = generateId();
     const now = new Date().toISOString();
-    await db.execute(sql`INSERT INTO roles (id, created_at, updated_at, name) VALUES (${roleId}, ${now}, ${now}, ${`role-${roleId}`})`);
     await db.execute(
-      sql`INSERT INTO permissions (id, created_at, updated_at, role_id, resource, action, field)
-          VALUES (${generateId()}, ${now}, ${now}, ${roleId}, 'workspaces', 'update', 'locked')`,
+      sql`INSERT INTO roles (id, created_at, updated_at, name, permissions)
+          VALUES (${roleId}, ${now}, ${now}, ${`role-${roleId}`}, ${JSON.stringify([{ resource: 'workspaces', action: 'update', field: 'locked' }])})`,
     );
     return roleId;
   }

@@ -67,6 +67,15 @@ export interface ModelFormProps {
   /** this model's fields, each already bound to its own built-in editor — `fields.email.render({
    * value, onChange })`, e.g., instead of rewiring `FieldInput` by hand for every field kind. */
   fields: ModelFieldRenderers;
+  /** every model's console metadata (the same list `useModels()` exposes) — handed down so a
+   * custom form can enumerate other models without calling `useModels()` itself. That matters for
+   * the framework's own builtin forms (e.g. `Role`'s, which renders a permission tree across every
+   * resource): a builtin form is imported via a package subpath and can end up in a *separate*
+   * module graph from the app's `ModelsProvider`, so reaching for the context there would read a
+   * second, provider-less `ModelsContext` instance and throw. Consuming `<name>.form.tsx` files
+   * are always bundled into the app's own console graph, so they may use `useModels()` directly —
+   * this prop just guarantees the builtins work either way. */
+  models: ConsoleModelMeta[];
 }
 
 export type ModelFormComponent = ComponentType<ModelFormProps>;

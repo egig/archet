@@ -5,11 +5,11 @@ import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
 import { redactSensitiveFields } from '../core/serialize.js';
 import { generateId } from '../core/id.js';
-import { insertRow } from '../core/persistence.js';
+import { insertRow, updateRow } from '../core/persistence.js';
 import { toErrorResponse } from '../router/errors.js';
 import { readJsonBody } from '../router/create-router.js';
 import { Workspace, DEFAULT_WORKSPACE_NAME } from '../workspace/index.js';
-import { User, Role, Permission, registerPipeline } from './models/index.js';
+import { User, Role, registerPipeline } from './models/index.js';
 import { resolveSessionUser } from './pipeline.js';
 import {
   deleteSessionByToken,
@@ -104,12 +104,14 @@ export function createAuthRouter(db: AnyDb): Hono {
       const permissions = await listPermissionsForRole(txDb, role.id as string);
       if (!permissions.some((p) => p.resource === '*' && p.action === '*')) {
         // `field: '*'` isn't optional here even though `action: '*'` already implies the
-        // fieldless `remove` action — `requireValidPermissionTarget` still requires an explicit
-        // field value for the field-shaped actions ('*' covers read/create/update too).
-        // Without it, secure-by-default field permission (docs/guide/auth.md) would brick the
-        // console immediately after setup: the root admin could log in but see/write no fields on
-        // any model, with no way to grant the first field permission.
-        await insertRow(txDb, Permission, { roleId: role.id, resource: '*', action: '*', field: '*' });
+        // fieldless `remove` action — field-level permission is checked independently of
+        // action-level (docs/guide/auth.md), so an explicit field value is still required for the
+        // field-shaped actions ('*' covers read/create/update too). Without it, secure-by-default
+        // field permission would brick the console immediately after setup: the root admin could
+        // log in but see/write no fields on any model, with no way to grant the first field
+        // permission. Self-heals an existing `Root` role that predates a `*:*` grant by appending
+        // one rather than replacing the array outright.
+        await updateRow(txDb, Role, role.id as string, { permissions: [...permissions, { resource: '*', action: '*', field: '*' }] });
       }
 
       const created = await insertRow(txDb, User, { email, passwordHash: await hashPasswordValue(password), roleId: role.id });

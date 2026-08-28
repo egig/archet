@@ -1,6 +1,6 @@
 # Auth
 
-`ratchet/auth` provides session-based authentication (`User`, `Role`, `Permission`, `Session` models, plus a router and pipeline helpers) that `ratchet serve` mounts at `/api/auth`, ahead of the generic `/api/:model` router.
+`ratchet/auth` provides session-based authentication (`User`, `Role`, `Session` models, plus a router and pipeline helpers) that `ratchet serve` mounts at `/api/auth`, ahead of the generic `/api/:model` router. A role's entire grant list lives on the `Role.permissions` json column — there is no separate `Permission` model.
 
 ## Endpoints
 
@@ -20,7 +20,7 @@
 
 ## Root admin onboarding
 
-A fresh instance has no users, so `requirePermission` would lock everyone out with no way to grant the first permission. `POST /api/auth/setup` closes that gap: it's unauthenticated, but only works once — it checks whether any user already holds a `*:*` permission (via their role) and 409s (`SETUP_ALREADY_COMPLETE`) if so. Otherwise it creates (or reuses) a `Root` role with a `{resource: '*', action: '*'}` permission, creates the submitted user under that role, and signs them in — the same shape as `register`/`login`.
+A fresh instance has no users, so `requirePermission` would lock everyone out with no way to grant the first permission. `POST /api/auth/setup` closes that gap: it's unauthenticated, but only works once — it checks whether any user already holds a `*:*` permission entry (on their role's `permissions` list) and 409s (`SETUP_ALREADY_COMPLETE`) if so. Otherwise it creates (or reuses) a `Root` role with a `{resource: '*', action: '*', field: '*'}` permission entry, creates the submitted user under that role, and signs them in — the same shape as `register`/`login`.
 
 The console SPA's `AuthProvider` checks `GET /api/auth/setup` on boot alongside `/me`. While a root admin doesn't yet exist, every console route redirects to its `/setup` route (a form styled like the login page, with a confirm-password field) instead of `/login`; once it's created, `/setup` itself redirects away.
 
@@ -41,7 +41,7 @@ The `User` model never declares a plaintext `password` field. Instead its `passw
 
 ## Auth + permission is implicit on the generic router
 
-Every route on the generic `/api/:model` router requires a matching `Permission` row by default — including reads, which use an implicit `'read'` action (there's no per-model `read` operation to compose a pipeline step into, unlike create/update/remove). A model author doesn't need to do anything to get this; it applies automatically, the same way `redactSensitiveFields` or `?include=` do.
+Every route on the generic `/api/:model` router requires a matching permission entry on the user's `Role.permissions` list by default — including reads, which use an implicit `'read'` action (there's no per-model `read` operation to compose a pipeline step into, unlike create/update/remove). A model author doesn't need to do anything to get this; it applies automatically, the same way `redactSensitiveFields` or `?include=` do.
 
 A model that must stay reachable with no session at all (a public read-only catalog, say) opts out with `api: { public: true }`:
 
@@ -57,22 +57,24 @@ export const Announcement = defineModel('announcements', {
 `requireAuth` and `requirePermission(resource, action)` still exist as ordinary [pipeline functions](/guide/pipelines), for a dedicated router that bypasses the generic one entirely (e.g. `Chat`/`Message`'s own `/api/automation/*` routes, or an agent tool call — `automation/tool.ts`'s `executeAgentTool` calls `authorizeRequest`, the same check under the hood, before ever touching a model's pipeline):
 
 - `requireAuth` resolves the `Bearer` token or session cookie on `ctx.request` to a live, active user and stashes it on `ctx.user`. Throws `UNAUTHENTICATED` (401) otherwise.
-- `requirePermission(resource, action)` must run after `requireAuth`. It checks the user's role owns a permission matching `(resource, action)` — either side may be granted as `*`. Throws `FORBIDDEN` (403) otherwise, or `UNAUTHENTICATED` if `requireAuth` didn't run first.
+- `requirePermission(resource, action)` must run after `requireAuth`. It checks the user's role owns a permission entry matching `(resource, action)` — either side may be granted as `*`. Throws `FORBIDDEN` (403) otherwise, or `UNAUTHENTICATED` if `requireAuth` didn't run first.
 
 ## Roles and permissions
 
-`Role` and `Permission` are ordinary models, managed like any other through the generic REST API (or the console) — grant a role a permission by creating a `Permission` row with `{ roleId, resource, action, field }`, using `'*'` for `resource`/`action` to grant broadly.
+`Role` is an ordinary model whose entire grant list is the `permissions` json column — `Role.permissions` is `[{ resource, action, field? }, ...]`, and there's no separate `Permission` model or junction table to manage. Grant a role permissions by setting `permissions` to the desired array, using `'*'` for `resource`/`action` to grant broadly and `'*'` for `field` to grant every field. A role's grants are edited through the generic REST API (a `POST /api/roles` create or `PATCH /api/roles/:id` update carrying the whole `permissions` array) or through the console form (see below) — replacing the entire array in one call, the same way you'd replace an array field on any model.
 
-`Role` also declares a `setPermissions` [custom operation](/guide/custom-operations) (`src/auth/models/role.model.ts`, a real, worked example of both a custom operation *and* a [builtin console form](/guide/console#builtin-forms) working together): `POST /api/roles/:id/setPermissions` with `{ targets: [{ resource, action, field? }, ...] }` replaces the role's *entire* grant list in one call — inserting what's newly granted, soft-removing what's dropped — instead of creating/deleting individual `Permission` rows one at a time. It's what backs `Role`'s own console form (`src/auth/models/role.form.tsx`, shipped with the framework — a tree of resource/action/field checkboxes, `'*'` collapsing a whole subtree into one wildcard row) that edits a role's own fields and its grants in a single form/submit; the operation itself is gated the same "two independent checks" way any custom operation is (see [Permissions](/guide/custom-operations#permissions)) — the router's own `roles:setPermissions` grant, plus a `permissions:create` field grant (since the actual write is `Permission` rows, not one of `Role`'s own fields).
+`Role`'s console form (`src/auth/models/role.form.tsx`, shipped with the framework — a real, worked example of a [builtin console form](/guide/console#builtin-forms)) edits `name`/`description` the normal way and, in the same form/submit, manages the role's entire `permissions` array via a tree of resource/action/field checkboxes where `'*'` collapses a fully-granted subtree into one wildcard entry. It persists with a plain `POST`/`PATCH /api/roles`, so it's gated the same "two independent checks" way any role edit is: the `roles:create`/`roles:update` grant from the requesting user's own role, plus the field grants covering the fields being written.
+
+> **Agents derive their tools from a `Role`.** An `Agent` carries a `roleId`, and the tools it may call (`resolveAgentTools`, `src/automation/tool.ts`) are exactly the operations its role's `permissions` grant — so an agent's capabilities are just a role assignment, no separate grant list. When an agent tool is invoked, the call is additionally gated by the *chatting user's* own role (not the agent's alone), so an agent can never escalate past what the human driving it may already do.
 
 ## Field-level permission
 
-`field` names one field of `resource` a role may read (`action: 'read'`) or write (`action: 'create'`/`'update'`) — or `'*'` for every field. It's required on a `read`/`create`/`update`/`'*'` row and doesn't apply at all to `remove` (which gates a whole row, never individual fields).
+`field` names one field of `resource` a role may read (`action: 'read'`) or write (`action: 'create'`/`'update'`) — or `'*'` for every field. It's required on a `read`/`create`/`update`/`'*'` entry and doesn't apply at all to `remove` (which gates a whole row, never individual fields). Each grant is one element of `Role.permissions`:
 
 ```
-{ roleId, resource: 'invoices', action: 'read', field: 'total' }
-{ roleId, resource: 'invoices', action: 'read', field: 'customerNotes' }
-{ roleId, resource: 'invoices', action: 'update', field: '*' }
+{ resource: 'invoices', action: 'read', field: 'total' }
+{ resource: 'invoices', action: 'read', field: 'customerNotes' }
+{ resource: 'invoices', action: 'update', field: '*' }
 ```
 
 This is **secure-by-default, with no implicit "all fields"**: a role with a `(resource, action)` grant but no matching `field` grant gets zero fields for that action, not every field. A read that field permission denies simply omits that key from the response (the same shape `sensitive: true` fields already get); a write that touches a denied field is rejected outright, naming every offending key, rather than silently dropping it. `?filter=`/`?sort=` on a field a role can't read is rejected the same way — otherwise field-read denial would be a trivial oracle to route around.
@@ -86,4 +88,4 @@ Two things are always exempt from field-level permission, for every role:
 
 ### Bootstrapping
 
-Because there's no implicit "all fields," the Root role `POST /api/auth/setup` creates grants `{ resource: '*', action: '*', field: '*' }` in one row — the `'*'` on `field` is what keeps the freshly-created admin able to see/edit anything immediately, the same way `'*'` on `resource`/`action` already did. When granting a narrower role by hand, remember `field` needs its own row (or `'*'`) for `read`/`create`/`update` — a grant that only sets `resource`/`action` and leaves `field` unset is rejected by `requireValidPermissionTarget`, not silently treated as "everything."
+Because there's no implicit "all fields," the Root role `POST /api/auth/setup` creates a `{ resource: '*', action: '*', field: '*' }` entry in `permissions` — the `'*'` on `field` is what keeps the freshly-created admin able to see/edit anything immediately, the same way `'*'` on `resource`/`action` already did. When granting a narrower role by hand, remember `field` needs its own entry (or `'*'`) for `read`/`create`/`update` — a grant that only sets `resource`/`action` and leaves `field` unset is rejected by `requireValidPermissionTarget`, not silently treated as "everything."

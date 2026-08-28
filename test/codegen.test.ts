@@ -62,10 +62,10 @@ describe('generate() against a self-contained model fixture', () => {
 
   it('emits a schema with §4 conventions: timestamptz, partial unique index, CHECK, RESTRICT FK', async () => {
     const { modelCount } = await generate({ modelsDir, generatedDir });
-    // 2 user models + 5 built-in auth models (User/Role/Permission/Session/WorkTitle) + 5 built-in
-    // automation models (Agent/AgentPermission/Chat/Message/Provider) + 2 built-in workspace
+    // 2 user models + 4 built-in auth models (User/Role/Session/WorkTitle) + 4 built-in
+    // automation models (Agent/Chat/Message/Provider) + 2 built-in workspace
     // models (Workspace/WorkspaceView) — built-ins are always present.
-    expect(modelCount).toBe(14);
+    expect(modelCount).toBe(12);
 
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
@@ -103,7 +103,7 @@ describe('generate() against a self-contained model fixture', () => {
     expect(registrySrc).toContain('export { Invoice }');
   });
 
-  it('always includes the built-in User/Role/Permission/Session/WorkTitle models, imported from `@egig/ratchet/auth`', async () => {
+  it('always includes the built-in User/Role/Session/WorkTitle models, imported from `@egig/ratchet/auth`', async () => {
     await generate({ modelsDir, generatedDir });
     const registrySrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
@@ -113,17 +113,16 @@ describe('generate() against a self-contained model fixture', () => {
     );
     // built-ins are wrapped, not plain re-exports, since they're assigned the 'auth' Domain
     // explicitly (builtins.ts) — see the 'auth' Domain assertions below.
-    for (const name of ['User', 'Role', 'Permission', 'Session', 'WorkTitle']) {
+    for (const name of ['User', 'Role', 'Session', 'WorkTitle']) {
       expect(registrySrc).toContain(`import { ${name} as _${name} } from '@egig/ratchet/auth';`);
     }
     expect(schemaSrc).toContain("pgTable('users'");
     expect(schemaSrc).toContain("pgTable('roles'");
-    expect(schemaSrc).toContain("pgTable('permissions'");
     expect(schemaSrc).toContain("pgTable('sessions'");
     expect(schemaSrc).toContain("pgTable('work_titles'");
   });
 
-  it('always includes the built-in Agent/AgentPermission/Chat/Message/Provider models, imported from `@egig/ratchet/automation`', async () => {
+  it('always includes the built-in Agent/Chat/Message/Provider models, imported from `@egig/ratchet/automation`', async () => {
     await generate({ modelsDir, generatedDir });
     const registrySrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
@@ -131,11 +130,10 @@ describe('generate() against a self-contained model fixture', () => {
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
     );
-    for (const name of ['Agent', 'AgentPermission', 'Chat', 'Message', 'Provider']) {
+    for (const name of ['Agent', 'Chat', 'Message', 'Provider']) {
       expect(registrySrc).toContain(`import { ${name} as _${name} } from '@egig/ratchet/automation';`);
     }
     expect(schemaSrc).toContain("pgTable('agents'");
-    expect(schemaSrc).toContain("pgTable('agent_permissions'");
     expect(schemaSrc).toContain("pgTable('chats'");
     expect(schemaSrc).toContain("pgTable('messages'");
     expect(schemaSrc).toContain("pgTable('providers'");
@@ -161,11 +159,11 @@ describe('generate() against a self-contained model fixture', () => {
     const registrySrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
     );
-    for (const name of ['User', 'Role', 'Permission', 'Session', 'WorkTitle']) {
+    for (const name of ['User', 'Role', 'Session', 'WorkTitle']) {
       expect(registrySrc).toContain(`domain: "auth"`);
       expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "auth" } };`);
     }
-    for (const name of ['Agent', 'AgentPermission', 'Chat', 'Message', 'Provider']) {
+    for (const name of ['Agent', 'Chat', 'Message', 'Provider']) {
       expect(registrySrc).toContain(`domain: "automation"`);
       expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "automation" } };`);
     }
@@ -176,6 +174,17 @@ describe('generate() against a self-contained model fixture', () => {
     // a flat, non-domain user model (customer.model.ts, invoice.model.ts) stays a plain re-export.
     expect(registrySrc).toContain('export { Customer } from');
     expect(registrySrc).toContain('export { Invoice } from');
+  });
+
+  it("emits `roles.permissions` as a jsonb column and `agents.role_id` as a nullable FK — grants live on Role, not junction tables", async () => {
+    await generate({ modelsDir, generatedDir });
+    const schemaSrc = await import('node:fs/promises').then((fs) =>
+      fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
+    );
+    expect(schemaSrc).not.toContain("pgTable('permissions'");
+    expect(schemaSrc).not.toContain("pgTable('agent_permissions'");
+    expect(schemaSrc).toMatch(/permissions:\s*jsonb\('permissions'\)/);
+    expect(schemaSrc).toMatch(/roleId:\s*uuid\('role_id'\)/);
   });
 
   it('a model declared under a modelsDir subdirectory is assigned that folder name as its Domain', async () => {

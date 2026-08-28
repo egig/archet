@@ -16,9 +16,9 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
   let app: ReturnType<typeof createApiRouter>;
 
   // `api: { public: true }` — this suite tests routing/filtering/pagination mechanics, not
-  // auth, and has no Role/Permission/User/Session fixtures of its own (see auth.test.ts /
+  // auth, and has no Role/User/Session fixtures of its own (see auth.test.ts /
   // router.test.ts's sibling suites for that); the generic router otherwise requires a matching
-  // `Permission` row by default for every route, including reads (see create-router.ts).
+  // role grant by default for every route, including reads (see create-router.ts).
   const Author = defineModel('authors', {
     fields: {
       name: field.string({ required: true, indexed: true }),

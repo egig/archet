@@ -1,4 +1,4 @@
-export { Agent, AgentPermission, Chat, Message, Provider } from './models/index.js';
+export { Agent, Chat, Message, Provider } from './models/index.js';
 export { AutomationDomain } from './domain.js';
 export { createAutomationRouter } from './router.js';
 export { resolveAgentTools, executeAgentTool } from './tool.js';

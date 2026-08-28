@@ -35,7 +35,7 @@ export async function* runAgentTurn(opts: {
     throw new Error(`agent '${agent.name as string}' references a provider that no longer exists`);
   }
   const provider = resolveProvider(providerRow.kind as string);
-  const agentTools = await resolveAgentTools(opts.db, opts.registry, agent.id as string);
+  const agentTools = await resolveAgentTools(opts.db, opts.registry, agent.roleId as string | null);
   const toolsByName = new Map(agentTools.map((t) => [t.spec.name, t] as const));
   const tools = agentTools.map((t) => t.spec);
 
