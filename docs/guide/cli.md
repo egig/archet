@@ -6,7 +6,7 @@ ratchet <command>
 
 ## `ratchet init`
 
-Scaffolds a new project in the current directory: `package.json`, `tsconfig.json`, `ratchet.config.ts`, `models/example.model.ts`, `drizzle/migrations/`, and a `.gitignore`. Never overwrites a file that already exists — safe to re-run.
+Scaffolds a new project in the current directory: `package.json`, `tsconfig.json`, `ratchet.config.ts`, `models/example.model.ts`, `migrations/`, and a `.gitignore`. Never overwrites a file that already exists — safe to re-run.
 
 ## `ratchet generate`
 
@@ -18,11 +18,13 @@ Reads `models/**/*.model.ts` and emits, into `generatedDir` (`.ratchet/` by defa
 - `console-forms.ts` — the [custom console form](/guide/console#custom-forms) registry, one entry per `models/**/*.form.tsx`
 - `console-field-inputs.ts` — the [custom field input](/guide/console#custom-field-inputs) registry, one entry per `models/**/*.input.tsx`
 
+It then runs `drizzle-kit generate` to diff the fresh schema against `migrationsDir` (`migrations/` by default) and write any new SQL migration files. Review those files, then apply them with `ratchet migrate`.
+
 Run this any time your models change and you're not using `ratchet dev`.
 
 ## `ratchet migrate`
 
-Regenerates the schema, then runs `drizzle-kit generate` + `drizzle-kit migrate` against `migrationsDir` (`drizzle/migrations/` by default). Use this for a durable, versioned migration history — the workflow you want outside of local development.
+Runs `drizzle-kit migrate` against `migrationsDir` (`migrations/` by default), applying and tracking any pending SQL migration files. It does not touch your models or the schema — run `ratchet generate` first to produce the migration files. Use this for a durable, versioned migration history — the workflow you want outside of local development.
 
 ## `ratchet dev`
 

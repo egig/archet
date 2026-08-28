@@ -32,7 +32,7 @@ export function resolveDirs(cwd: string, config: FrameworkConfig) {
   return {
     modelsDir: path.resolve(cwd, config.modelsDir ?? 'models'),
     generatedDir: path.resolve(cwd, config.generatedDir ?? '.ratchet'),
-    migrationsDir: path.resolve(cwd, config.migrationsDir ?? 'drizzle/migrations'),
+    migrationsDir: path.resolve(cwd, config.migrationsDir ?? 'migrations'),
     consolePath: resolveConsolePath(config),
     brand: config.brand ?? {},
   };

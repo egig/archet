@@ -24,14 +24,14 @@ program
 
 program
   .command('generate')
-  .description('Read models/**/*.model.ts and emit the Drizzle schema, Zod validators, and model registry')
+  .description('Regenerate the schema, Zod validators, and model registry, then run drizzle-kit generate to emit SQL migration files')
   .action(async () => {
     await runGenerate(process.cwd());
   });
 
 program
   .command('migrate')
-  .description('Regenerate the schema, then run drizzle-kit generate + migrate against drizzle/migrations')
+  .description('Apply pending SQL migration files with drizzle-kit migrate (run `ratchet generate` first to create them)')
   .action(async () => {
     await runMigrate(process.cwd());
   });

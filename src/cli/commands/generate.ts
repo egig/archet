@@ -1,10 +1,13 @@
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { generate } from '../../codegen/generate.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
+import { writeDrizzleKitConfig } from '../drizzle-kit-config.js';
+import { runDrizzleKit } from '../run-drizzle-kit.js';
 
 export async function runGenerate(cwd: string): Promise<void> {
   const config = await loadConfig(cwd);
-  const { modelsDir, generatedDir } = resolveDirs(cwd, config);
+  const { modelsDir, generatedDir, migrationsDir } = resolveDirs(cwd, config);
 
   const { modelCount, domainCount, formCount, fieldInputCount, files } = await generate({ modelsDir, generatedDir });
 
@@ -14,4 +17,10 @@ export async function runGenerate(cwd: string): Promise<void> {
   for (const file of files) {
     console.log(`  ${path.relative(cwd, file)}`);
   }
+
+  // §7: emit reviewable SQL migration files from the fresh schema diff — `ratchet migrate`
+  // only applies what lands here.
+  await mkdir(migrationsDir, { recursive: true });
+  const drizzleConfigFile = await writeDrizzleKitConfig(cwd, generatedDir, migrationsDir);
+  await runDrizzleKit(['generate', '--config', drizzleConfigFile], cwd);
 }

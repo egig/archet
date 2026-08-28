@@ -75,7 +75,7 @@ export default defineConfig({
   db: { connectionString: process.env.DATABASE_URL! },
   modelsDir: 'models',
   generatedDir: '.ratchet',
-  migrationsDir: 'drizzle/migrations',
+  migrationsDir: 'migrations',
 });
 `;
 
@@ -158,6 +158,6 @@ export async function runInit(cwd: string): Promise<void> {
   console.log('next steps:');
   console.log('  1. bun install');
   console.log('  2. set DATABASE_URL');
-  console.log('  3. bun run generate   (writes .ratchet/*)');
+  console.log('  3. bun run generate   (writes .ratchet/* + SQL migration files)');
   console.log('  4. bun run migrate && bun run serve   (or `bun run dev` for local push-based iteration)');
 }

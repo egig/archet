@@ -28,7 +28,7 @@ bun add @egig/ratchet
 bunx @egig/ratchet init
 ```
 
-This writes `package.json`, `tsconfig.json`, `ratchet.config.ts`, `models/example.model.ts`, `drizzle/migrations/`, and a `.gitignore` into the current directory. It never overwrites a file that's already there, so it's safe to re-run in a partially set-up directory.
+This writes `package.json`, `tsconfig.json`, `ratchet.config.ts`, `models/example.model.ts`, `migrations`, and a `.gitignore` into the current directory. It never overwrites a file that's already there, so it's safe to re-run in a partially set-up directory.
 
 ## Define a model
 
@@ -45,8 +45,8 @@ export const Example = defineModel('examples', {
 ## Generate, migrate, serve
 
 ```sh
-bun run generate   # models/**/*.model.ts -> .ratchet/{schema,validators,registry}.ts
-bun run migrate    # regenerate, then drizzle-kit generate + migrate
+bun run generate   # regenerate .ratchet/*, then drizzle-kit generate -> SQL migration files
+bun run migrate    # drizzle-kit migrate — apply the pending SQL migration files
 bun run serve       # boot the API + console
 ```
 

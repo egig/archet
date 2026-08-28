@@ -18,12 +18,16 @@ hero:
       link: https://github.com/egig/ratchet
 
 features:
-  - title: Models -> Schema
-    details: Define a model once with defineModel() and field(); Ratchet generates the Drizzle schema, Zod validators, and a model registry for you.
-  - title: One generic REST API
-    details: Every model gets GET/POST/PATCH/DELETE at /api/:model for free — filtering, sorting, cursor and offset pagination, and ?include= relations included.
-  - title: Composable pipelines
-    details: create/update/remove are just pipe(...) chains of small functions around validate and persist — insert your own business logic anywhere in the chain.
-  - title: Auth and console, batteries included
-    details: Session-based auth (register/login/logout/me), role/permission checks, and a generated console SPA ship with the framework.
+  - title: Model once, ship the backend
+    details: Define a model and Ratchet generates Postgres schema, validation, REST API, and admin console. Features in hours, not weeks.
+  - title: Console your team can use
+    details: Searchable, sortable tables with inline editing — no admin screens to build.
+  - title: Secure by default
+    details: Auth, roles, and permissions apply to every route automatically, down to individual fields.
+  - title: Fits real workflows
+    details: Custom actions like lock or approve, plus custom forms and inputs — no framework forks or hand-wired routes.
+  - title: Real data shapes, handled
+    details: Hierarchies, multi-column sorting, and case-insensitive search work out of the box.
+  - title: Ship anywhere
+    details: Develop on Bun, deploy to any Node host or container. No lock-in.
 ---

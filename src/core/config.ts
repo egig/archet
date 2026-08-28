@@ -19,7 +19,7 @@ export interface FrameworkConfig {
   modelsDir?: string;
   /** default: '.ratchet' — gitignored, rebuilt by `generate` every time */
   generatedDir?: string;
-  /** default: 'drizzle/migrations' — git-tracked; separate from generatedDir (Q8) */
+  /** default: 'migrations' — git-tracked; separate from generatedDir (Q8) */
   migrationsDir?: string;
   /** default: '/console' — where the console SPA (and its `/meta/models` metadata API) is
    * mounted. Must start with '/', have no trailing slash (except the bare '/' root value), and
