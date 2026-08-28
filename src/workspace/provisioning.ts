@@ -4,7 +4,8 @@ import { WorkTitle } from './models/work-title.model.js';
 import { Workspace } from './models/workspace.model.js';
 import { WorkspaceView } from './models/workspace-view.model.js';
 
-/** Name given to the `Workspace` every new `User` with no `workTitleId` is provisioned with — see
+/** Name given to the `Workspace` every new `User` with no `workTitleId` (the inverse FK of
+ * `WorkTitle`'s `users` referenceToMany) is provisioned with — see
  * `createDefaultWorkspace` below. Kept in its own module (not `pipeline.ts`) because
  * `workspace-view.model.ts` already imports `pipeline.ts` for `requireWorkspaceOwnership` —
  * importing `WorkspaceView` back into `pipeline.ts` would make that a real import cycle. */
@@ -50,11 +51,11 @@ async function cloneWorkspaceViews(
  * `persist`, the pipeline's write boundary — core/pipeline.ts), so a failure here can't roll back
  * the user creation itself, and non-transactionally, so it can't be folded into the same insert.
  *
- * When the new user has a `workTitleId` (`WorkTitle`, `workspace/models/work-title.model.ts` — every
- * `WorkTitle` mandates a `workspaceTemplateId`), the provisioned `Workspace` is a clone of that
- * template's tabs rather than a blank one, so the user lands on a view suited to their role.
- * `workTitleId` is optional on `User` (e.g. a self-registered account has none yet), so the blank
- * fallback stays the common case for `/register`.
+  * When the new user has a `workTitleId` (the inverse FK of `WorkTitle`'s `users` referenceToMany —
+ * `workspace/models/work-title.model.ts`, every `WorkTitle` mandates a `workspaceTemplateId`), the
+ * provisioned `Workspace` is a clone of that template's tabs rather than a blank one, so the user
+ * lands on a view suited to their role. `workTitleId` is optional (e.g. a self-registered account
+ * has none yet), so the blank fallback stays the common case for `/register`.
  */
 export const createDefaultWorkspace: PipelineFn = async (ctx) => {
   const userId = ctx.doc?.id;
