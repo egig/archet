@@ -16,3 +16,4 @@ docs/.vitepress/dist/
 !/example/deploy/
 local*
 .claude/plans
+docs-internal

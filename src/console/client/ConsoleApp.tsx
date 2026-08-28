@@ -10,6 +10,7 @@ import { ModelListPage } from './ModelListPage.js';
 import { SettingsPage } from './SettingsPage.js';
 import { ProfilePage } from './ProfilePage.js';
 import { WorkspacePage } from './WorkspacePage.js';
+import { ChatsPage } from './ChatsPage.js';
 import { CustomFormsProvider, type ModelFormComponent } from './custom-forms.js';
 import { FieldInputOverridesProvider, type FieldInputOverrides } from './field-input-overrides.js';
 
@@ -56,6 +57,10 @@ export function ConsoleApp({ customForms, fieldInputs }: ConsoleAppProps) {
                     <Route index element={<IndexRedirect />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="settings/:domain" element={<SettingsPage />} />
+                    {/* built-in Automation Domain menu link (AutomationDomain.consoleMenu) —
+                        must precede the `:model/*` catch-all. */}
+                    <Route path="automation/chats" element={<ChatsPage />} />
+                    <Route path="automation/chats/:threadId" element={<ChatsPage />} />
                     <Route path=":model/*" element={<ModelListPage />} />
                   </Route>
                 </Route>

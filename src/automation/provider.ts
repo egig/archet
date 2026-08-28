@@ -32,7 +32,7 @@ export interface ChatMessage {
   toolResults?: ChatToolResult[];
 }
 
-export type ChatStopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal';
+export type ChatStopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal' | 'aborted';
 
 export interface ChatUsage {
   inputTokens: number;
@@ -43,6 +43,9 @@ export type ChatEvent =
   | { type: 'text-delta'; text: string }
   | { type: 'thinking-delta'; text: string }
   | { type: 'tool-call'; call: ChatToolCall }
+  // emitted by `runAgentTurn` (not by a provider adapter) once it has executed a tool call it
+  // previously surfaced — carries the same `toolCallId` so the console can pair them.
+  | { type: 'tool-result'; result: ChatToolResult }
   | { type: 'done'; stopReason: ChatStopReason; usage: ChatUsage };
 
 export interface ChatRequest {

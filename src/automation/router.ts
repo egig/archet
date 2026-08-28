@@ -1,9 +1,10 @@
-import { Hono, type Context } from 'hono';
-import { streamSSE } from 'hono/streaming';
+import { Hono } from 'hono';
+import { createAssistantStreamResponse } from 'assistant-stream';
+import type { ReadonlyJSONObject } from 'assistant-stream/utils';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { ModelDefinition } from '../core/model.js';
 import { PipelineError } from '../core/pipeline.js';
-import { fetchRow, insertRow, updateRow } from '../core/persistence.js';
+import { fetchRow, insertRow, updateRow, hardRemoveRow } from '../core/persistence.js';
 import { listRows } from '../router/list.js';
 import { toErrorResponse } from '../router/errors.js';
 import { readJsonBody } from '../router/create-router.js';
@@ -13,6 +14,12 @@ import { Agent, Chat, Message } from './models/index.js';
 import { assertOwnsChat } from './pipeline.js';
 import { runAgentTurn } from './run-turn.js';
 import type { ChatMessage } from './provider.js';
+import {
+  AssistantPartsBuilder,
+  storedToProviderMessages,
+  type StoredMessage,
+  type StoredPart,
+} from './message-parts.js';
 import { Workspace, WorkspaceView } from '../workspace/models/index.js';
 import { assertOwnsWorkspace } from '../workspace/pipeline.js';
 
@@ -35,17 +42,11 @@ async function requireOwnedChat(db: AnyDb, chatId: string, user: UserRow): Promi
   return chat;
 }
 
-function requireMessageText(input: Record<string, unknown>): string {
-  const message = input.message;
-  if (typeof message !== 'string' || message.trim().length === 0) {
-    throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { message: 'required' } });
-  }
-  return message;
-}
-
-async function loadHistory(db: AnyDb, chatId: string): Promise<ChatMessage[]> {
+/** Rows persisted for a chat, oldest first, as `StoredMessage`s. Only `user`/`assistant` rows
+ * are ever written (see `message-parts.ts`), but the cast is tolerant of a stray `tool` row. */
+async function loadStoredMessages(db: AnyDb, chatId: string): Promise<StoredMessage[]> {
   const page = await listRows(db, Message, {}, {
-    limit: 200,
+    limit: 500,
     offset: 0,
     sort: [{ field: 'createdAt', direction: 'asc' }],
     cursorMode: false,
@@ -53,28 +54,23 @@ async function loadHistory(db: AnyDb, chatId: string): Promise<ChatMessage[]> {
     include: [],
     filters: [{ field: 'chatId', op: '=', value: chatId }],
   });
-  // MVP only ever persists 'user'/'assistant'/'context' rows (see Message model comment) — a
-  // 'tool' row never lands here. Providers have no mid-thread system role, so a 'context' row
-  // (a workspace snapshot, see insertWorkspaceContext below) is sent as 'user' — it's only ever
-  // rendered distinctly on the way *out* (ChatThreadView), not specially understood by the model.
   return page.rows.map((row) => ({
-    role: row.role === 'assistant' ? 'assistant' : 'user',
-    content: row.content as string,
+    role: row.role as StoredMessage['role'],
+    content: Array.isArray(row.content) ? (row.content as StoredPart[]) : [],
   }));
 }
 
-/** Fetches the requesting user's own `workspaceId` (owned check via `assertOwnsWorkspace`, same
- * as `requireOwnedChat` above) and its `WorkspaceView` tabs, and persists a `role: 'context'`
- * `Message` describing them — called right before the user's own turn is inserted, so it's the
- * most recent thing the agent sees. Persisted (not just folded into the system prompt) so the
- * console can show what the workspace looked like at each point in the transcript. */
-async function insertWorkspaceContext(
+/**
+ * A workspace + its view tabs, as a `ChatMessage` prepended to the model's context for one turn
+ * only — never persisted (Q5). The console passes `workspaceId` in the request body; this checks
+ * the requester owns it (same `assertOwnsWorkspace` the generic router uses) before reading it.
+ */
+async function workspaceContextMessage(
   db: AnyDb,
   registry: Record<string, ModelDefinition>,
-  chatId: string,
   workspaceId: string,
   user: UserRow,
-): Promise<void> {
+): Promise<ChatMessage> {
   const workspace = await fetchRow(db, Workspace, workspaceId);
   assertOwnsWorkspace(workspace, user);
 
@@ -102,65 +98,42 @@ async function insertWorkspaceContext(
     })),
   };
 
-  await insertRow(db, Message, { chatId, role: 'context', content: JSON.stringify(snapshot) }, user.id);
+  return {
+    role: 'user',
+    content:
+      'Current workspace context (the tabs the user is looking at right now). ' +
+      'Use your workspace-view tools to open, edit, or close tabs.\n' +
+      JSON.stringify(snapshot),
+  };
 }
 
-/** Streams one agent turn over SSE: persists the user's message, runs `runAgentTurn` against
- * the full history, forwards every delta/tool-call as it happens, then persists the assistant's
- * final message and bumps `chat.updatedAt` so the console sidebar sorts by recent activity. */
-function streamTurn(
-  c: Context,
-  db: AnyDb,
-  registry: Record<string, ModelDefinition>,
-  chat: Record<string, unknown>,
-  agent: Record<string, unknown>,
-  user: UserRow,
-  userMessage: string,
-  workspaceId: string | undefined,
-) {
-  return streamSSE(c, async (stream) => {
-    if (workspaceId) {
-      await insertWorkspaceContext(db, registry, chat.id as string, workspaceId, user);
+/** The most recent user turn's text out of the `messages` array assistant-ui's data-stream
+ * runtime POSTs. History itself is rebuilt from the DB — this is the only thing the endpoint
+ * trusts from the request body (Q17). */
+function latestUserText(body: Record<string, unknown>): string {
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as { role?: string; content?: unknown };
+    if (m?.role !== 'user') continue;
+    if (typeof m.content === 'string') return m.content;
+    if (Array.isArray(m.content)) {
+      return m.content
+        .filter((p): p is { type: string; text: string } => !!p && (p as { type?: string }).type === 'text')
+        .map((p) => p.text)
+        .join('');
     }
-    await insertRow(db, Message, { chatId: chat.id, role: 'user', content: userMessage }, user.id);
-    const history = await loadHistory(db, chat.id as string);
+  }
+  return '';
+}
 
-    let assistantText = '';
-    let finalStopReason = 'end_turn';
-    let finalUsage = { inputTokens: 0, outputTokens: 0 };
-
-    try {
-      for await (const event of runAgentTurn({ agent, history, db, request: c.req.raw, registry })) {
-        if (event.type === 'text-delta') {
-          assistantText += event.text;
-          await stream.writeSSE({ event: 'delta', data: JSON.stringify({ kind: 'text', text: event.text }) });
-        } else if (event.type === 'thinking-delta') {
-          await stream.writeSSE({ event: 'delta', data: JSON.stringify({ kind: 'thinking', text: event.text }) });
-        } else if (event.type === 'tool-call') {
-          await stream.writeSSE({ event: 'tool', data: JSON.stringify(event.call) });
-        } else {
-          finalStopReason = event.stopReason;
-          finalUsage = event.usage;
-        }
-      }
-    } catch (err) {
-      await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: err instanceof Error ? err.message : 'agent turn failed' }) });
-      return;
-    }
-
-    const assistantMessage = await insertRow(db, Message, {
-      chatId: chat.id,
-      role: 'assistant',
-      content: assistantText,
-      metadata: { stopReason: finalStopReason, usage: finalUsage, model: agent.model, provider: agent.provider },
-    });
-    await updateRow(db, Chat, chat.id as string, {});
-
-    await stream.writeSSE({
-      event: 'done',
-      data: JSON.stringify({ chatId: chat.id, messageId: assistantMessage.id, stopReason: finalStopReason, usage: finalUsage }),
-    });
-  });
+function toHistoryRow(row: Record<string, unknown>) {
+  return {
+    id: row.id as string,
+    role: row.role as string,
+    content: row.content as StoredPart[],
+    metadata: (row.metadata as Record<string, unknown> | null) ?? null,
+    createdAt: row.createdAt as string,
+  };
 }
 
 export function createAutomationRouter(db: AnyDb, registry: Record<string, ModelDefinition>): Hono {
@@ -171,13 +144,13 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
     return c.json(body, status as never);
   });
 
-  // mounted at `/api/automation` (src/cli/commands/serve.ts) — routes here are relative to
-  // that, so '/chats' is `/api/automation/chats` and '/chats/:id/messages' is
-  // `/api/automation/chats/:id/messages`.
+  // ── Thread list (assistant-ui RemoteThreadListAdapter) ──────────────────────────────────────
+  // mounted at `/api/automation` (src/cli/commands/serve.ts).
+
   app.get('/chats', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
     const page = await listRows(db, Chat, {}, {
-      limit: 100,
+      limit: 200,
       offset: 0,
       sort: [{ field: 'updatedAt', direction: 'desc' }],
       cursorMode: false,
@@ -185,14 +158,45 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
       include: [],
       filters: [{ field: 'userId', op: '=', value: user.id }],
     });
-    return c.json({ data: page.rows });
+    return c.json({
+      data: page.rows.map((row) => ({
+        id: row.id,
+        agentId: row.agentId,
+        title: row.title,
+        status: row.status,
+        updatedAt: row.updatedAt,
+      })),
+    });
   });
 
-  app.get('/chats/:id/messages', async (c) => {
+  // `initialize(threadId)` — creates the Chat record. `agentId` is chosen in the console's
+  // "new chat" affordance before this fires (Q4).
+  app.post('/chats', async (c) => {
+    const user = await resolveSessionUser(db, c.req.raw);
+    const input = await readJsonBody(c);
+    const agent = await loadActiveAgent(db, input.agentId);
+    const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 255) : null;
+    const chat = await insertRow(db, Chat, { userId: user.id, agentId: agent.id, title, status: 'active' }, user.id);
+    return c.json({ data: { id: chat.id } });
+  });
+
+  // `rename` / `archive` / `unarchive`.
+  app.patch('/chats/:id', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
     await requireOwnedChat(db, c.req.param('id'), user);
-    const history = await listRows(db, Message, {}, {
-      limit: 200,
+    const input = await readJsonBody(c);
+    const patch: Record<string, unknown> = {};
+    if (typeof input.title === 'string') patch.title = input.title.trim().slice(0, 255);
+    if (input.status === 'active' || input.status === 'archived') patch.status = input.status;
+    const updated = await updateRow(db, Chat, c.req.param('id'), patch);
+    return c.json({ data: updated });
+  });
+
+  app.delete('/chats/:id', async (c) => {
+    const user = await resolveSessionUser(db, c.req.raw);
+    await requireOwnedChat(db, c.req.param('id'), user);
+    const messages = await listRows(db, Message, {}, {
+      limit: 1000,
       offset: 0,
       sort: [{ field: 'createdAt', direction: 'asc' }],
       cursorMode: false,
@@ -200,33 +204,123 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
       include: [],
       filters: [{ field: 'chatId', op: '=', value: c.req.param('id') }],
     });
-    return c.json({ data: history.rows });
+    for (const m of messages.rows) await hardRemoveRow(db, Message, m.id as string);
+    await hardRemoveRow(db, Chat, c.req.param('id'));
+    return c.json({ data: { id: c.req.param('id') } });
   });
 
-  // creates the chat, persists the first message, and streams the reply — one call covers the
-  // "type a message with no chat open yet" flow the console's empty state needs.
-  app.post('/chats', async (c) => {
+  // history `load()` — flat, oldest-first. The console maps these rows to a linear
+  // `ExportedMessageRepository` (no branching, Q14).
+  app.get('/chats/:id/messages', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
-    const input = await readJsonBody(c);
-    const agent = await loadActiveAgent(db, input.agentId);
-    const message = requireMessageText(input);
-
-    const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim() : message.slice(0, 60);
-    const chat = await insertRow(db, Chat, { userId: user.id, agentId: agent.id, title, status: 'active' }, user.id);
-    const workspaceId = typeof input.workspaceId === 'string' ? input.workspaceId : undefined;
-
-    return streamTurn(c, db, registry, chat, agent, user, message, workspaceId);
+    await requireOwnedChat(db, c.req.param('id'), user);
+    const history = await listRows(db, Message, {}, {
+      limit: 1000,
+      offset: 0,
+      sort: [{ field: 'createdAt', direction: 'asc' }],
+      cursorMode: false,
+      includeDeleted: false,
+      include: [],
+      filters: [{ field: 'chatId', op: '=', value: c.req.param('id') }],
+    });
+    return c.json({ data: history.rows.map(toHistoryRow) });
   });
 
-  app.post('/chats/:id/messages', async (c) => {
+  // ── One streamed turn (assistant-ui data-stream protocol) ───────────────────────────────────
+  //
+  // `useDataStreamRuntime` POSTs to this one fixed URL with `{ threadId, messages, system,
+  // tools, workspaceId? }`. Security boundary (Q17): `system` and `tools` from the body are
+  // ignored outright (the agent's system prompt and `AgentPermission`-derived tools are
+  // authoritative); `messages` is read only for the latest user turn's text — the rest of the
+  // history is rebuilt from the DB.
+  app.post('/chat', async (c) => {
     const user = await resolveSessionUser(db, c.req.raw);
-    const chat = await requireOwnedChat(db, c.req.param('id'), user);
     const input = await readJsonBody(c);
-    const message = requireMessageText(input);
+    const chatId = typeof input.threadId === 'string' ? input.threadId : '';
+    if (!chatId) throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { threadId: 'required' } });
+
+    const chat = await requireOwnedChat(db, chatId, user);
     const agent = await loadActiveAgent(db, chat.agentId);
-    const workspaceId = typeof input.workspaceId === 'string' ? input.workspaceId : undefined;
 
-    return streamTurn(c, db, registry, chat, agent, user, message, workspaceId);
+    const userText = latestUserText(input);
+    if (!userText.trim()) {
+      throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { message: 'required' } });
+    }
+
+    const workspaceId = typeof input.workspaceId === 'string' ? input.workspaceId : undefined;
+    const contextMessage = workspaceId
+      ? await workspaceContextMessage(db, registry, workspaceId, user)
+      : undefined;
+
+    // persist the user turn now, before streaming (server-authoritative, Q13).
+    await insertRow(
+      db,
+      Message,
+      { chatId, role: 'user', content: [{ type: 'text', text: userText }] satisfies StoredPart[] },
+      user.id,
+    );
+
+    // first message doubles as the chat title until renamed (Q15) — `initialize` created the
+    // chat with none since it only knew a local id.
+    if (!chat.title) {
+      await updateRow(db, Chat, chatId, { title: userText.trim().slice(0, 80) });
+    }
+
+    const stored = await loadStoredMessages(db, chatId);
+    const history: ChatMessage[] = [
+      ...(contextMessage ? [contextMessage] : []),
+      ...storedToProviderMessages(stored),
+    ];
+
+    const abortSignal = c.req.raw.signal;
+
+    return createAssistantStreamResponse(async (controller) => {
+      const parts = new AssistantPartsBuilder();
+      let stopReason = 'end_turn';
+      let usage = { inputTokens: 0, outputTokens: 0 };
+
+      try {
+        for await (const event of runAgentTurn({ agent, history, db, request: c.req.raw, registry, abortSignal })) {
+          if (event.type === 'text-delta') {
+            parts.appendText(event.text);
+            controller.appendText(event.text);
+          } else if (event.type === 'thinking-delta') {
+            parts.appendReasoning(event.text);
+            controller.appendReasoning(event.text);
+          } else if (event.type === 'tool-call') {
+            parts.addToolCall(event.call);
+            controller.addToolCallPart({
+              toolCallId: event.call.id,
+              toolName: event.call.name,
+              args: (event.call.input ?? {}) as ReadonlyJSONObject,
+            });
+          } else if (event.type === 'tool-result') {
+            parts.setToolResult(event.result.toolCallId, event.result.content, event.result.isError);
+          } else {
+            stopReason = event.stopReason;
+            usage = event.usage;
+          }
+        }
+      } catch (err) {
+        controller.appendText(`\n\n_Agent turn failed: ${err instanceof Error ? err.message : 'unknown error'}_`);
+        stopReason = 'error';
+      }
+
+      if (!parts.isEmpty()) {
+        await insertRow(
+          db,
+          Message,
+          {
+            chatId,
+            role: 'assistant',
+            content: parts.build(),
+            metadata: { stopReason, usage, model: agent.model },
+          },
+          user.id,
+        );
+      }
+      await updateRow(db, Chat, chatId, {});
+    });
   });
 
   return app;

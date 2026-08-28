@@ -23,23 +23,32 @@ export async function* runAgentTurn(opts: {
   db: AnyDb;
   request: Request | undefined;
   registry: Record<string, ModelDefinition>;
+  /** the chat request's own signal — checked between tool iterations and provider chunks so a
+   * client hitting stop ends the turn cleanly (the router still persists whatever streamed, with
+   * `stopReason: 'aborted'`). A tool call already dispatched is not rolled back. */
+  abortSignal?: AbortSignal;
 }): AsyncGenerator<ChatEvent> {
-  const { agent } = opts;
-  const provider = resolveProvider(agent.provider as string);
+  const { agent, abortSignal } = opts;
+
+  const providerRow = await fetchRow(opts.db, Provider, agent.providerId as string);
+  if (!providerRow) {
+    throw new Error(`agent '${agent.name as string}' references a provider that no longer exists`);
+  }
+  const provider = resolveProvider(providerRow.kind as string);
   const agentTools = await resolveAgentTools(opts.db, opts.registry, agent.id as string);
   const toolsByName = new Map(agentTools.map((t) => [t.spec.name, t] as const));
   const tools = agentTools.map((t) => t.spec);
 
-  const providerRow = await fetchRow(opts.db, Provider, agent.providerId as string);
-  if (!providerRow) {
-    throw new Error(`agent '${agent.name}' references a provider that no longer exists`);
-  }
   const apiKey = providerRow.apiKey as string;
   const baseUrl = (providerRow.url as string | null) ?? undefined;
 
   let messages = opts.history;
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    if (abortSignal?.aborted) {
+      yield { type: 'done', stopReason: 'aborted', usage: { inputTokens: 0, outputTokens: 0 } };
+      return;
+    }
     const calls: ChatToolCall[] = [];
     let assistantText = '';
     let stopReason: ChatStopReason = 'end_turn';
@@ -54,6 +63,10 @@ export async function* runAgentTurn(opts: {
       apiKey,
       baseUrl,
     })) {
+      if (abortSignal?.aborted) {
+        yield { type: 'done', stopReason: 'aborted', usage };
+        return;
+      }
       if (event.type === 'text-delta') {
         assistantText += event.text;
         yield event;
@@ -62,7 +75,7 @@ export async function* runAgentTurn(opts: {
       } else if (event.type === 'tool-call') {
         calls.push(event.call);
         yield event;
-      } else {
+      } else if (event.type === 'done') {
         stopReason = event.stopReason;
         usage = event.usage;
       }
@@ -75,25 +88,26 @@ export async function* runAgentTurn(opts: {
 
     const results: ChatToolResult[] = [];
     for (const call of calls) {
+      let result: ChatToolResult;
       const tool: ModelOperationTool | undefined = toolsByName.get(call.name);
       if (!tool) {
-        results.push({ toolCallId: call.id, content: `unknown tool '${call.name}'`, isError: true });
-        continue;
+        result = { toolCallId: call.id, content: `unknown tool '${call.name}'`, isError: true };
+      } else if (typeof call.input !== 'object' || call.input === null) {
+        result = { toolCallId: call.id, content: `'${call.name}' input must be an object`, isError: true };
+      } else {
+        try {
+          const output = await executeModelOperationTool(tool, call.input as Record<string, unknown>, {
+            db: opts.db,
+            request: opts.request,
+            registry: opts.registry,
+          });
+          result = { toolCallId: call.id, content: typeof output === 'string' ? output : JSON.stringify(output) };
+        } catch (err) {
+          result = { toolCallId: call.id, content: err instanceof Error ? err.message : String(err), isError: true };
+        }
       }
-      if (typeof call.input !== 'object' || call.input === null) {
-        results.push({ toolCallId: call.id, content: `'${call.name}' input must be an object`, isError: true });
-        continue;
-      }
-      try {
-        const output = await executeModelOperationTool(tool, call.input as Record<string, unknown>, {
-          db: opts.db,
-          request: opts.request,
-          registry: opts.registry,
-        });
-        results.push({ toolCallId: call.id, content: typeof output === 'string' ? output : JSON.stringify(output) });
-      } catch (err) {
-        results.push({ toolCallId: call.id, content: err instanceof Error ? err.message : String(err), isError: true });
-      }
+      results.push(result);
+      yield { type: 'tool-result', result };
     }
 
     messages = [

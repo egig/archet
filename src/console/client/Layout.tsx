@@ -48,27 +48,35 @@ function NavSection({ title, children }: { title?: string; children: ReactNode }
   );
 }
 
-/** Renders one `NavSection` per Domain-grouped set of models, plus that Domain's own declared
- * `consoleMenu` (`defineDomain()`) above its models — for a Domain with only hidden models and no
- * `consoleMenu` (e.g. the built-in Automation Domain, `automation/domain.ts`), that leaves nothing
- * to group, so it never reaches `models`/`groupByDomain` and simply doesn't appear here. */
+/** Renders one `NavSection` per Domain, in first-appearance order — each Domain's declared
+ * `consoleMenu` links (`defineDomain()`) above its visible models. A Domain with a `consoleMenu`
+ * but no visible models (e.g. the built-in Automation Domain's "Chats" link — its `chats`/
+ * `messages` models are `console: hidden`) still gets a section from its menu alone. */
 function DomainsMenu({
   groups,
+  domains,
   getDomain,
 }: {
   groups: { domain: string; models: ConsoleModelMeta[] }[];
+  domains: ConsoleDomainMeta[];
   getDomain: (name: string) => ConsoleDomainMeta | undefined;
 }) {
+  const modelsByDomain = new Map(groups.map((g) => [g.domain, g.models]));
+  const order: string[] = groups.map((g) => g.domain);
+  for (const d of domains) {
+    if (d.consoleMenu.length > 0 && !modelsByDomain.has(d.name)) order.push(d.name);
+  }
+
   return (
     <>
-      {groups.map(({ domain, models: domainModels }) => (
+      {order.map((domain) => (
         <NavSection key={domain} title={getDomain(domain)?.label ?? humanizeDomain(domain)}>
           {getDomain(domain)?.consoleMenu.map((item) => (
             <NavLink key={item.to} to={item.to} className={navLinkClassName}>
               {item.label}
             </NavLink>
           ))}
-          {domainModels.map((model) => (
+          {(modelsByDomain.get(domain) ?? []).map((model) => (
             <NavLink key={model.name} to={`/${model.name}`} className={navLinkClassName}>
               {model.label}
             </NavLink>
@@ -189,7 +197,7 @@ export function Layout() {
           {loading && <p className="px-4 py-2 text-xs text-gray-400">Loading models…</p>}
           {error && <p className="px-4 py-2 text-xs text-red-600">{error}</p>}
 
-          <DomainsMenu groups={grouped} getDomain={getDomain} />
+          <DomainsMenu groups={grouped} domains={domains} getDomain={getDomain} />
 
           {!loading && !hasModelSections && !error && (
             <p className="px-4 py-2 text-xs text-gray-400">No models registered.</p>
