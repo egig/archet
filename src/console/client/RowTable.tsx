@@ -315,7 +315,10 @@ export function RowTable({
   // the `?sort=` overlay. A locked View passes neither → no panel, and `sortInteractive` is false.
   const sortPanel = sortControlled ? (sortToolbar ?? null) : <SortBar model={model} value={effectiveSort} onChange={applySort} />;
 
-  const columns = useMemo(() => model.fields.filter((f) => !f.sensitive), [model]);
+  const columns = useMemo(
+    () => model.fields.filter((f) => !f.sensitive && !f.hideInTable),
+    [model],
+  );
   const includes = useMemo(
     () =>
       query.include ??

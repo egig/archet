@@ -64,6 +64,7 @@ export function inverseReferenceFieldDef(relation: ReferenceToManyRelation): Ref
     unique: false,
     indexed: true,
     sensitive: false,
+    hideInTable: false,
   };
 }
 

@@ -12,6 +12,8 @@ export interface ConsoleFieldMeta {
   unique: boolean;
   indexed: boolean;
   sensitive: boolean;
+  /** when true, the field is omitted from the console list/table columns but still shown in forms. */
+  hideInTable: boolean;
   default?: unknown;
   /** present only on a sensitive field that's writable under a different key — e.g.
    * `passwordHash` (sensitive, never read back) reports `writeAs: 'password'`. */
@@ -110,6 +112,7 @@ export function serializeField(key: string, f: ModelDefinition['fields'][string]
     unique: f.unique,
     indexed: f.indexed,
     sensitive: f.sensitive,
+    hideInTable: f.hideInTable,
   };
   if (f.default !== undefined) meta.default = f.default;
   if (f.writeAs) meta.writeAs = f.writeAs;

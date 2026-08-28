@@ -7,6 +7,8 @@ export interface FieldCommonOptions<T = unknown> {
   indexed?: boolean;
   /** stored, but stripped from every HTTP response — e.g. a password hash. */
   sensitive?: boolean;
+  /** hide this field from the console list/table view while keeping it editable in the form. */
+  hideInTable?: boolean;
   /** this field is written under a different, undeclared input key — e.g. `passwordHash`
    * declares `writeAs: 'password'` because a pipeline fn (`hashPassword`) synthesizes the real
    * column from a plaintext `password` key that never appears in `fields`. Read by console
@@ -27,6 +29,7 @@ interface BaseFieldDefinition {
   unique: boolean;
   indexed: boolean;
   sensitive: boolean;
+  hideInTable: boolean;
   writeAs?: string;
   displayText?: string;
   description?: string;
@@ -218,6 +221,7 @@ function base(opts: FieldCommonOptions): BaseFieldDefinition {
     unique: opts.unique ?? false,
     indexed: opts.indexed ?? false,
     sensitive: opts.sensitive ?? false,
+    hideInTable: opts.hideInTable ?? false,
     writeAs: opts.writeAs,
     displayText: opts.displayText,
     description: opts.description,
@@ -230,7 +234,7 @@ export const field = {
   },
 
   text(opts: FieldCommonOptions<string> = {}): TextFieldDefinition {
-    return { ...base(opts), kind: 'text' };
+    return { ...base(opts), kind: 'text', hideInTable: opts.hideInTable ?? true };
   },
 
   integer(opts: FieldCommonOptions<number> = {}): IntegerFieldDefinition {
@@ -260,11 +264,11 @@ export const field = {
   },
 
   json(opts: { schema?: ZodTypeAny } & FieldCommonOptions = {}): JsonFieldDefinition {
-    return { ...base(opts), kind: 'json', schema: opts.schema };
+    return { ...base(opts), kind: 'json', schema: opts.schema, hideInTable: opts.hideInTable ?? true };
   },
 
   reference(targetModel: string, opts: FieldCommonOptions<string> = {}): ReferenceFieldDefinition {
-    return { ...base(opts), kind: 'reference', targetModel };
+    return { ...base(opts), kind: 'reference', targetModel, hideInTable: opts.hideInTable ?? true };
   },
 
   modelRef(opts: { allowWildcard?: boolean } & FieldCommonOptions<string> = {}): ModelRefFieldDefinition {
@@ -288,26 +292,27 @@ export const field = {
       accept: opts.accept ?? (opts.preview === 'image' ? 'image/*' : undefined),
       preview: opts.preview,
       maxSize: opts.maxSize,
+      hideInTable: opts.hideInTable ?? true
     };
   },
 
-  manyToMany(targetModel: string, opts: { displayText?: string; description?: string } = {}): ManyToManyFieldDefinition {
-    return { ...base(opts), kind: 'manyToMany', targetModel };
+  manyToMany(targetModel: string, opts: { displayText?: string; description?: string; hideInTable?: boolean } = {}): ManyToManyFieldDefinition {
+    return { ...base(opts), kind: 'manyToMany', targetModel, hideInTable: opts.hideInTable ?? true };
   },
 
   referenceToMany(
     targetModel: string,
-    opts: { displayText?: string; description?: string; inverseColumn?: string } = {},
+    opts: { displayText?: string; description?: string; inverseColumn?: string; hideInTable?: boolean } = {},
   ): ReferenceToManyFieldDefinition {
-    return { ...base(opts), kind: 'referenceToMany', targetModel, inverseColumn: opts.inverseColumn };
+    return { ...base(opts), kind: 'referenceToMany', targetModel, inverseColumn: opts.inverseColumn, hideInTable: opts.hideInTable ?? true };
   },
 
   /** Never `required` (a root node has no parent — there's nothing to require) and never `unique`
    * (many children legitimately share one parent), so `opts` is narrowed to just `indexed`/
    * `displayText`, the same way `manyToMany()`'s is. `targetModel` is a placeholder here — see
    * `TreeFieldDefinition`'s doc comment for why `defineModel()` has to fill in the real value. */
-  tree(opts: { indexed?: boolean; displayText?: string; description?: string } = {}): TreeFieldDefinition {
-    return { ...base(opts), kind: 'tree', targetModel: '' };
+  tree(opts: { indexed?: boolean; displayText?: string; description?: string, hideInTable?: boolean } = {}): TreeFieldDefinition {
+    return { ...base(opts), kind: 'tree', targetModel: '', hideInTable: opts.hideInTable ?? true };
   },
 
   /** Tags an existing field definition with a `name` the console client can key a custom form
@@ -315,7 +320,7 @@ export const field = {
    * kind — `base`'s Postgres column and Zod validation apply unchanged, e.g.
    * `field.custom('html', field.text())` stores and validates exactly like `field.text()`, it
    * just renders differently in the console. */
-  custom<F extends FieldDefinition>(name: string, base: F): F {
-    return { ...base, customType: name };
+  custom<F extends FieldDefinition>(name: string, base: F, opts: { hideInTable?: boolean } = {}): F {
+    return { ...base, customType: name, hideInTable: opts.hideInTable ?? true };
   },
 };

@@ -79,6 +79,6 @@ describe('serializeModelMeta: custom operations (Q6/Q9/Q11/Q13/Q14/Q19)', () => 
   it('params are serialized the same way model fields are (Q15)', () => {
     const meta = serializeModelMeta(Document);
     const retitle = meta.operations.find((o) => o.name === 'retitle')!;
-    expect(retitle.params).toEqual([{ key: 'title', label: 'New title', kind: 'string', required: true, unique: false, indexed: false, sensitive: false }]);
+    expect(retitle.params).toEqual([{ key: 'title', label: 'New title', kind: 'string', required: true, unique: false, indexed: false, sensitive: false, hideInTable: false }]);
   });
 });
