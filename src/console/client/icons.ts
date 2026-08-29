@@ -35,6 +35,8 @@ export {
   LockOpenIcon,
   ArrowsUpDownIcon as SortIcon,
   FunnelIcon as FilterIcon,
+  ViewColumnsIcon as ColumnsIcon,
+  ArrowDownTrayIcon as ExportIcon,
   PencilSquareIcon as EditIcon,
   Cog6ToothIcon as SettingsIcon,
   ArrowLeftStartOnRectangleIcon as LogOutIcon,

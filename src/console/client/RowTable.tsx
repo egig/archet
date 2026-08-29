@@ -3,21 +3,26 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { useModels } from './models.js';
 import { useAuth } from './auth.js';
-import { hasPermission, listRows, removeRow } from './api.js';
+import { hasPermission, listRows, removeRow, type OffsetPage } from './api.js';
 import { formatCellValue } from './format.js';
+import { buildCsvColumns, downloadCsv, rowsToCsv } from './csv.js';
 import { OperationButton } from './OperationButton.js';
 import { queryKeys } from './query-keys.js';
 import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
 import { countFilters, sanitizeFilters, FilterBar, type FilterClause, type FilterNode } from './FilterBar.js';
 import { SortBar, sortableOptions, type SortKey } from './SortBar.js';
+import { ColumnsBar } from './ColumnsBar.js';
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpDownIcon,
   ChevronUpIcon,
+  ColumnsIcon,
   EditIcon,
+  ExportIcon,
   FilterIcon,
+  MagnifyingGlassIcon,
   PlusIcon,
   SortIcon,
   TrashIcon,
@@ -35,6 +40,35 @@ const AD_HOC_FILTER_PARAM = 'filter';
  * same spirit as `?filter=`: shareable, survives a reload. Used only when `builtinSort` is on
  * (`ModelListPage`); `WorkspaceViewTable` persists to its row instead. */
 const AD_HOC_SORT_PARAM = 'sort';
+
+/** The URL query-string key the simple search box reads/writes its free-text term into — same
+ * ad-hoc-vs-ephemeral split as `?filter=` (see `searchInUrl` below): a plain param on
+ * `ModelListPage`, plain component state (never a URL param, never persisted) on
+ * `WorkspaceViewTable`. */
+const AD_HOC_SEARCH_PARAM = 'q';
+
+/** The URL query-string key the column show/hide checklist reads/writes its hidden-column set
+ * into, as a comma-separated list of field keys. Same ad-hoc-vs-ephemeral split as search/filter. */
+const AD_HOC_COLUMNS_PARAM = 'cols';
+
+/** How long to wait after the last keystroke before a search term is actually applied (written to
+ * the URL / local state, and sent to the query layer) — a single free-text box has no half-built
+ * state to protect against the way a filter clause does, so debounced live search (rather than
+ * `FilterBar`'s explicit Apply) is what "simple search" implies. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** Rows are fetched `EXPORT_PAGE_SIZE` at a time (matching the server's own per-request cap) up to
+ * this ceiling — past it, export is truncated with a visible notice rather than either failing or
+ * silently walking an unbounded number of pages from the browser. */
+const EXPORT_ROW_CAP = 5000;
+const EXPORT_PAGE_SIZE = 100;
+
+/** Escapes literal `%`/`_` (ILIKE's own wildcard characters) and `\` (its escape character) in
+ * user-typed search text, so e.g. searching for "50%" or "a_b" matches those literal characters
+ * instead of being interpreted as ILIKE wildcards. */
+function escapeLikeWildcards(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
 
 /** Keeps only well-formed `[field, op, value]` clauses (and the non-empty groups of them) whose
  * field is an indexed column on the model currently being shown. This is what lets a `?filter=`
@@ -213,6 +247,7 @@ export function RowTable({
   // signal when filters/sort are active while closed.
   const [showFilters, setShowFilters] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  const [showColumns, setShowColumns] = useState(false);
 
   // Sort — an ordered list of `[field, direction]` keys. `builtinSort` (ModelListPage): the applied
   // set lives in a `?sort=a,-b` URL overlay on top of `query.sort`, edited by header clicks and the
@@ -282,10 +317,70 @@ export function RowTable({
     return i === -1 ? undefined : i + 1;
   };
 
+  // the Sort panel's in-progress draft (Q8: header clicks stay instant via `applySort` above; only
+  // the panel's multi-level builder stages edits behind an Apply button) — re-synced whenever the
+  // applied sort changes out from under it, including right after a header click applies instantly.
+  const [draftSort, setDraftSort] = useState<SortKey[]>(effectiveSort);
+  useEffect(() => {
+    setDraftSort(effectiveSort);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveSortKey]);
+  const sortDirty = JSON.stringify(draftSort) !== JSON.stringify(effectiveSort);
+
+  // Simple search — an ad-hoc term that's turned into an OR-group of `ilike` clauses over the
+  // model's indexed string/text fields (Q2/round 2: only an `indexed` field is reachable this way —
+  // the same gate `FilterBar` is already subject to — so a field needs `indexed: true` to be
+  // searchable). `searchInUrl` mirrors the same ad-hoc-vs-ephemeral split as Filters: a shareable
+  // `?q=` param on `ModelListPage` (`builtinFilters` true), plain component state on
+  // `WorkspaceViewTable` (`builtinFilters` false) — never persisted to the `workspace_views` row.
+  const searchableFields = useMemo(
+    () => model.fields.filter((f) => f.indexed && (f.kind === 'string' || f.kind === 'text')),
+    [model],
+  );
+  const searchInUrl = builtinFilters;
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
+  const searchTerm = searchInUrl ? (searchParams.get(AD_HOC_SEARCH_PARAM) ?? '') : localSearchTerm;
+
+  // the debounced input box itself — re-synced whenever the applied term changes out from under it
+  // (back/forward nav, or this instance reused for another model).
+  const [searchInput, setSearchInput] = useState(searchTerm);
+  useEffect(() => {
+    setSearchInput(searchTerm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (searchInput === searchTerm) return;
+    const handle = setTimeout(() => {
+      if (searchInUrl) {
+        setSearchParams(
+          (prev) => {
+            const p = new URLSearchParams(prev);
+            if (searchInput) p.set(AD_HOC_SEARCH_PARAM, searchInput);
+            else p.delete(AD_HOC_SEARCH_PARAM);
+            return p;
+          },
+          { replace: true },
+        );
+      } else {
+        setLocalSearchTerm(searchInput);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
+
+  const searchFilterNode = useMemo<FilterNode | null>(() => {
+    const term = searchTerm.trim();
+    if (!term || searchableFields.length === 0) return null;
+    const pattern = `%${escapeLikeWildcards(term)}%`;
+    return ['or', searchableFields.map((f): FilterClause => [f.key, 'ilike', pattern])];
+  }, [searchTerm, searchableFields]);
+
   const limit = query.limit ?? DEFAULT_LIMIT;
   const queryKeyString = useMemo(
-    () => JSON.stringify([model.name, query, adHocKey, effectiveSortKey]),
-    [model.name, query, adHocKey, effectiveSortKey],
+    () => JSON.stringify([model.name, query, adHocKey, effectiveSortKey, searchTerm]),
+    [model.name, query, adHocKey, effectiveSortKey, searchTerm],
   );
 
   function applyAdHocFilters(next: FilterNode[]) {
@@ -312,26 +407,79 @@ export function RowTable({
   const filterPanel = toolbar ?? builtinFilterBar;
 
   // Sort panel: the caller's own `sortToolbar` (WorkspaceViewTable) or a built-in `SortBar` writing
-  // the `?sort=` overlay. A locked View passes neither → no panel, and `sortInteractive` is false.
-  const sortPanel = sortControlled ? (sortToolbar ?? null) : <SortBar model={model} value={effectiveSort} onChange={applySort} />;
+  // the `?sort=` overlay via its draft + Apply. A locked View passes neither → no panel, and
+  // `sortInteractive` is false.
+  const sortPanel = sortControlled ? (
+    sortToolbar ?? null
+  ) : (
+    <SortBar model={model} value={draftSort} onChange={setDraftSort} onApply={applySort} dirty={sortDirty} />
+  );
 
+  // every column the model can show — the show/hide checklist's full universe. `id` isn't part of
+  // it: it's always shown (Q10), rendered separately below, never toggleable.
   const columns = useMemo(
     () => model.fields.filter((f) => !f.sensitive && !f.hideInTable),
     [model],
   );
+  const columnKeys = useMemo(() => new Set(columns.map((f) => f.key)), [columns]);
+
+  // Column show/hide — same ad-hoc-vs-ephemeral split as search: a shareable `?cols=` URL param on
+  // `ModelListPage`, plain component state on `WorkspaceViewTable`. Stores *hidden* keys (rather
+  // than visible ones) so the default, param-absent state is the empty set — "nothing hidden".
+  const columnsInUrl = builtinFilters;
+  const urlHiddenColumns = useMemo(() => {
+    const raw = searchParams.get(AD_HOC_COLUMNS_PARAM);
+    if (!raw) return new Set<string>();
+    return new Set(raw.split(',').map((s) => s.trim()).filter((k) => columnKeys.has(k)));
+  }, [searchParams, columnKeys]);
+  const [localHiddenColumns, setLocalHiddenColumns] = useState<Set<string>>(new Set());
+  const hiddenColumns = columnsInUrl ? urlHiddenColumns : localHiddenColumns;
+
+  function setHiddenColumns(next: Set<string>) {
+    if (columnsInUrl) {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (next.size > 0) p.set(AD_HOC_COLUMNS_PARAM, [...next].join(','));
+          else p.delete(AD_HOC_COLUMNS_PARAM);
+          return p;
+        },
+        { replace: true },
+      );
+    } else {
+      setLocalHiddenColumns(next);
+    }
+  }
+
+  const visibleColumns = useMemo(() => columns.filter((f) => !hiddenColumns.has(f.key)), [columns, hiddenColumns]);
+  const columnsPanelShown = columns.length > 0;
+  const columnsPanel = columnsPanelShown ? (
+    <ColumnsBar fields={columns} hidden={hiddenColumns} onChange={setHiddenColumns} />
+  ) : null;
+
+  // reference/tree includes follow the *visible* columns (Q11: a hidden column's relation isn't
+  // fetched for nothing — it isn't rendered or exported while hidden) unless the caller (a saved
+  // View) already pins its own explicit `include` list.
   const includes = useMemo(
     () =>
       query.include ??
-      columns.filter((f) => f.kind === 'reference' || f.kind === 'tree').map((f) => f.key.replace(/Id$/, '')),
-    [columns, query.include],
+      visibleColumns.filter((f) => f.kind === 'reference' || f.kind === 'tree').map((f) => f.key.replace(/Id$/, '')),
+    [visibleColumns, query.include],
   );
 
   useEffect(() => setOffset(0), [queryKeyString]);
 
   const sort = effectiveSortKey || undefined;
+  // Filters actually sent to the query layer = the Filter panel's own set (`effectiveFilters`,
+  // also what powers the "Filter (n)" badge above) AND the search OR-group, if any — kept separate
+  // from `effectiveFilters` so the badge doesn't inflate with search's per-field clauses.
+  const queryFilters = useMemo(
+    () => (searchFilterNode ? [...effectiveFilters, searchFilterNode] : effectiveFilters),
+    [effectiveFilters, searchFilterNode],
+  );
   // incomplete clauses (a reference `=` with nothing picked, an empty number box) are stripped
   // here too — not just on Apply — so a stale/hand-built saved filter can't 500 the listing.
-  const filtersForQuery = useMemo(() => sanitizeFilters(effectiveFilters), [effectiveFilters]);
+  const filtersForQuery = useMemo(() => sanitizeFilters(queryFilters), [queryFilters]);
   const listParams = { limit, offset, include: includes, filters: filtersForQuery, sort };
 
   const {
@@ -370,11 +518,66 @@ export function RowTable({
 
   const errorMessage = error ? (error instanceof Error ? error.message : 'failed to load') : null;
 
+  // CSV export — all rows matching the current filter/search/sort (not just the loaded page),
+  // fetched by looping `listRows` at the server's own per-request cap up to `EXPORT_ROW_CAP`. Exports
+  // whatever's currently visible per the column show/hide toggle (Q11), same rendering as the table
+  // (`buildCsvColumns` mirrors `formatCellValue`'s reference/file handling below).
+  const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+
+  async function handleExport() {
+    setExporting(true);
+    setExportNotice(null);
+    try {
+      const collected: Record<string, unknown>[] = [];
+      let fetchOffset = 0;
+      let total = Number.POSITIVE_INFINITY;
+      while (fetchOffset < total && collected.length < EXPORT_ROW_CAP) {
+        const exportPage: OffsetPage = await listRows(model.name, {
+          limit: EXPORT_PAGE_SIZE,
+          offset: fetchOffset,
+          include: includes,
+          filters: filtersForQuery,
+          sort,
+        });
+        total = exportPage.total;
+        if (exportPage.rows.length === 0) break;
+        collected.push(...exportPage.rows);
+        fetchOffset += exportPage.rows.length;
+      }
+      const exportRows = collected.slice(0, EXPORT_ROW_CAP);
+      const csvColumns = buildCsvColumns(visibleColumns, getModel);
+      downloadCsv(`${model.name}.csv`, rowsToCsv(csvColumns, exportRows));
+      setExportNotice(
+        exportRows.length < total
+          ? `Exported the first ${exportRows.length.toLocaleString()} of ${total.toLocaleString()} rows — narrow your filters or search to export the rest.`
+          : null,
+      );
+    } catch (err) {
+      setExportNotice(err instanceof Error ? `Export failed: ${err.message}` : 'Export failed.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-gray-900">{model.label}</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {searchableFields.length > 0 && (
+            <div className="relative">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search…"
+                aria-label="Search"
+                className="w-48 rounded border border-gray-300 py-1.5 pl-8 pr-3 text-sm"
+              />
+            </div>
+          )}
           {filterPanel && (
             <button
               type="button"
@@ -405,6 +608,30 @@ export function RowTable({
               Sort{effectiveSort.length > 0 ? ` (${effectiveSort.length})` : ''}
             </button>
           )}
+          {columnsPanelShown && (
+            <button
+              type="button"
+              onClick={() => setShowColumns((v) => !v)}
+              aria-expanded={showColumns}
+              className={`flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${
+                showColumns
+                  ? 'border-gray-400 bg-gray-100 text-gray-800'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <ColumnsIcon className="h-4 w-4" />
+              Columns{hiddenColumns.size > 0 ? ` (${visibleColumns.length}/${columns.length})` : ''}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={() => void handleExport()}
+            className="flex items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+          >
+            <ExportIcon className="h-4 w-4" />
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
           {canCreate && (
             <Link
               to={{ pathname: `${base}/new`, search }}
@@ -419,7 +646,9 @@ export function RowTable({
 
       {filterPanel && showFilters && filterPanel}
       {sortPanel && showSort && sortPanel}
+      {columnsPanel && showColumns && columnsPanel}
 
+      {exportNotice && <p className="mb-3 text-sm text-amber-700">{exportNotice}</p>}
       {errorMessage && <p className="mb-3 text-sm text-red-600">{errorMessage}</p>}
 
       <div className="overflow-x-auto rounded border border-gray-200 bg-white">
@@ -434,7 +663,7 @@ export function RowTable({
                 ordinal={sortOrdinalOf('id')}
                 onSort={(shiftKey) => headerClickSort('id', shiftKey)}
               />
-              {columns.map((f) => (
+              {visibleColumns.map((f) => (
                 <HeaderCell
                   key={f.key}
                   label={f.label}
@@ -454,7 +683,7 @@ export function RowTable({
               return (
                 <tr key={id} className="border-b border-gray-100 last:border-0">
                   <td className="px-3 py-2 font-mono text-xs text-gray-500">{id.slice(0, 8)}</td>
-                  {columns.map((f) => {
+                  {visibleColumns.map((f) => {
                     if (f.kind === 'reference' || f.kind === 'tree') {
                       const relation = f.key.replace(/Id$/, '');
                       const related = row[relation] as Record<string, unknown> | null | undefined;
@@ -516,7 +745,7 @@ export function RowTable({
             })}
             {!loading && page?.rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length + 2} className="px-3 py-6 text-center text-gray-400">
+                <td colSpan={visibleColumns.length + 2} className="px-3 py-6 text-center text-gray-400">
                   No records.
                 </td>
               </tr>

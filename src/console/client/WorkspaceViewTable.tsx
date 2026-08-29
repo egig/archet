@@ -62,23 +62,31 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
     persistFiltersMutation.mutate(filters);
   }
 
-  // Sort has no draft/Apply step — a `SortKey` is always complete, so every SortBar edit and header
-  // click applies to the table immediately (optimistic `sortState`) and persists to the row, the
-  // same way a tab rename does; a failed write rolls the state back.
-  const [sortState, setSortState] = useState<SortKey[]>(view.sort ?? []);
+  // Sort: header clicks stay instant — optimistic `appliedSort`, persisted right away, rolled back
+  // on a failed write, the same way a tab rename does. The Sort panel's multi-level builder now
+  // stages edits in its own `draftSort` behind an Apply button (Q8), mirroring how the Filter panel
+  // above already stages `draftFilters` — `draftSort` re-syncs off `appliedSort` whenever it changes
+  // out from under it, including right after an instant header-click apply.
+  const [appliedSort, setAppliedSort] = useState<SortKey[]>(view.sort ?? []);
   useEffect(() => {
-    setSortState(view.sort ?? []);
+    setAppliedSort(view.sort ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.id, JSON.stringify(view.sort)]);
+
+  const [draftSort, setDraftSort] = useState<SortKey[]>(appliedSort);
+  useEffect(() => {
+    setDraftSort(appliedSort);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(appliedSort)]);
 
   const persistSortMutation = useMutation({
     mutationFn: (sort: SortKey[]) => updateRow('workspace_views', view.id, { sort }),
     onSuccess: (updated) => onChange(updated as unknown as WorkspaceViewRow),
-    onError: () => setSortState(view.sort ?? []),
+    onError: () => setAppliedSort(view.sort ?? []),
   });
 
-  function changeSort(sort: SortKey[]) {
-    setSortState(sort);
+  function commitSort(sort: SortKey[]) {
+    setAppliedSort(sort);
     persistSortMutation.mutate(sort);
   }
 
@@ -91,7 +99,7 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
       model={model}
       query={{
         filters: applied,
-        sort: sortState,
+        sort: appliedSort,
         include: view.include ?? undefined,
         limit: view.limit,
       }}
@@ -113,8 +121,19 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
           />
         ) : undefined
       }
-      onSortChange={locked ? undefined : changeSort}
-      sortToolbar={locked ? undefined : <SortBar model={model} value={sortState} onChange={changeSort} />}
+      onSortChange={locked ? undefined : commitSort}
+      sortToolbar={
+        locked ? undefined : (
+          <SortBar
+            model={model}
+            value={draftSort}
+            onChange={setDraftSort}
+            onApply={commitSort}
+            dirty={JSON.stringify(draftSort) !== JSON.stringify(appliedSort)}
+            applying={persistSortMutation.isPending}
+          />
+        )
+      }
     />
   );
 }
