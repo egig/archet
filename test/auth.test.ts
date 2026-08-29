@@ -112,6 +112,20 @@ describeIfDb('auth system (against a live Postgres)', () => {
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         user_id uuid NOT NULL, token varchar NOT NULL, expires_at timestamptz NOT NULL
       )`);
+    // setup now also provisions a `Provider` + the built-in `Ratchet` `Agent` (src/auth/router.ts
+    // POST /setup) alongside the root role/user — these two tables need to exist for that insert
+    // to succeed, even though this suite is otherwise entirely about auth.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS providers (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        name varchar NOT NULL, kind varchar NOT NULL DEFAULT 'anthropic', url varchar, api_key varchar NOT NULL
+      )`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS agents (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        name varchar NOT NULL, description text, system_prompt text NOT NULL, provider_id uuid NOT NULL, role_id uuid,
+        model varchar NOT NULL DEFAULT 'claude-opus-5', config jsonb, active boolean NOT NULL DEFAULT true
+      )`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS notes (
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
@@ -149,17 +163,26 @@ describeIfDb('auth system (against a live Postgres)', () => {
 
   beforeEach(async () => {
     // `workspaces` is deliberately not truncated here — see the beforeAll note above.
-    await db.execute(sql`TRUNCATE TABLE notes, lockable_docs, sessions, users, roles`);
+    await db.execute(sql`TRUNCATE TABLE notes, lockable_docs, sessions, users, roles, agents, providers`);
   });
 
   afterAll(async () => {
     await db.execute(sql`DROP TABLE IF EXISTS lockable_docs`);
     await db.execute(sql`DROP TABLE IF EXISTS notes`);
     await db.execute(sql`DROP TABLE IF EXISTS sessions`);
+    await db.execute(sql`DROP TABLE IF EXISTS agents`);
+    await db.execute(sql`DROP TABLE IF EXISTS providers`);
     await db.execute(sql`DROP TABLE IF EXISTS users`);
     await db.execute(sql`DROP TABLE IF EXISTS roles`);
     await client.end();
   });
+
+  /** Every `POST /setup` call in this suite needs a `providerApiKey` now that setup also
+   * provisions the built-in `Ratchet` agent's `Provider` — a small helper keeps every call site
+   * below from repeating the same filler credential. */
+  function setupBody(email: string, password = 'hunter2'): string {
+    return JSON.stringify({ email, password, providerApiKey: 'sk-test-key' });
+  }
 
   async function registerUser(email: string, password: string) {
     const res = await authApp.request('/register', {
@@ -179,7 +202,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
       const create = await authApp.request('/setup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'root@example.com', password: 'hunter2' }),
+        body: setupBody('root@example.com'),
       });
       expect(create.status).toBe(201);
 
@@ -191,7 +214,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
       const setup = await authApp.request('/setup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'root2@example.com', password: 'hunter2' }),
+        body: setupBody('root2@example.com'),
       });
       const { token } = ((await setup.json()) as { data: { token: string } }).data;
 
@@ -207,13 +230,13 @@ describeIfDb('auth system (against a live Postgres)', () => {
       await authApp.request('/setup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'root3@example.com', password: 'hunter2' }),
+        body: setupBody('root3@example.com'),
       });
 
       const second = await authApp.request('/setup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'someone-else@example.com', password: 'hunter2' }),
+        body: setupBody('someone-else@example.com'),
       });
       expect(second.status).toBe(409);
       expect(((await second.json()) as { error: { code: string } }).error.code).toBe('SETUP_ALREADY_COMPLETE');
@@ -223,7 +246,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
       const setup = await authApp.request('/setup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'root4@example.com', password: 'hunter2' }),
+        body: setupBody('root4@example.com'),
       });
       const { user } = ((await setup.json()) as { data: { user: { id: string } } }).data;
 
@@ -237,7 +260,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
       await authApp.request('/setup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'root5@example.com', password: 'hunter2' }),
+        body: setupBody('root5@example.com'),
       });
 
       const roles = (await db.execute(
@@ -245,6 +268,60 @@ describeIfDb('auth system (against a live Postgres)', () => {
       )) as unknown as { permissions: { resource: string; action: string; field: string }[] }[];
       expect(roles.length).toBe(1);
       expect(roles[0]!.permissions).toEqual([{ resource: '*', action: '*', field: '*' }]);
+    });
+
+    it('requires a providerApiKey — 400s without one', async () => {
+      const res = await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'root6@example.com', password: 'hunter2' }),
+      });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: { fields?: Record<string, string> } }).error.fields?.providerApiKey).toBe('required');
+    });
+
+    it('rejects an unknown providerKind', async () => {
+      const res = await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'root7@example.com', password: 'hunter2', providerApiKey: 'sk-test', providerKind: 'bogus' }),
+      });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: { fields?: Record<string, string> } }).error.fields?.providerKind).toBeTruthy();
+    });
+
+    it('provisions a Provider + the built-in Ratchet Agent, wired to the Root role', async () => {
+      await authApp.request('/setup', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'root8@example.com',
+          password: 'hunter2',
+          providerApiKey: 'sk-test-key',
+          providerKind: 'openai',
+          providerUrl: 'https://api.example.com/v1',
+        }),
+      });
+
+      const providers = (await db.execute(sql`SELECT id, name, kind, url, api_key FROM providers`)) as unknown as {
+        id: string;
+        name: string;
+        kind: string;
+        url: string | null;
+        api_key: string;
+      }[];
+      expect(providers.length).toBe(1);
+      const provider = providers[0]!;
+      expect(provider).toMatchObject({ name: 'Ratchet Provider', kind: 'openai', url: 'https://api.example.com/v1', api_key: 'sk-test-key' });
+
+      const roles = (await db.execute(sql`SELECT id FROM roles WHERE name = 'Root'`)) as unknown as { id: string }[];
+      const agents = (await db.execute(sql`SELECT name, provider_id, role_id FROM agents`)) as unknown as {
+        name: string;
+        provider_id: string;
+        role_id: string;
+      }[];
+      expect(agents.length).toBe(1);
+      expect(agents[0]).toEqual({ name: 'Ratchet', provider_id: provider.id, role_id: roles[0]!.id });
     });
   });
 
