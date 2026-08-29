@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
-import type { ChatEvent, ChatMessage, ChatProvider, ChatRequest, ChatStopReason, ToolSpec } from '../provider.js';
+import { parseToolInput, type ChatEvent, type ChatMessage, type ChatProvider, type ChatRequest, type ChatStopReason, type ToolSpec } from '../provider.js';
 
 function toOpenAiTools(tools: ToolSpec[] | undefined): ChatCompletionTool[] | undefined {
   if (!tools || tools.length === 0) return undefined;
@@ -54,15 +54,20 @@ function mapFinishReason(reason: string | null): ChatStopReason {
  * equivalent of Anthropic's adaptive thinking/effort/prompt-caching — `req.extra` is unused. */
 export const openAiCompatibleProvider: ChatProvider = {
   async *stream(req: ChatRequest): AsyncIterable<ChatEvent> {
-    const client = new OpenAI({ apiKey: req.apiKey, baseURL: req.baseUrl });
+    // the SDK already retries connection errors and 408/409/429/5xx with backoff by default
+    // (maxRetries: 2) — set explicitly here so that behavior is visible rather than incidental.
+    const client = new OpenAI({ apiKey: req.apiKey, baseURL: req.baseUrl, maxRetries: 3 });
 
-    const stream = await client.chat.completions.create({
-      model: req.model,
-      messages: toOpenAiMessages(req.system, req.messages),
-      tools: toOpenAiTools(req.tools),
-      stream: true,
-      stream_options: { include_usage: true },
-    });
+    const stream = await client.chat.completions.create(
+      {
+        model: req.model,
+        messages: toOpenAiMessages(req.system, req.messages),
+        tools: toOpenAiTools(req.tools),
+        stream: true,
+        stream_options: { include_usage: true },
+      },
+      { signal: req.signal },
+    );
 
     // tool_calls deltas arrive as fragments keyed by index, same accumulate-then-parse shape
     // as the Anthropic adapter's input_json_delta handling.
@@ -98,10 +103,7 @@ export const openAiCompatibleProvider: ChatProvider = {
     }
 
     for (const pending of pendingToolCalls.values()) {
-      yield {
-        type: 'tool-call',
-        call: { id: pending.id, name: pending.name, input: pending.json ? JSON.parse(pending.json) : {} },
-      };
+      yield { type: 'tool-call', call: { id: pending.id, name: pending.name, input: parseToolInput(pending.json) } };
     }
 
     yield { type: 'done', stopReason: mapFinishReason(finishReason), usage };

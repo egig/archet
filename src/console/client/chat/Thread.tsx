@@ -71,13 +71,35 @@ const STOP_REASON_NOTICE: Record<string, string> = {
   max_tokens: 'Response was cut off (length limit)',
   refusal: 'The model declined to answer',
   error: 'The agent turn failed',
+  max_iterations: 'Stopped after too many tool-call rounds',
+  timeout: 'The agent turn timed out',
 };
+
+/** Shown in place of the assistant bubble during the gap between "user hit send" and the first
+ * streamed token/tool-call — otherwise nothing in the viewport changes except the composer's
+ * Send button swapping for Stop, which reads as the UI having done nothing. */
+function ThinkingIndicator() {
+  return (
+    <div className="flex items-center gap-1 px-1 py-1.5" aria-label="Thinking">
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
+    </div>
+  );
+}
 
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="mb-4 flex justify-start">
       <div className="max-w-[85%] min-w-0">
         <div className="rounded-lg bg-gray-100 px-3 py-2 text-gray-900">
+          {/* the newest assistant message is added (empty, status "running") the instant a turn
+              starts, before any network response — this fills that gap instead of an empty bubble. */}
+          <MessagePrimitive.If last hasContent={false}>
+            <ThreadPrimitive.If running>
+              <ThinkingIndicator />
+            </ThreadPrimitive.If>
+          </MessagePrimitive.If>
           <MessagePrimitive.Parts
             components={{
               Text: MarkdownText,

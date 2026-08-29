@@ -5,7 +5,7 @@ import type {
   Tool as AnthropicTool,
   StopReason as AnthropicStopReason,
 } from '@anthropic-ai/sdk/resources/messages';
-import type { ChatEvent, ChatMessage, ChatProvider, ChatRequest, ChatStopReason, ToolSpec } from '../provider.js';
+import { parseToolInput, type ChatEvent, type ChatMessage, type ChatProvider, type ChatRequest, type ChatStopReason, type ToolSpec } from '../provider.js';
 
 const MAX_TOKENS = 64000;
 
@@ -53,18 +53,23 @@ function mapStopReason(reason: AnthropicStopReason | null): ChatStopReason {
 
 export const anthropicProvider: ChatProvider = {
   async *stream(req: ChatRequest): AsyncIterable<ChatEvent> {
-    const client = new Anthropic(req.apiKey ? { apiKey: req.apiKey } : {});
+    // the SDK already retries connection errors and 408/409/429/5xx with backoff by default
+    // (maxRetries: 2) — set explicitly here so that behavior is visible rather than incidental.
+    const client = new Anthropic({ ...(req.apiKey ? { apiKey: req.apiKey } : {}), maxRetries: 3 });
     const effort = (req.extra?.effort as string | undefined) ?? 'high';
 
-    const stream = client.messages.stream({
-      model: req.model,
-      max_tokens: MAX_TOKENS,
-      system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
-      thinking: { type: 'adaptive', display: 'summarized' },
-      output_config: { effort: effort as 'low' | 'medium' | 'high' | 'xhigh' | 'max' },
-      tools: toAnthropicTools(req.tools),
-      messages: toAnthropicMessages(req.messages),
-    });
+    const stream = client.messages.stream(
+      {
+        model: req.model,
+        max_tokens: MAX_TOKENS,
+        system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
+        thinking: { type: 'adaptive', display: 'summarized' },
+        output_config: { effort: effort as 'low' | 'medium' | 'high' | 'xhigh' | 'max' },
+        tools: toAnthropicTools(req.tools),
+        messages: toAnthropicMessages(req.messages),
+      },
+      { signal: req.signal },
+    );
 
     // input_json_delta arrives as fragments of one tool call's JSON input, keyed by content
     // block index — accumulated here and parsed once content_block_stop closes that block.
@@ -92,10 +97,7 @@ export const anthropicProvider: ChatProvider = {
         const pending = pendingToolCalls.get(event.index);
         if (pending) {
           pendingToolCalls.delete(event.index);
-          yield {
-            type: 'tool-call',
-            call: { id: pending.id, name: pending.name, input: pending.json ? JSON.parse(pending.json) : {} },
-          };
+          yield { type: 'tool-call', call: { id: pending.id, name: pending.name, input: parseToolInput(pending.json) } };
         }
       }
     }
