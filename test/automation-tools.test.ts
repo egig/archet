@@ -117,6 +117,18 @@ describeIfDb('agent tools are role-derived (src/automation/tool.ts)', () => {
       const tools = await resolveAgentTools(db, registry, roleId);
       expect(tools.map((t) => t.spec.name).sort()).toEqual(['create_gizmos', 'remove_gizmos', 'update_gizmos']);
     });
+
+    // Guards against a schema-library regression: the tool's `parameters` must be a real JSON
+    // Schema object describing the model's fields, not an empty/degenerate document — a chatting
+    // model can't call the tool correctly otherwise.
+    it("a tool's parameters is a proper JSON Schema of the model's fields", async () => {
+      const roleId = await createRole([{ resource: 'gizmos', action: 'create', field: '*' }]);
+      const tools = await resolveAgentTools(db, registry, roleId);
+      const params = tools[0]!.spec.parameters as { type?: string; properties?: Record<string, unknown>; required?: string[] };
+      expect(params.type).toBe('object');
+      expect(params.properties).toEqual({ name: { type: 'string' } });
+      expect(params.required).toEqual(['name']);
+    });
   });
 
   describe('executeAgentTool — the chatting user\'s own role gates the actual call, never the agent\'s alone', () => {

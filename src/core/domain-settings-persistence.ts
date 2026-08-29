@@ -45,7 +45,7 @@ export async function updateDomainSettings(
   }
 
   const current = await getDomainSettings(db, def);
-  const merged = { ...current, ...result.data };
+  const merged = { ...current, ...(result.data as Record<string, unknown>) };
   const now = new Date().toISOString();
 
   await db.execute(sql`
