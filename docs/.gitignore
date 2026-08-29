@@ -1,0 +1,14 @@
+# deps
+/node_modules
+
+# generated content
+.source
+content/docs/changelog.mdx
+
+# build output
+/.next/
+/out/
+*.tsbuildinfo
+
+# misc
+next-env.d.ts

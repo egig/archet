@@ -1,4 +1,7 @@
-# Models & Fields
+---
+title: Models & Fields
+description: The field vocabulary, relations, and console metadata for `defineModel()`.
+---
 
 A model is defined once, with `defineModel()`, and drives everything else: the Postgres table, the Zod validators, the REST routes, and the console.
 
@@ -49,7 +52,7 @@ interface FieldCommonOptions<T> {
 ```
 
 - **`required`** and **`default`** are mutually exclusive — a field with a default is never absent, so declaring both throws at definition time.
-- **`indexed`** gates whether a field can appear in `?filter=` or `?sort=` on the REST API (see [REST API](/guide/router)) — and, for a `string`/`text` field, whether the console's list-view search box can find it (see [Console](/guide/console#list-view)).
+- **`indexed`** gates whether a field can appear in `?filter=` or `?sort=` on the REST API (see [REST API](/docs/router)) — and, for a `string`/`text` field, whether the console's list-view search box can find it (see [Console](/docs/console#list-view)).
 - **`sensitive`** marks a field as stored but stripped from every HTTP response — e.g. a password hash.
 - **`writeAs`** is for a field written under a different, undeclared input key. For example, a `passwordHash` column declares `writeAs: 'password'` because a pipeline function (`hashPassword`) synthesizes the real column from a plaintext `password` key that never appears in `fields`. The console form reads this to know which key to submit under.
 - **`displayText`** is the label shown for this field in console list-view column headers and form labels; when omitted it defaults to the field key humanized (e.g. `roleId` -> "Role Id").
@@ -196,7 +199,7 @@ columns instead of using `field.manyToMany()`.
 
 ## Operations
 
-Every model gets `create`, `update`, and `remove` operations, each a [pipeline](/guide/pipelines). If you don't supply your own, the defaults are:
+Every model gets `create`, `update`, and `remove` operations, each a [pipeline](/docs/pipelines). If you don't supply your own, the defaults are:
 
 ```ts
 {
@@ -239,4 +242,4 @@ interface ConsoleModelOptions {
 }
 ```
 
-See [Console](/guide/console) for how these are consumed — including how a model's folder location under `modelsDir` groups it into a Domain in the console sidebar.
+See [Console](/docs/console) for how these are consumed — including how a model's folder location under `modelsDir` groups it into a Domain in the console sidebar.

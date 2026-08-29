@@ -1,4 +1,7 @@
-# Pipelines
+---
+title: Pipelines
+description: Compose `create`/`update`/`remove` out of small, ordered pipeline functions.
+---
 
 `create`, `update`, and `remove` on every model are pipelines: an ordered chain of small functions built with `pipe(...)`. This is where your business logic lives.
 
@@ -66,7 +69,7 @@ Each of these marks the pipeline's write boundary.
 A pipeline function typically does one of:
 
 - **Read from `ctx.db`** to check external state (stock, quota, uniqueness beyond what a DB constraint gives you) and throw a `PipelineError` if a precondition fails.
-- **Mutate `ctx.input`** before `persist` runs — e.g. `applyDiscount` recalculating `amount`, or `hashPassword` (see [Auth](/guide/auth)) replacing a plaintext `password` key with a `passwordHash` column.
+- **Mutate `ctx.input`** before `persist` runs — e.g. `applyDiscount` recalculating `amount`, or `hashPassword` (see [Auth](/docs/auth)) replacing a plaintext `password` key with a `passwordHash` column.
 - **Act on `ctx.doc`** after `persist` — e.g. `notify` sending an email now that the row exists and is committed.
 
 ```ts
@@ -83,8 +86,8 @@ export const notify: PipelineFn = async (ctx) => {
 
 ## Auth-related pipeline functions
 
-`requireAuth` and `requirePermission(resource, action)` (from `ratchet/auth`) are ordinary pipeline functions and compose the same way — see [Auth](/guide/auth#auth--permission-is-implicit-on-the-generic-router).
+`requireAuth` and `requirePermission(resource, action)` (from `ratchet/auth`) are ordinary pipeline functions and compose the same way — see [Auth](/docs/auth#auth--permission-is-implicit-on-the-generic-router).
 
 ## Beyond create/update/remove
 
-A model isn't limited to these three operations — see [Custom Operations](/guide/custom-operations) for defining a named, convenient action (e.g. `lock`/`unlock`) built out of the same pipeline primitives.
+A model isn't limited to these three operations — see [Custom Operations](/docs/custom-operations) for defining a named, convenient action (e.g. `lock`/`unlock`) built out of the same pipeline primitives.

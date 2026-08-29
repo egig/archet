@@ -1,4 +1,7 @@
-# CLI Reference
+---
+title: CLI Reference
+description: Every `ratchet` command, from `init` to `studio`.
+---
 
 ```sh
 ratchet <command>
@@ -15,8 +18,8 @@ Reads `models/**/*.model.ts` and emits, into `generatedDir` (`.ratchet/` by defa
 - `schema.ts` — the Drizzle schema
 - `validators.ts` — Zod validators
 - `registry.ts` — the model registry `ratchet serve` and `ratchet build` read from
-- `console-forms.ts` — the [custom console form](/guide/console#custom-forms) registry, one entry per `models/**/*.form.tsx`
-- `console-field-inputs.ts` — the [custom field input](/guide/console#custom-field-inputs) registry, one entry per `models/**/*.input.tsx`
+- `console-forms.ts` — the [custom console form](/docs/console#custom-forms) registry, one entry per `models/**/*.form.tsx`
+- `console-field-inputs.ts` — the [custom field input](/docs/console#custom-field-inputs) registry, one entry per `models/**/*.input.tsx`
 
 It then runs `drizzle-kit generate` to diff the fresh schema against `migrationsDir` (`migrations/` by default) and write any new SQL migration files. Review those files, then apply them with `ratchet migrate`.
 

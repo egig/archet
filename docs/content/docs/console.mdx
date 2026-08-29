@@ -1,4 +1,7 @@
-# Console
+---
+title: Console
+description: The generated admin console — branding, custom forms, and custom field inputs.
+---
 
 `ratchet serve` mounts a generated console SPA — a sidebar of models, list/form views generated from each model's field metadata, and session-based login, with no per-model UI code to write.
 
@@ -51,7 +54,7 @@ The console SPA discovers models and renders CRUD views from a small metadata AP
 | `GET` | `${consolePath}/meta/domains/:name/settings` | one Domain's current settings values |
 | `PATCH` | `${consolePath}/meta/domains/:name/settings` | update one Domain's settings values |
 
-All require an authenticated session (see [Auth](/guide/auth)) and are driven by each model's `fields`/`console` options or a Domain's `defineDomain()` — there's no separate console schema to maintain.
+All require an authenticated session (see [Auth](/docs/auth)) and are driven by each model's `fields`/`console` options or a Domain's `defineDomain()` — there's no separate console schema to maintain.
 
 ## Controlling what shows up
 
@@ -72,13 +75,13 @@ export const Customer = defineModel('customers', {
 });
 ```
 
-A `field.reference(...)` on a model automatically renders as a dropdown in the generated form, populated from the target model's rows and labeled with its `displayField`. A field with `sensitive: true` (e.g. `passwordHash`) never round-trips to the client; one with `writeAs` submits under its declared input key instead of its column name; one with `displayText` uses that as its list/form label instead of a humanized field key (see [Common options](/guide/models#common-options)).
+A `field.reference(...)` on a model automatically renders as a dropdown in the generated form, populated from the target model's rows and labeled with its `displayField`. A field with `sensitive: true` (e.g. `passwordHash`) never round-trips to the client; one with `writeAs` submits under its declared input key instead of its column name; one with `displayText` uses that as its list/form label instead of a humanized field key (see [Common options](/docs/models#common-options)).
 
 ## List view
 
 Every model's list view has a small toolbar above the table:
 
-- **Search** — a single free-text box, shown whenever the model has at least one field declared `indexed: true` with kind `string` or `text`. It debounces as you type and matches like the REST API's `ilike` filter operator would: case-insensitive, substring, OR'd across every eligible field. **A field that isn't `indexed: true` (or isn't `string`/`text`) is invisible to search**, the same gate that already applies to `?filter=`/`?sort=` (see [Common options](/guide/models#common-options) and [REST API](/guide/router)) — a common field like a `title` or `description` won't be found unless it's indexed.
+- **Search** — a single free-text box, shown whenever the model has at least one field declared `indexed: true` with kind `string` or `text`. It debounces as you type and matches like the REST API's `ilike` filter operator would: case-insensitive, substring, OR'd across every eligible field. **A field that isn't `indexed: true` (or isn't `string`/`text`) is invisible to search**, the same gate that already applies to `?filter=`/`?sort=` (see [Common options](/docs/models#common-options) and [REST API](/docs/router)) — a common field like a `title` or `description` won't be found unless it's indexed.
 - **Filter** — the manual clause builder (`field`/`operator`/`value`, with AND/OR groups), unchanged; also gated on `indexed: true`.
 - **Sort** — click a column header for an instant single-key sort (shift-click to add a secondary key), or open the Sort panel to build a multi-level sort and click **Apply**. Only header clicks apply immediately; the panel stages its edits until Apply is clicked.
 - **Columns** — show/hide individual columns. `id` is always shown.
@@ -191,7 +194,7 @@ Tailwind classes used in a `*.form.tsx` are picked up by the console build the s
 
 ### A form that manages a related model too
 
-A custom form isn't limited to its own model's fields — it owns its data fetching/mutations entirely, so it can just as well read and write a *related* model alongside the one it was opened for. `Role`'s own console form (`src/auth/models/role.form.tsx`, shipped with the framework — see [Builtin forms](#builtin-forms) below) is a real, worked example: it edits `name`/`description` the normal way and manages the role's entire `permissions` grant list — a tree of resource → action → field checkboxes, `'*'` collapsing a fully-granted subtree into one wildcard entry — persisted via the `Role` model's own `createRow`/`updateRow` (the whole `permissions` array in one Save), instead of a separate CRUD screen. See [Auth](/guide/auth#roles-and-permissions) for how the grant list is shaped.
+A custom form isn't limited to its own model's fields — it owns its data fetching/mutations entirely, so it can just as well read and write a *related* model alongside the one it was opened for. `Role`'s own console form (`src/auth/models/role.form.tsx`, shipped with the framework — see [Builtin forms](#builtin-forms) below) is a real, worked example: it edits `name`/`description` the normal way and manages the role's entire `permissions` grant list — a tree of resource → action → field checkboxes, `'*'` collapsing a fully-granted subtree into one wildcard entry — persisted via the `Role` model's own `createRow`/`updateRow` (the whole `permissions` array in one Save), instead of a separate CRUD screen. See [Auth](/docs/auth#roles-and-permissions) for how the grant list is shaped.
 
 ## Builtin forms
 

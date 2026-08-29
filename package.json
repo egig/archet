@@ -4,6 +4,9 @@
   "description": "Model driven application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.",
   "license": "MIT",
   "type": "module",
+  "workspaces": [
+    "docs"
+  ],
   "files": [
     "dist"
   ],
@@ -38,9 +41,9 @@
     "test": "bun test",
     "cli": "cd example && bun ../src/cli/bin.ts",
     "serve": "cd example && bun ../src/cli/bin.ts serve",
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:dev": "bun --cwd docs run dev",
+    "docs:build": "bun --cwd docs run build",
+    "docs:preview": "bun --cwd docs run start"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
@@ -110,8 +113,7 @@
     "drizzle-kit": "^0.28.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "typescript": "^5.7.2",
-    "vitepress": "^1.6.4"
+    "typescript": "^5.7.2"
   },
   "trustedDependencies": [
     "@parcel/watcher"

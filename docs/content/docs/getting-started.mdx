@@ -1,4 +1,7 @@
-# Getting Started
+---
+title: Getting Started
+description: Scaffold a project, define your first model, and boot the server.
+---
 
 Ratchet turns a directory of TypeScript model files into a Postgres schema, a REST API, a console, and auth — with composable pipelines wherever you need custom logic.
 
@@ -49,7 +52,7 @@ export const Example = defineModel('examples', {
 });
 ```
 
-See [Models & Fields](/guide/models) for the full field vocabulary and how relations, defaults, and console options work.
+See [Models & Fields](/docs/models) for the full field vocabulary and how relations, defaults, and console options work.
 
 ## Generate, migrate, serve
 
@@ -63,13 +66,13 @@ bun run serve        # boot the API + console
 
 - `/api/auth/*` — register/login/logout/me
 - `/api/:model` — the generic REST router, one route family for every model
-- `/console` — the generated console SPA (customize with `consolePath`; registered last since it can be mounted at `/`, see [Console](/guide/console))
+- `/console` — the generated console SPA (customize with `consolePath`; registered last since it can be mounted at `/`, see [Console](/docs/console))
 
 For local iteration, `bun run dev` watches `models/**/*.model.ts` and on every change regenerates, runs `drizzle-kit push`, and restarts the dev server — faster than the migration-file workflow, intended for development only.
 
 ## Next steps
 
-- [Models & Fields](/guide/models) — the field vocabulary, relations, and console metadata
-- [Pipelines](/guide/pipelines) — where your business logic goes
-- [REST API](/guide/router) — filtering, sorting, pagination, and `?include=`
-- [CLI Reference](/guide/cli) — every `ratchet` command
+- [Models & Fields](/docs/models) — the field vocabulary, relations, and console metadata
+- [Pipelines](/docs/pipelines) — where your business logic goes
+- [REST API](/docs/router) — filtering, sorting, pagination, and `?include=`
+- [CLI Reference](/docs/cli) — every `ratchet` command
