@@ -13,7 +13,7 @@ import { runBuild } from './commands/build.js';
 // command runs. Silently a no-op for projects with no `.env`.
 
 const program = new Command();
-program.name('ratchet').description('Model -> Postgres schema, codegen, and composable pipelines.');
+program.name('ratchet').description('General-purpose backend tools for TypeScript and Postgres: schema codegen, a REST API, auth, a console, and composable pipelines.');
 
 program
   .command('init')

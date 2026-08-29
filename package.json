@@ -1,7 +1,7 @@
 {
   "name": "@egig/ratchet",
   "version": "0.1.0",
-  "description": "Model driven application framework: TypeScript models -> Postgres schema, codegen, and composable pipelines.",
+  "description": "A toolbox of general-purpose backend building blocks for TypeScript and Postgres: schema codegen, a REST API, auth, a console, and composable pipelines.",
   "license": "MIT",
   "type": "module",
   "files": [

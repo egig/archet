@@ -1,6 +1,6 @@
 # Getting Started
 
-Ratchet turns a directory of TypeScript model files into a Postgres schema, a REST API, a console, and auth — with composable pipelines wherever you need custom logic.
+Ratchet isn't a models-in, API-out black box. It's a set of general-purpose tools — schema and migration codegen, a REST API, auth, an admin console, and composable pipelines — none of it unique to any one business. Point it at a directory of TypeScript model files and it wires up the Postgres schema, REST routes, and console for you; the pipelines are where your own business logic goes.
 
 ## Prerequisites
 

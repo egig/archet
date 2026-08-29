@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress';
 
 export default defineConfig({
   title: 'Ratchet',
-  description: 'RATher an arCHEType, you build something out of. TypeScript models -> Postgres schema, codegen, and composable pipelines.',
+  description: 'RATher an arCHEType — general-purpose backend tools for TypeScript and Postgres: schema codegen, a REST API, auth, a console, and composable pipelines.',
   base: '/ratchet/',
   cleanUrls: true,
   head: [

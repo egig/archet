@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Ratchet
-  text: Models in, App out.
-  tagline: RATher an arCHEType, you build something out of.
+  text: A toolbox, not a black box.
+  tagline: RATher an arCHEType — general-purpose backend tools, none of it unique to your business.
   image:
     light: /logo.png
     dark: /logo-dark.png
