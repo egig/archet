@@ -41,9 +41,9 @@
     "test": "bun test",
     "cli": "cd example && bun ../src/cli/bin.ts",
     "serve": "cd example && bun ../src/cli/bin.ts serve",
-    "docs:dev": "bun --cwd docs run dev",
-    "docs:build": "bun --cwd docs run build",
-    "docs:preview": "bun --cwd docs run start"
+    "docs:dev": "bun --cwd=docs run dev",
+    "docs:build": "bun --cwd=docs run build",
+    "docs:preview": "bun --cwd=docs run start"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
