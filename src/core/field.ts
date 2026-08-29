@@ -185,6 +185,15 @@ export interface FileFieldDefinition extends BaseFieldDefinition {
   accept?: string;
   preview?: 'image';
   maxSize?: number;
+  /** only meaningful on a Domain Settings field (a model's `file` field has no equivalent — its
+   * read route is always gated by that model's own `read` permission, see
+   * `router/create-router.ts`'s `GET /:model/:id/:field`). `true` serves this field's current
+   * value with no auth at all, from a fixed, content-addressed URL — `GET
+   * /_site-assets/:domain/:field/:token` (`router/site-assets.ts`) — for a value meant to be
+   * embedded in a public page (a site favicon, a social share image, ...), which browsers and
+   * social-media crawlers alike fetch with no session. Defaults `false`: a Domain Settings `file`
+   * field with no dedicated read route at all yet, same as before this option existed. */
+  public?: boolean;
 }
 
 export type FieldDefinition =
@@ -284,7 +293,7 @@ export const field = {
   },
 
   file(
-    opts: { accept?: string; preview?: 'image'; maxSize?: number } & FieldCommonOptions = {},
+    opts: { accept?: string; preview?: 'image'; maxSize?: number; public?: boolean } & FieldCommonOptions = {},
   ): FileFieldDefinition {
     return {
       ...base(opts),
@@ -292,6 +301,7 @@ export const field = {
       accept: opts.accept ?? (opts.preview === 'image' ? 'image/*' : undefined),
       preview: opts.preview,
       maxSize: opts.maxSize,
+      public: opts.public ?? false,
       hideInTable: opts.hideInTable ?? true
     };
   },

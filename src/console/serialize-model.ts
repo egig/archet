@@ -27,6 +27,12 @@ export interface ConsoleFieldMeta {
   accept?: string;
   preview?: 'image';
   maxSize?: number;
+  /** `field.file({ public: true })` — this field's current value is served with no auth from a
+   * fixed URL (Domain Settings only; see `core/serialize.ts`'s `siteAssetUrl`, applied server-side
+   * to the value itself before it ever reaches the client, so the console never needs to build
+   * this URL by hand). Metadata only — informational for now, e.g. a future "public" hint in the
+   * form. */
+  public?: boolean;
   /** set when the field was declared with `field.custom(name, base)` — see `core/field.ts`. Keys
    * the console client's `fieldRenderers` registry (`console/client/field-renderers.tsx`) so a
    * consumer app can swap in a custom form editor for this field, e.g. a rich-text editor for an
@@ -129,6 +135,7 @@ export function serializeField(key: string, f: ModelDefinition['fields'][string]
     meta.accept = f.accept;
     meta.preview = f.preview;
     meta.maxSize = f.maxSize;
+    meta.public = f.public;
   }
   return meta;
 }

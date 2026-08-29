@@ -2,20 +2,25 @@ import { PipelineError, type PipelineFn } from '../core/pipeline.js';
 import { listRowsByField, updateRow } from '../core/persistence.js';
 import { Page } from './models/page.model.js';
 
-/** Rejects a `slug` whose first path segment is `api` — the one prefix that's always reserved,
- * on every deployment, unconditionally (`/api/*` is hardcoded at every mount site, never
- * configurable). A slug colliding with the console's own mount point (`consolePath`, which *is*
- * configurable) can't be checked here — that value doesn't exist yet when this model is defined —
- * so it's handled instead by mount order at the router layer (see `router.ts`'s doc comment). */
+/** Path segments always reserved, on every deployment, unconditionally: `api` (`/api/*` is
+ * hardcoded at every mount site) plus the three well-known files `router.ts` registers ahead of
+ * its own `/:slug` catch-all (`robots.txt`, `sitemap.xml`) and ahead of that same catch-all in
+ * `serve.ts`'s mount order (`_site-assets`, `router/site-assets.ts`) — a `Page` at any of these
+ * slugs would silently never be reachable, always losing to the route registered first. A slug
+ * colliding with the console's own mount point (`consolePath`, which *is* configurable) can't be
+ * checked here — that value doesn't exist yet when this model is defined — so it's handled
+ * instead by mount order at the router layer (see `router.ts`'s doc comment). */
+const RESERVED_FIRST_SEGMENTS = new Set(['api', 'robots.txt', 'sitemap.xml', '_site-assets']);
+
 export const assertSlugNotReserved: PipelineFn = (ctx) => {
   const slug = ctx.input.slug;
   if (typeof slug !== 'string') return ctx;
   const firstSegment = slug.split('/')[0]?.toLowerCase();
-  if (firstSegment === 'api') {
+  if (firstSegment && RESERVED_FIRST_SEGMENTS.has(firstSegment)) {
     throw new PipelineError({
       code: 'VALIDATION_ERROR',
       status: 400,
-      fields: { slug: "can't start with 'api' — that path is reserved by the framework's own API router" },
+      fields: { slug: `can't start with '${firstSegment}' — that path is reserved by the framework` },
     });
   }
   return ctx;

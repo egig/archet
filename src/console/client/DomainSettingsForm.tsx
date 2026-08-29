@@ -135,7 +135,15 @@ export function DomainSettingsForm({ domain }: { domain: ConsoleDomainMeta }) {
         {domain.fields.map((f) => (
           <label key={f.key} className="block text-sm">
             <span className="mb-1 block text-gray-700">{f.label}</span>
-            <FieldInput field={f} inputKey={f.key} value={values[f.key]} onChange={handleChange} error={fieldErrors[f.key]} mode="update" />
+            <FieldInput
+              field={f}
+              inputKey={f.key}
+              value={values[f.key]}
+              onChange={handleChange}
+              error={fieldErrors[f.key]}
+              mode="update"
+              domainName={domain.name}
+            />
           </label>
         ))}
 

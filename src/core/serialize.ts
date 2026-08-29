@@ -1,4 +1,5 @@
 import type { ModelDefinition } from './model.js';
+import type { DomainDefinition } from './domain.js';
 
 const AUTO_TIMESTAMP_KEYS = ['createdAt', 'updatedAt', 'deletedAt'];
 
@@ -56,6 +57,40 @@ export function deriveFileFields(model: ModelDefinition, row: Record<string, unk
     if (value === null || value === undefined || typeof value !== 'object') continue;
     const { filename, mimeType, size } = value as { filename: unknown; mimeType: unknown; size: unknown };
     out[key] = { url: `/api/${model.name}/${String(out.id)}/${key}`, filename, mimeType, size };
+  }
+  return out;
+}
+
+/** The public, unauthenticated URL a `field.file({ public: true })` Domain Settings value is
+ * served at (`router/site-assets.ts`'s `GET /_site-assets/:domain/:field/:token`) — mirrors
+ * `deriveFileFields`'s `/api/:model/:id/:field` convention, but keyed by domain+field (Domain
+ * Settings has no row `id`, just one value per Domain) instead of a row. `token` is only the
+ * trailing, opaque id segment of the stored key (`domain-settings/${domain}/${field}/${id}`, see
+ * `console/router.ts`'s upload route) — never the full key, same "don't leak the raw storage key"
+ * reasoning as `deriveFileFields`. The route itself ignores `token` for the actual lookup (it
+ * always serves whichever value is currently stored); its only job is to give the URL a distinct
+ * identity per upload, so a long-lived `Cache-Control: immutable` is safe — replacing the file
+ * changes the URL, so a stale cached response is simply never requested again. */
+export function siteAssetUrl(domain: string, field: string, storedKey: string): string {
+  const token = storedKey.split('/').pop();
+  return `/_site-assets/${domain}/${field}/${token}`;
+}
+
+/** `deriveFileFields`'s counterpart for Domain Settings (ADR 0002): replaces each `kind: 'file'`
+ * setting's raw `{ key, filename, mimeType, size }` with `{ url, filename, mimeType, size }` when
+ * the field is `public: true` (see `siteAssetUrl`) — `key` is stripped either way, public or not,
+ * same "never let the raw storage key reach a client" rule `deriveFileFields` follows. A
+ * non-public `file` setting has no read route yet (nothing consumes it publicly today), so it's
+ * left as `{ filename, mimeType, size }` with no `url` — not fetchable, but not leaking its key
+ * either. Used by `console/router.ts`'s `/meta/domains/:name/settings` GET/PATCH responses. */
+export function deriveDomainSettingsFileFields(def: DomainDefinition, values: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...values };
+  for (const [key, f] of Object.entries(def.settingFields ?? {})) {
+    if (f.kind !== 'file') continue;
+    const value = out[key];
+    if (value === null || value === undefined || typeof value !== 'object') continue;
+    const { key: storedKey, filename, mimeType, size } = value as { key: string; filename: unknown; mimeType: unknown; size: unknown };
+    out[key] = { ...(f.public ? { url: siteAssetUrl(def.name, key, storedKey) } : {}), filename, mimeType, size };
   }
   return out;
 }

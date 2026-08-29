@@ -5,6 +5,7 @@
  * helpers, so nothing here ever interpolates unescaped block content into the page; `html`
  * blocks are the deliberate, permission-gated exception (see `block.model.ts`'s doc comment).
  */
+import { siteAssetUrl } from '../core/serialize.js';
 
 function escapeHtml(value: string): string {
   return value
@@ -57,6 +58,33 @@ function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
+/** The public path `router.ts` serves a page at — `/` for the home page (`isHome`), `/<slug>`
+ * otherwise. Shared with `router.ts`'s `sitemap.xml` route so the two can never drift on what a
+ * page's own URL looks like. */
+export function pagePathOf(page: Record<string, unknown>): string {
+  return page.isHome ? '/' : `/${asString(page.slug)}`;
+}
+
+/** `settings.favicon`/`settings.ogImage` (a `field.file({ public: true })` value, `{ key,
+ * filename, mimeType, size }` — see `core/storage.ts`'s `StoredFile`) turned into the public,
+ * unauthenticated URL `router/site-assets.ts` serves it at, or `undefined` if that setting was
+ * never uploaded. */
+function siteAssetUrlOf(settings: Record<string, unknown>, field: string): string | undefined {
+  const value = settings[field];
+  const key = value && typeof value === 'object' ? (value as { key?: unknown }).key : undefined;
+  return typeof key === 'string' ? siteAssetUrl('website', field, key) : undefined;
+}
+
+/** `siteUrl` (Domain Settings) turns a path this file already knows to be safe (its own
+ * `pagePathOf`/asset URLs, never raw user input) into an absolute URL — required for
+ * `og:image`/`og:url`/canonical/sitemap `<loc>`, which the relevant specs and social-media
+ * crawlers alike expect to be able to fetch directly, not resolve relative to the page. Returns
+ * `undefined` (letting a caller omit the tag entirely) when `siteUrl` isn't set, rather than
+ * emitting a relative URL those consumers wouldn't accept anyway. */
+function absoluteUrl(siteUrl: string, path: string): string | undefined {
+  return siteUrl ? `${siteUrl.replace(/\/+$/, '')}${path}` : undefined;
+}
+
 function renderBlock(block: Record<string, unknown>): string {
   const content = (block.content as Record<string, unknown> | null) ?? {};
   switch (block.type) {
@@ -107,21 +135,44 @@ export function renderPage(
   blocks: Record<string, unknown>[],
   settings: Record<string, unknown> = {},
 ): string {
+  const siteUrl = asString(settings.siteUrl);
   const siteTitle = asString(settings.title);
   const pageTitle = asString(page.title, 'Untitled');
-  const title = escapeHtml(siteTitle && siteTitle !== pageTitle ? `${pageTitle} — ${siteTitle}` : pageTitle);
+  const title = siteTitle && siteTitle !== pageTitle ? `${pageTitle} — ${siteTitle}` : pageTitle;
   const metaDescription = asString(page.metaDescription) || asString(settings.description);
   const globalCss = asString(settings.globalCss);
+  const headHtml = asString(settings.headHtml);
   const body = blocks.map(renderBlock).join('\n');
+
+  const canonicalUrl = absoluteUrl(siteUrl, pagePathOf(page));
+  const faviconUrl = siteAssetUrlOf(settings, 'favicon');
+  const ogImageUrl = siteAssetUrlOf(settings, 'ogImage');
+  const absoluteOgImageUrl = ogImageUrl ? absoluteUrl(siteUrl, ogImageUrl) : undefined;
+
+  // og:title/og:description/og:type don't need an absolute URL, so they're emitted regardless of
+  // `siteUrl` — only og:url/og:image (and canonical, above) require one the spec/crawlers can
+  // actually fetch, so those are skipped rather than emitted relative (see `absoluteUrl`).
+  const ogTags = [
+    `<meta property="og:title" content="${escapeAttr(title)}">`,
+    `<meta property="og:type" content="website">`,
+    canonicalUrl ? `<meta property="og:url" content="${escapeAttr(canonicalUrl)}">` : '',
+    metaDescription ? `<meta property="og:description" content="${escapeAttr(metaDescription)}">` : '',
+    absoluteOgImageUrl ? `<meta property="og:image" content="${escapeAttr(absoluteOgImageUrl)}">` : '',
+    `<meta name="twitter:card" content="${absoluteOgImageUrl ? 'summary_large_image' : 'summary'}">`,
+    absoluteOgImageUrl ? `<meta name="twitter:image" content="${escapeAttr(absoluteOgImageUrl)}">` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title}</title>
-${metaDescription ? `<meta name="description" content="${escapeAttr(metaDescription)}">\n` : ''}<style>${DEFAULT_STYLES}</style>
-${globalCss ? `<style>${globalCss}</style>\n` : ''}</head>
+<title>${escapeHtml(title)}</title>
+${metaDescription ? `<meta name="description" content="${escapeAttr(metaDescription)}">\n` : ''}${settings.noindex ? '<meta name="robots" content="noindex, nofollow">\n' : ''}${canonicalUrl ? `<link rel="canonical" href="${escapeAttr(canonicalUrl)}">\n` : ''}${faviconUrl ? `<link rel="icon" href="${escapeAttr(faviconUrl)}">\n` : ''}${ogTags}
+<style>${DEFAULT_STYLES}</style>
+${globalCss ? `<style>${globalCss}</style>\n` : ''}${headHtml ? `${headHtml}\n` : ''}</head>
 <body>
 <main class="rp-page">
 ${body}

@@ -1,9 +1,14 @@
 import { Hono, type Context } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { FileStorage } from '@flystorage/file-storage';
 import type { ModelDefinition } from '../core/model.js';
 import type { DomainDefinition } from '../core/domain.js';
+import type { FileFieldDefinition } from '../core/field.js';
 import { PipelineError } from '../core/pipeline.js';
 import { getDomainSettings, updateDomainSettings } from '../core/domain-settings-persistence.js';
+import { deriveDomainSettingsFileFields } from '../core/serialize.js';
+import { generateId } from '../core/id.js';
+import { DEFAULT_MAX_FILE_SIZE, matchesAccept, sniffMimeType, type StoredFile } from '../core/storage.js';
 import { resolveSessionUser } from '../auth/pipeline.js';
 import { toErrorResponse } from '../router/errors.js';
 import { readJsonBody } from '../router/create-router.js';
@@ -11,6 +16,15 @@ import { serializeModelMeta } from './serialize-model.js';
 import { serializeDomainSettingsMeta } from './serialize-domain.js';
 
 type AnyDb = PgDatabase<any, any, any>;
+
+/** Checks `def.settingFields` for a `kind: 'file'` entry — the Domain Settings counterpart of
+ * `router/create-router.ts`'s `resolveFileField`, just without that one's extra fallback into a
+ * custom operation's `params` (Domain Settings has no operations to search). */
+function resolveDomainFileField(def: DomainDefinition, key: string): FileFieldDefinition {
+  const f = def.settingFields?.[key];
+  if (f?.kind === 'file') return f;
+  throw new PipelineError({ code: 'NOT_FOUND', status: 404, message: `'${key}' is not a file setting on '${def.name}'` });
+}
 
 export interface ConsoleManifest {
   'main.js': string;
@@ -89,13 +103,18 @@ function assetPathFrom(c: Context, mountPath: string): string {
  *
  * `domainSettingsRegistry` (name -> DomainDefinition, default `{}`) backs the `/meta/domains*`
  * routes below the same way `registry` backs `/meta/models*` — optional, and defaulted, so an
- * existing caller that hasn't declared any Domains keeps compiling unchanged. */
+ * existing caller that hasn't declared any Domains keeps compiling unchanged.
+ *
+ * `storage` (optional, like `createApiRouter`'s) backs the settings upload route below — only
+ * needed once some Domain actually declares a `kind: 'file'` setting; omitted, that route 500s
+ * the same way `createApiRouter`'s own upload route does with no storage configured. */
 export function createConsoleRouter(
   assetSource: ConsoleAssetSource,
   registry: Record<string, ModelDefinition>,
   db: AnyDb,
   mountPath: string,
   domainSettingsRegistry: Record<string, DomainDefinition> = {},
+  storage?: FileStorage,
 ): Hono {
   const app = new Hono();
 
@@ -134,7 +153,7 @@ export function createConsoleRouter(
     const def = domainSettingsRegistry[c.req.param('name')];
     if (!def) throw new PipelineError({ code: 'DOMAIN_NOT_FOUND', status: 404 });
     const values = await getDomainSettings(db, def);
-    return c.json({ data: values });
+    return c.json({ data: deriveDomainSettingsFileFields(def, values) });
   });
 
   app.patch('/meta/domains/:name/settings', async (c) => {
@@ -143,7 +162,56 @@ export function createConsoleRouter(
     if (!def) throw new PipelineError({ code: 'DOMAIN_NOT_FOUND', status: 404 });
     const input = await readJsonBody(c);
     const values = await updateDomainSettings(db, def, input);
-    return c.json({ data: values });
+    return c.json({ data: deriveDomainSettingsFileFields(def, values) });
+  });
+
+  // `POST /meta/domains/:name/settings/:field/upload` — the Domain Settings counterpart of
+  // `createApiRouter`'s `POST /:model/:field/upload` (same two-step upload flow: this stores the
+  // blob and hands back a `StoredFile` reference, which the client then submits as the field's
+  // normal value on the following `PATCH .../settings`). Unlike that route, this one *does*
+  // require a session — every other `/meta/domains/*` route already does, and there's no
+  // "new record, no permission context yet" excuse here the way there is for a model create form
+  // (a Domain always has exactly one settings row, so there's always something to check auth
+  // against). Whether the resulting value ever becomes publicly readable is a separate question,
+  // decided per-field by `public` (`core/field.ts`) and enforced by `router/site-assets.ts` —
+  // upload access and read access are independent here, same as they are for a model's `file` field.
+  app.post('/meta/domains/:name/settings/:field/upload', async (c) => {
+    await resolveSessionUser(db, c.req.raw);
+    const def = domainSettingsRegistry[c.req.param('name')];
+    if (!def) throw new PipelineError({ code: 'DOMAIN_NOT_FOUND', status: 404 });
+    const field = resolveDomainFileField(def, c.req.param('field'));
+
+    const body = await c.req.parseBody();
+    const file = body.file;
+    if (!(file instanceof File)) {
+      throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { file: 'required (multipart field "file")' } });
+    }
+
+    const maxSize = field.maxSize ?? DEFAULT_MAX_FILE_SIZE;
+    if (file.size > maxSize) {
+      throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { file: `exceeds ${maxSize} byte limit` } });
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const mimeType = sniffMimeType(bytes, file.type);
+    if (field.accept && !matchesAccept(mimeType, field.accept)) {
+      throw new PipelineError({
+        code: 'VALIDATION_ERROR',
+        status: 400,
+        fields: { file: `must match '${field.accept}' (detected '${mimeType}')` },
+      });
+    }
+
+    if (!storage) {
+      throw new PipelineError({ code: 'INTERNAL', status: 500, message: 'this app has a Domain Settings `file` field but no FileStorage was passed to createConsoleRouter' });
+    }
+    const key = `domain-settings/${def.name}/${c.req.param('field')}/${generateId()}`;
+    // see `router/create-router.ts`'s own upload route for why this is `Buffer.from(bytes)`, not
+    // `bytes` itself — a plain `Uint8Array` gets silently corrupted by flystorage's stream conversion.
+    await storage.write(key, Buffer.from(bytes), { mimeType });
+
+    const stored: StoredFile = { key, filename: file.name, mimeType, size: bytes.byteLength };
+    return c.json({ data: stored }, 201);
   });
 
   app.get('/assets/*', async (c) => {

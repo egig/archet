@@ -196,13 +196,10 @@ export interface UploadedFile {
   size: number;
 }
 
-/** `POST /api/:model/:field/upload` (Q3's two-step upload) — the caller sends the returned
- * `UploadedFile` as the field's own create/update value. Bypasses `request()`: a multipart body
- * must not carry a manually-set `content-type` (the browser sets the boundary itself). */
-export async function uploadFile(model: string, field: string, file: File): Promise<UploadedFile> {
+async function uploadTo(url: string, file: File): Promise<UploadedFile> {
   const body = new FormData();
   body.append('file', file);
-  const res = await fetch(`/api/${encodeURIComponent(model)}/${encodeURIComponent(field)}/upload`, { method: 'POST', body });
+  const res = await fetch(url, { method: 'POST', body });
 
   let json: unknown = null;
   try {
@@ -215,6 +212,21 @@ export async function uploadFile(model: string, field: string, file: File): Prom
     throw new ApiRequestError(res.status, errorBody);
   }
   return (json as { data: UploadedFile }).data;
+}
+
+/** `POST /api/:model/:field/upload` (Q3's two-step upload) — the caller sends the returned
+ * `UploadedFile` as the field's own create/update value. Bypasses `request()`: a multipart body
+ * must not carry a manually-set `content-type` (the browser sets the boundary itself). */
+export function uploadFile(model: string, field: string, file: File): Promise<UploadedFile> {
+  return uploadTo(`/api/${encodeURIComponent(model)}/${encodeURIComponent(field)}/upload`, file);
+}
+
+/** `POST {MOUNT_PREFIX}/meta/domains/:domain/settings/:field/upload` — `uploadFile`'s Domain
+ * Settings counterpart (`console/router.ts`); same two-step flow, the returned `UploadedFile` is
+ * submitted as the field's value on the following `updateDomainSettings`. Console-prefixed
+ * (`MOUNT_PREFIX`), unlike `uploadFile`, because it lives on the console router, not `/api`. */
+export function uploadDomainSettingsFile(domain: string, field: string, file: File): Promise<UploadedFile> {
+  return uploadTo(`${MOUNT_PREFIX}/meta/domains/${encodeURIComponent(domain)}/settings/${encodeURIComponent(field)}/upload`, file);
 }
 
 export function hasPermission(permissions: AuthUser['permissions'], resource: string, action: string): boolean {

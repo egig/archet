@@ -60,7 +60,7 @@ export { getDomainSettings, updateDomainSettings } from './domain-settings-persi
 
 export { generateId } from './id.js';
 
-export { normalizeTimestamps, redactSensitiveFields, deriveFileFields } from './serialize.js';
+export { normalizeTimestamps, redactSensitiveFields, deriveFileFields, deriveDomainSettingsFileFields, siteAssetUrl } from './serialize.js';
 
 export { defineConfig } from './config.js';
 export type { FrameworkConfig, StorageConfig } from './config.js';

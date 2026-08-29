@@ -8,6 +8,7 @@ import { buildRegistryMap, buildDomainSettingsRegistryMap } from '../../router/r
 import { createAuthRouter } from '../../auth/router.js';
 import { createAutomationRouter } from '../../automation/router.js';
 import { createConsoleRouter } from '../../console/router.js';
+import { createSiteAssetsRouter } from '../../router/site-assets.js';
 import { createWebsiteRouter } from '../../website/router.js';
 import { createNodeFsAssetSource } from '../../console/node-assets.js';
 import { buildStorageAdapter } from '../../core/storage-config.js';
@@ -55,8 +56,14 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   app.route('/api', createApiRouter(registry, db, storage));
   app.route(
     dirs.consolePath,
-    createConsoleRouter(createNodeFsAssetSource(generatedDir), registry, db, dirs.consolePath, domainSettingsRegistry),
+    createConsoleRouter(createNodeFsAssetSource(generatedDir), registry, db, dirs.consolePath, domainSettingsRegistry, storage),
   );
+  // `/_site-assets/*` — a `field.file({ public: true })` Domain Settings value (e.g. the website
+  // Domain's favicon/social share image), served with no auth at all. Fixed, non-configurable
+  // prefix (unlike `consolePath`) so a public asset's URL never moves; mounted before the website
+  // router below for the same reason `/api`/the console are — that catch-all `/:slug` route must
+  // never be able to shadow it.
+  app.route('/_site-assets', createSiteAssetsRouter(db, storage, domainSettingsRegistry));
   app.route('/', createWebsiteRouter(db));
 
   const port = Number(process.env.PORT ?? 3000);
