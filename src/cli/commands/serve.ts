@@ -10,7 +10,7 @@ import { createAutomationRouter } from '../../automation/router.js';
 import { createConsoleRouter } from '../../console/router.js';
 import { createWebsiteRouter } from '../../website/router.js';
 import { createNodeFsAssetSource } from '../../console/node-assets.js';
-import { createNodeFsStorageAdapter } from '../../core/storage-node.js';
+import { buildStorageAdapter } from '../../core/storage-config.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
 
 /**
@@ -34,11 +34,13 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   const client = postgres(config.db.connectionString);
   const db = drizzle(client);
 
-  // default local storage for `file` fields — sibling to `<generatedDir>/console`, gitignored
-  // the same way (`generatedDir` itself is). A production deploy target (e.g. Cloudflare) builds
-  // its own adapter (R2, ...) and passes it to `createApiRouter` instead — see
+  // built from `config.storage` (default: local fs, sibling to `<generatedDir>/console`,
+  // gitignored the same way `generatedDir` itself is) — see `buildStorageAdapter`
+  // (core/storage-config.ts). A production deploy target without Node/Bun's plain-config
+  // resolution (e.g. Cloudflare, whose R2 binding only exists inside a Worker's `fetch` handler)
+  // builds its own `FileStorage` and passes it to `createApiRouter` instead — see
   // `example/deploy/cloudflare/worker.ts`.
-  const storage = createNodeFsStorageAdapter(path.join(generatedDir, 'storage'));
+  const storage = await buildStorageAdapter(config.storage, path.join(generatedDir, 'storage'));
 
   const app = new Hono();
   // more specific prefix first: `/api/auth/*` and `/api/automation/*` must win over the generic

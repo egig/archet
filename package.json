@@ -26,7 +26,11 @@
     "./console": "./dist/console/index.js",
     "./console/client": "./dist/console/client/index.js",
     "./console/node": "./dist/console/node-assets.js",
-    "./storage/node": "./dist/core/storage-node.js"
+    "./storage": "./dist/core/storage-config.js",
+    "./storage/node": "./dist/core/storage-node.js",
+    "./storage/s3": "./dist/core/storage-s3.js",
+    "./storage/gcs": "./dist/core/storage-gcs.js",
+    "./storage/azure": "./dist/core/storage-azure.js"
   },
   "scripts": {
     "build": "bun scripts/build.ts",
@@ -43,6 +47,8 @@
     "@assistant-ui/react": "^0.15.17",
     "@assistant-ui/react-data-stream": "^0.12.28",
     "@assistant-ui/react-markdown": "^0.14.13",
+    "@flystorage/file-storage": "^1.2.2",
+    "@flystorage/local-fs": "^1.2.0",
     "@heroicons/react": "^2.2.0",
     "@hono/node-server": "^1.13.7",
     "@tailwindcss/cli": "^4.3.3",
@@ -60,9 +66,42 @@
   },
   "peerDependencies": {
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "@aws-sdk/client-s3": "^3.1121.0",
+    "@azure/storage-blob": "^12.33.0",
+    "@flystorage/aws-s3": "^1.2.0",
+    "@flystorage/azure-storage-blob": "^1.2.0",
+    "@flystorage/google-cloud-storage": "^1.2.0",
+    "@google-cloud/storage": "^7.17.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "@azure/storage-blob": {
+      "optional": true
+    },
+    "@flystorage/aws-s3": {
+      "optional": true
+    },
+    "@flystorage/azure-storage-blob": {
+      "optional": true
+    },
+    "@flystorage/google-cloud-storage": {
+      "optional": true
+    },
+    "@google-cloud/storage": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1121.0",
+    "@azure/storage-blob": "^12.33.0",
+    "@flystorage/aws-s3": "^1.2.0",
+    "@flystorage/azure-storage-blob": "^1.2.0",
+    "@flystorage/google-cloud-storage": "^1.2.0",
+    "@flystorage/in-memory": "^1.1.0",
+    "@google-cloud/storage": "^7.17.0",
     "@neondatabase/serverless": "^1.1.0",
     "@types/bun": "^1.4.0",
     "@types/node": "^22.10.2",

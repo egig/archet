@@ -3,6 +3,8 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
+import { FileStorage } from '@flystorage/file-storage';
+import { InMemoryStorageAdapter } from '@flystorage/in-memory';
 import { defineModel, field } from '../src/core/index.js';
 import { presetFields } from '../src/auth/index.js';
 import { createApiRouter } from '../src/router/create-router.js';
@@ -365,16 +367,7 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
         fields: { image: field.file() },
         api: { public: true },
       });
-      const blobs = new Map<string, { data: Uint8Array; mimeType: string }>();
-      const memoryStorage = {
-        put: async (key: string, data: Uint8Array, opts: { mimeType: string }) => {
-          blobs.set(key, { data, mimeType: opts.mimeType });
-        },
-        get: async (key: string) => blobs.get(key) ?? null,
-        delete: async (key: string) => {
-          blobs.delete(key);
-        },
-      };
+      const memoryStorage = new FileStorage(new InMemoryStorageAdapter());
       const photoApp = createApiRouter({ opphotos: Photo }, db, memoryStorage);
       const res = await photoApp.request('/opphotos/image/upload', {
         method: 'POST',
@@ -386,6 +379,51 @@ describeIfDb('createApiRouter (against a live Postgres)', () => {
       });
       expect(res.status).toBe(201);
       expect(((await res.json()) as { data: { filename: string } }).data.filename).toBe('x.jpg');
+    });
+
+    it('GET /:model/:id/:field streams a file field back from the flystorage-backed storage, and 404s if the blob is gone', async () => {
+      const Photo = defineModel('opphotos2', { fields: { image: field.file() }, api: { public: true } });
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS opphotos2 (
+          id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+          image jsonb
+        )`);
+      try {
+        const memoryStorage = new FileStorage(new InMemoryStorageAdapter());
+        const photoApp = createApiRouter({ opphotos2: Photo }, db, memoryStorage);
+
+        const bytes = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 4, 5]);
+        const uploadRes = await photoApp.request('/opphotos2/image/upload', {
+          method: 'POST',
+          body: (() => {
+            const form = new FormData();
+            form.append('file', new File([bytes], 'pic.jpg', { type: 'image/jpeg' }));
+            return form;
+          })(),
+        });
+        expect(uploadRes.status).toBe(201);
+        const stored = ((await uploadRes.json()) as { data: { key: string } }).data;
+
+        const createRes = await photoApp.request('/opphotos2', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ image: stored }),
+        });
+        expect(createRes.status).toBe(201);
+        const id = ((await createRes.json()) as { data: { id: string } }).data.id;
+
+        const downloadRes = await photoApp.request(`/opphotos2/${id}/image`);
+        expect(downloadRes.status).toBe(200);
+        expect(downloadRes.headers.get('content-type')).toBe('image/jpeg');
+        expect(new Uint8Array(await downloadRes.arrayBuffer())).toEqual(bytes);
+
+        // the row still references the blob, but it's gone from storage — must 404 cleanly, not throw/hang.
+        await memoryStorage.deleteFile(stored.key);
+        const missingRes = await photoApp.request(`/opphotos2/${id}/image`);
+        expect(missingRes.status).toBe(404);
+      } finally {
+        await db.execute(sql`DROP TABLE IF EXISTS opphotos2`);
+      }
     });
   });
 });

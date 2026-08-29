@@ -1,5 +1,5 @@
 /** The value a `file` field's column holds (jsonb) — `key` addresses the blob in whatever
- * `FileStorageAdapter` the app configured; `filename`/`mimeType`/`size` are display metadata
+ * `FileStorage` the app configured; `filename`/`mimeType`/`size` are display metadata
  * captured at upload time. This is also the shape a client submits as the field's value on
  * create/update (see `core/validation.ts`), returned as-is by the upload endpoint
  * (`router/create-router.ts`). API responses that *read* a record never expose this shape
@@ -12,19 +12,19 @@ export interface StoredFile {
   size: number;
 }
 
-/** Swappable blob backend for `file` fields — mirrors `ConsoleAssetSource`
- * (`console/router.ts`): a small interface passed directly into `createApiRouter`
- * (constructor injection) rather than resolved from `FrameworkConfig`, because unlike
- * `db.connectionString` a storage backend isn't always constructible from a plain value at
- * config-load time (Cloudflare R2 is an `env`-injected binding, only available inside a Worker's
- * `fetch` handler). Ships a Node fs implementation (`core/storage-node.ts`, `ratchet/storage/node`);
- * other backends (R2, S3, ...) are the app author's own adapter, built the same way
- * `example/deploy/cloudflare/worker.ts` builds its `ConsoleAssetSource`. */
-export interface FileStorageAdapter {
-  put(key: string, data: Uint8Array, opts: { mimeType: string }): Promise<void>;
-  get(key: string): Promise<{ data: Uint8Array; mimeType: string } | null>;
-  delete(key: string): Promise<void>;
-}
+/** Blob backend for `file` fields — flystorage's own `FileStorage` facade
+ * (`@flystorage/file-storage`), constructed by one of the `ratchet/storage/*` factories
+ * (`./node` for local fs, `./s3`, `./gcs`, `./azure` for the well-known cloud backends) or
+ * `buildStorageAdapter` (`ratchet/storage`) from a declarative `FrameworkConfig.storage`.
+ * Passed directly into `createApiRouter` (constructor injection) rather than resolved from
+ * `FrameworkConfig` internally — mirrors `ConsoleAssetSource` (`console/router.ts`) — because
+ * unlike `db.connectionString` a storage backend isn't always constructible from a plain config
+ * value at load time (Cloudflare R2 is an `env`-injected binding, only available inside a
+ * Worker's `fetch` handler, so it stays hand-wired with its own flystorage `StorageAdapter` —
+ * see `example/deploy/cloudflare/worker.ts`). Re-exported here so callers that only need the
+ * type (e.g. `FrameworkConfig` consumers) don't have to add their own `@flystorage/file-storage`
+ * import. */
+export type { FileStorage } from '@flystorage/file-storage';
 
 /** Applies when a `file` field omits `maxSize`. */
 export const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;

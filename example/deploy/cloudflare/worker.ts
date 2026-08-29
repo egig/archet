@@ -15,23 +15,31 @@
  * below just adapts that binding to ratchet's `ConsoleAssetSource` interface.
  *
  * File storage: `env.FILES` is a native R2 bucket binding (wrangler.jsonc's `r2_buckets`) —
- * `createR2StorageAdapter` below adapts it to ratchet's `FileStorageAdapter` the same way
- * `createAssetsBindingSource` adapts `env.ASSETS`. Neither uses `FrameworkConfig` for this: R2's
- * binding only exists inside a Worker's `fetch` handler, so it can't be resolved from a plain
- * config value the way `db.connectionString` can (see `FileStorageAdapter`'s doc comment,
- * `@egig/ratchet/core`) — this file constructs and injects the concrete adapter itself.
+ * `R2StorageAdapter` below implements flystorage's `StorageAdapter` contract directly against
+ * it, wrapped in a `FileStorage` the same way `ratchet/storage/s3`'s `createS3Storage` wraps
+ * `AwsS3StorageAdapter`. This can't just reuse `ratchet/storage/s3` pointed at R2's S3-compatible
+ * API instead: that would trade the free binding (no egress charges, no separate credentials)
+ * for an HTTP round trip authenticated with R2 API tokens — not a good trade for something
+ * already running inside the very Worker the binding is scoped to. Neither uses `FrameworkConfig`
+ * for this: R2's binding only exists inside a Worker's `fetch` handler, so it can't be resolved
+ * from a plain config value the way `db.connectionString` can (see `core/storage.ts`'s
+ * `FileStorage` doc comment) — this file constructs and injects the concrete adapter itself.
+ * Only `write`/`read`/`deleteFile` are real — those are the only three `StorageAdapter` methods
+ * `createApiRouter` ever calls (see `router/create-router.ts`); every other method the interface
+ * requires is stubbed to throw, since ratchet never reaches them.
  *
  * The literal `'/console'` below must match `consolePath` in `ratchet.config.ts` if you've
  * customized it (see docs/guide/console.md) — ratchet doesn't patch this file for you.
  */
+import { Readable } from 'node:stream';
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { FileStorage, FileWasNotFound, type StatEntry, type StorageAdapter } from '@flystorage/file-storage';
 import { createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
 import { createAuthRouter } from '@egig/ratchet/auth';
 import { createConsoleRouter, type ConsoleAsset, type ConsoleAssetSource, type ConsoleManifest } from '@egig/ratchet/console';
 import { createWebsiteRouter } from '@egig/ratchet/website';
-import type { FileStorageAdapter } from '@egig/ratchet/core';
 import * as registryModule from '../../.ratchet/registry.js';
 
 const CONSOLE_PATH = '/console';
@@ -52,20 +60,81 @@ interface Env {
   FILES: R2Bucket;
 }
 
-function createR2StorageAdapter(bucket: R2Bucket): FileStorageAdapter {
-  return {
-    async put(key, data, opts) {
-      await bucket.put(key, data, { httpMetadata: { contentType: opts.mimeType } });
-    },
-    async get(key) {
-      const obj = await bucket.get(key);
-      if (!obj) return null;
-      return { data: new Uint8Array(await obj.arrayBuffer()), mimeType: obj.httpMetadata?.contentType ?? 'application/octet-stream' };
-    },
-    async delete(key) {
-      await bucket.delete(key);
-    },
-  };
+function notSupported(method: string): Error {
+  return new Error(`R2StorageAdapter.${method}() is not implemented — createApiRouter never calls it`);
+}
+
+/** flystorage `StorageAdapter` over a native R2 binding. Only `write`/`read`/`deleteFile` do real
+ * work; every other method the interface requires is a stub (see this file's top doc comment for
+ * why that's safe here). */
+class R2StorageAdapter implements StorageAdapter {
+  constructor(private readonly bucket: R2Bucket) {}
+
+  async write(path: string, contents: Readable, options: { mimeType?: string }): Promise<void> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of contents) chunks.push(chunk as Buffer);
+    await this.bucket.put(path, Buffer.concat(chunks), { httpMetadata: { contentType: options.mimeType } });
+  }
+
+  async read(path: string): Promise<Readable> {
+    const obj = await this.bucket.get(path);
+    if (!obj) throw FileWasNotFound.atLocation(path, {});
+    return Readable.from(Buffer.from(await obj.arrayBuffer()));
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    await this.bucket.delete(path);
+  }
+
+  async fileExists(path: string): Promise<boolean> {
+    return (await this.bucket.get(path)) !== null;
+  }
+
+  createDirectory(): Promise<void> {
+    throw notSupported('createDirectory');
+  }
+  copyFile(): Promise<void> {
+    throw notSupported('copyFile');
+  }
+  moveFile(): Promise<void> {
+    throw notSupported('moveFile');
+  }
+  stat(): Promise<StatEntry> {
+    throw notSupported('stat');
+  }
+  list(): AsyncGenerator<StatEntry> {
+    throw notSupported('list');
+  }
+  changeVisibility(): Promise<void> {
+    throw notSupported('changeVisibility');
+  }
+  visibility(): Promise<string> {
+    throw notSupported('visibility');
+  }
+  deleteDirectory(): Promise<void> {
+    throw notSupported('deleteDirectory');
+  }
+  directoryExists(): Promise<boolean> {
+    throw notSupported('directoryExists');
+  }
+  publicUrl(): Promise<string> {
+    throw notSupported('publicUrl');
+  }
+  temporaryUrl(): Promise<string> {
+    throw notSupported('temporaryUrl');
+  }
+  checksum(): Promise<string> {
+    throw notSupported('checksum');
+  }
+  mimeType(): Promise<string> {
+    throw notSupported('mimeType');
+  }
+  lastModified(): Promise<number> {
+    throw notSupported('lastModified');
+  }
+  fileSize(): Promise<number> {
+    throw notSupported('fileSize');
+  }
 }
 
 /** `directory` in wrangler.jsonc points straight at `.ratchet/console`, so paths here are
@@ -105,7 +174,7 @@ export default {
     // keeps a page slug from ever shadowing `/api`/the console.
     const app = new Hono();
     app.route('/api/auth', createAuthRouter(db));
-    app.route('/api', createApiRouter(registry, db, createR2StorageAdapter(env.FILES)));
+    app.route('/api', createApiRouter(registry, db, new FileStorage(new R2StorageAdapter(env.FILES))));
     app.route(CONSOLE_PATH, createConsoleRouter(createAssetsBindingSource(env.ASSETS), registry, db, CONSOLE_PATH));
     app.route('/', createWebsiteRouter(db));
 

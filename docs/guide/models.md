@@ -61,7 +61,17 @@ avatar: field.file({ preview: 'image' }),       // accept defaults to 'image/*'
 resume: field.file({ accept: 'application/pdf', maxSize: 5 * 1024 * 1024 }),
 ```
 
-A `file` field stores a reference (`{ key, filename, mimeType, size }`, jsonb), not the bytes — the actual blob lives in whatever `FileStorageAdapter` the app passes to `createApiRouter(registry, db, storage)` (a Node filesystem adapter, `ratchet/storage/node`, is the default under `ratchet serve`; other backends — R2, S3, ... — are the app's own adapter, injected the same way a console asset source is, since a backend like R2 isn't resolvable from a plain config value). Uploading is two steps:
+A `file` field stores a reference (`{ key, filename, mimeType, size }`, jsonb), not the bytes — the actual blob lives in whatever [flystorage](https://flystorage.dev) `FileStorage` the app passes to `createApiRouter(registry, db, storage)`. Under `ratchet serve` this is built automatically from an optional `storage` key in `ratchet.config.ts`:
+
+```ts
+export default defineConfig({
+  db: { connectionString: process.env.DATABASE_URL! },
+  storage: { driver: 's3', bucket: process.env.S3_BUCKET!, region: 'us-east-1' },
+  // driver: 'local' (default — no config needed) | 's3' | 'gcs' | 'azure'
+});
+```
+
+`driver: 's3'`'s `endpoint`/`forcePathStyle` options also cover S3-compatible services (R2's S3 API, MinIO, DigitalOcean Spaces, Backblaze B2, ...), so one driver reaches most providers. Each cloud driver's adapter + SDK is a peer dependency behind its own subpath (`ratchet/storage/s3`, `/gcs`, `/azure`) — installing one doesn't pull in the others. Omitting `storage` entirely keeps today's zero-config default: local fs under `<generatedDir>/storage`. A deploy target that can't resolve credentials from plain config at load time (Cloudflare's R2 binding only exists inside a Worker's `fetch` handler) builds and injects its own `FileStorage` instead, the same way it builds its own console asset source — see `example/deploy/cloudflare/worker.ts`. Uploading is two steps:
 
 1. `POST /api/:model/:field/upload` (multipart, form field `file`) stores the blob and returns the reference.
 2. That reference is sent as the field's own value on the normal `POST`/`PATCH /api/:model` call.

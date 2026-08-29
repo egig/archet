@@ -34,7 +34,7 @@ export { treeFieldOf, wouldCreateTreeCycle } from './tree.js';
 export type { TreeField } from './tree.js';
 
 export { DEFAULT_MAX_FILE_SIZE, sniffMimeType, matchesAccept } from './storage.js';
-export type { FileStorageAdapter, StoredFile } from './storage.js';
+export type { FileStorage, StoredFile } from './storage.js';
 
 export { defineModel, RESERVED_OPERATION_NAMES } from './model.js';
 export type {
@@ -63,4 +63,4 @@ export { generateId } from './id.js';
 export { normalizeTimestamps, redactSensitiveFields, deriveFileFields } from './serialize.js';
 
 export { defineConfig } from './config.js';
-export type { FrameworkConfig } from './config.js';
+export type { FrameworkConfig, StorageConfig } from './config.js';
