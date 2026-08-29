@@ -21,6 +21,8 @@
     "./auth/console-forms": "./dist/auth/console-forms.js",
     "./automation": "./dist/automation/index.js",
     "./workspace": "./dist/workspace/index.js",
+    "./website": "./dist/website/index.js",
+    "./website/console-forms": "./dist/website/console-forms.js",
     "./console": "./dist/console/index.js",
     "./console/client": "./dist/console/client/index.js",
     "./console/node": "./dist/console/node-assets.js",

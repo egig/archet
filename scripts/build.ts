@@ -3,7 +3,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const SRC_DIRS = ['core', 'cli', 'codegen', 'router', 'auth', 'automation', 'workspace', 'console'];
+const SRC_DIRS = ['core', 'cli', 'codegen', 'router', 'auth', 'automation', 'workspace', 'website', 'console'];
 
 function walk(dir: string, out: string[]): string[] {
   for (const entry of readdirSync(dir)) {
