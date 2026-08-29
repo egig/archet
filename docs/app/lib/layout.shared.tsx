@@ -1,5 +1,4 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
-import Image from 'next/image';
 import { appName, gitConfig } from './shared';
 
 export function baseOptions(): BaseLayoutProps {
@@ -7,14 +6,19 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: (
         <>
-          <Image src="/logo.png" alt={appName} width={24} height={24} className="block dark:hidden" priority />
-          <Image
-            src="/logo-dark.png"
+          <img
+            src={`${import.meta.env.BASE_URL}logo.png`}
+            alt={appName}
+            width={24}
+            height={24}
+            className="block dark:hidden"
+          />
+          <img
+            src={`${import.meta.env.BASE_URL}logo-dark.png`}
             alt={appName}
             width={24}
             height={24}
             className="hidden dark:block"
-            priority
           />
           <span className="font-medium">{appName}</span>
         </>

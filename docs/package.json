@@ -2,28 +2,32 @@
   "name": "@egig/ratchet-docs",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "node scripts/sync-changelog.mjs && next dev",
-    "build": "node scripts/sync-changelog.mjs && next build",
-    "start": "serve out"
+    "dev": "node scripts/sync-changelog.mjs && react-router dev",
+    "build": "node scripts/sync-changelog.mjs && react-router build && node scripts/flatten-prerender.mjs",
+    "start": "node scripts/preview.mjs",
+    "typecheck": "react-router typegen && tsc --noEmit"
   },
   "dependencies": {
     "fumadocs-core": "^16.15.4",
     "fumadocs-mdx": "^15.4.0",
     "fumadocs-ui": "^16.15.4",
-    "next": "^16.3.3",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router": "^8.3.1",
+    "isbot": "^5"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
+    "@react-router/dev": "^8.3.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/mdx": "^2.0.14",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "postcss": "^8.5.26",
     "serve": "^14.2.6",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vite": "^8.2.2"
   }
 }

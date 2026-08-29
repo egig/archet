@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/ratchet/**", "destination": "/ratchet/404.html" }]
+}

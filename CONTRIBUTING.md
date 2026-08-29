@@ -81,13 +81,13 @@ bun run serve              # ratchet serve inside example/
 
 ## Docs
 
-Docs are a [Fumadocs](https://fumadocs.dev) (Next.js) site under [`docs/`](docs/),
+Docs are a [Fumadocs](https://fumadocs.dev) (React Router) site under [`docs/`](docs/),
 with its own `package.json` — install its dependencies once with `bun install`
 at the repo root (it's a Bun workspace member):
 
 ```sh
 bun run docs:dev       # local preview with hot reload
-bun run docs:build     # static export to docs/out/
+bun run docs:build     # prerendered static build to docs/build/client/
 ```
 
 User-facing changes should update the relevant page in `docs/content/docs/` and

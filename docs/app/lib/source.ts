@@ -1,19 +1,16 @@
 import { loader } from 'fumadocs-core/source';
 import { defineDocs } from 'fumadocs-mdx/macro';
-import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
+import { docsRoute } from './shared';
 
-const docs = defineDocs({
+export const docs = defineDocs({
   dir: 'content/docs',
   docs: {
-    schema: pageSchema,
-  },
-  meta: {
-    schema: metaSchema,
+    async: true,
   },
 });
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
-  baseUrl: '/docs',
   source: docs.toFumadocsSource(),
+  baseUrl: docsRoute,
 });

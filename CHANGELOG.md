@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Docs site migrated from VitePress to [Fumadocs](https://fumadocs.dev)**: `docs/` is now a Next.js app (static-exported for GitHub Pages) with its own `package.json`, installed as part of the repo's Bun workspace. Content lives under `docs/content/docs/*.mdx`; the same guides, at the same `/docs/...` URL shape (`/guide/*` -> `/docs/*`).
+- **Docs site migrated from VitePress to [Fumadocs](https://fumadocs.dev) on React Router**: `docs/` is now a React Router (framework mode, SPA/prerendered, matching the console's own router) app with its own `package.json`, installed as part of the repo's Bun workspace. Content lives under `docs/content/docs/*.mdx`; the same guides, at the same `/docs/...` URL shape (`/guide/*` -> `/docs/*`).
 
 ### Added
 

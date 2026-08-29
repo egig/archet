@@ -1,5 +1,7 @@
-import Link from 'next/link';
-import Image from 'next/image';
+import type { Route } from './+types/home';
+import { HomeLayout } from 'fumadocs-ui/layouts/home';
+import { Link } from 'react-router';
+import { baseOptions } from '@/lib/layout.shared';
 
 const features = [
   {
@@ -30,35 +32,46 @@ const features = [
   },
 ];
 
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: 'Ratchet' },
+    {
+      name: 'description',
+      content:
+        'RATher an arCHEType, you build something out of. TypeScript models -> Postgres schema, codegen, and composable pipelines.',
+    },
+  ];
+}
+
 export default function HomePage() {
   return (
-    <>
+    <HomeLayout {...baseOptions()}>
       <div className="flex flex-col items-center text-center gap-6 px-4 py-24">
-        <Image src="/logo.png" alt="Ratchet" width={96} height={96} className="block dark:hidden" priority />
-        <Image
-          src="/logo-dark.png"
+        <img
+          src={`${import.meta.env.BASE_URL}logo.png`}
+          alt="Ratchet"
+          width={96}
+          height={96}
+          className="block dark:hidden"
+        />
+        <img
+          src={`${import.meta.env.BASE_URL}logo-dark.png`}
           alt="Ratchet"
           width={96}
           height={96}
           className="hidden dark:block"
-          priority
         />
         <h1 className="text-4xl font-bold">Ratchet</h1>
         <p className="text-xl text-fd-muted-foreground">Models in, App out.</p>
-        <p className="max-w-xl text-fd-muted-foreground">
-          RATher an arCHEType, you build something out of.
-        </p>
+        <p className="max-w-xl text-fd-muted-foreground">RATher an arCHEType, you build something out of.</p>
         <div className="flex gap-4">
           <Link
-            href="/docs/getting-started"
+            to="/docs/getting-started"
             className="rounded-md bg-fd-primary px-4 py-2 font-medium text-fd-primary-foreground"
           >
             Get Started
           </Link>
-          <Link
-            href="https://github.com/egig/ratchet"
-            className="rounded-md border px-4 py-2 font-medium"
-          >
+          <Link to="https://github.com/egig/ratchet" className="rounded-md border px-4 py-2 font-medium">
             View on GitHub
           </Link>
         </div>
@@ -71,6 +84,6 @@ export default function HomePage() {
           </div>
         ))}
       </div>
-    </>
+    </HomeLayout>
   );
 }

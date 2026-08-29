@@ -6,9 +6,6 @@
 content/docs/changelog.mdx
 
 # build output
-/.next/
-/out/
+/.react-router/
+/build/
 *.tsbuildinfo
-
-# misc
-next-env.d.ts
