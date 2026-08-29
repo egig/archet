@@ -8,6 +8,7 @@ import { buildRegistryMap, buildDomainSettingsRegistryMap } from '../../router/r
 import { createAuthRouter } from '../../auth/router.js';
 import { createAutomationRouter } from '../../automation/router.js';
 import { createConsoleRouter } from '../../console/router.js';
+import { createWebsiteRouter } from '../../website/router.js';
 import { createNodeFsAssetSource } from '../../console/node-assets.js';
 import { createNodeFsStorageAdapter } from '../../core/storage-node.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
@@ -42,8 +43,11 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   const app = new Hono();
   // more specific prefix first: `/api/auth/*` and `/api/automation/*` must win over the generic
   // `/api/:model` pattern, and all three must win over the console router — which is registered
-  // last since `consolePath` can be '/' (root mount), where its own catch-all would otherwise
-  // swallow every path.
+  // next since `consolePath` can be '/' (root mount), where its own catch-all would otherwise
+  // swallow every path. The website router (public page rendering) is registered last of all —
+  // its own `/:slug` route is a catch-all too, and mounting it last means a page slug that
+  // happens to collide with `/api` or the console's mount point always loses to the router
+  // already claiming that path (see `website/router.ts`'s own doc comment).
   app.route('/api/auth', createAuthRouter(db));
   app.route('/api/automation', createAutomationRouter(db, registry));
   app.route('/api', createApiRouter(registry, db, storage));
@@ -51,6 +55,7 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
     dirs.consolePath,
     createConsoleRouter(createNodeFsAssetSource(generatedDir), registry, db, dirs.consolePath, domainSettingsRegistry),
   );
+  app.route('/', createWebsiteRouter(db));
 
   const port = Number(process.env.PORT ?? 3000);
   const server = Bun.serve({ fetch: app.fetch, port });

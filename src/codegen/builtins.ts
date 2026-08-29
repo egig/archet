@@ -3,6 +3,8 @@ import { WorkTitle } from '../workspace/models/index.js';
 import { Agent, Chat, Message, Provider } from '../automation/models/index.js';
 import { AutomationDomain } from '../automation/domain.js';
 import { Workspace, WorkspaceView } from '../workspace/models/index.js';
+import { Page, Block } from '../website/models/index.js';
+import { WebsiteDomain } from '../website/domain.js';
 import type { ScannedModel } from './scan.js';
 import type { ScannedDomain } from './scan-domains.js';
 import type { ScannedForm } from './scan-forms.js';
@@ -26,6 +28,8 @@ export const BUILTIN_MODELS: ScannedModel[] = [
   { filePath: '@egig/ratchet/automation (Message)', exportName: 'Message', model: Message, builtinPackage: '@egig/ratchet/automation', domain: 'automation' },
   { filePath: '@egig/ratchet/workspace (Workspace)', exportName: 'Workspace', model: Workspace, builtinPackage: '@egig/ratchet/workspace', domain: 'workspace' },
   { filePath: '@egig/ratchet/workspace (WorkspaceView)', exportName: 'WorkspaceView', model: WorkspaceView, builtinPackage: '@egig/ratchet/workspace', domain: 'workspace' },
+  { filePath: '@egig/ratchet/website (Page)', exportName: 'Page', model: Page, builtinPackage: '@egig/ratchet/website', domain: 'website' },
+  { filePath: '@egig/ratchet/website (Block)', exportName: 'Block', model: Block, builtinPackage: '@egig/ratchet/website', domain: 'website' },
 ];
 
 /**
@@ -38,6 +42,12 @@ export const BUILTIN_DOMAINS: ScannedDomain[] = [
     exportName: 'AutomationDomain',
     domain: AutomationDomain,
     builtinPackage: '@egig/ratchet/automation',
+  },
+  {
+    filePath: '@egig/ratchet/website (WebsiteDomain)',
+    exportName: 'WebsiteDomain',
+    domain: WebsiteDomain,
+    builtinPackage: '@egig/ratchet/website',
   },
 ];
 
@@ -57,5 +67,11 @@ export const BUILTIN_FORMS: ScannedForm[] = [
     modelName: 'roles',
     builtinPackage: '@egig/ratchet/auth/console-forms',
     exportName: 'RoleForm',
+  },
+  {
+    filePath: '@egig/ratchet/website/console-forms (PageForm)',
+    modelName: 'pages',
+    builtinPackage: '@egig/ratchet/website/console-forms',
+    exportName: 'PageForm',
   },
 ];
