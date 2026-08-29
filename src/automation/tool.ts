@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { CustomOperationDefinition, ModelDefinition, OperationContext, PipelineFn } from '../core/index.js';
 import { buildCreateSchema, buildUpdateSchema, buildParamsSchema } from '../core/index.js';
@@ -34,6 +33,17 @@ export interface AgentTool {
 
 function toolName(operation: string, resource: string): string {
   return `${operation}_${resource}`;
+}
+
+/** Renders a tool's input schema to plain JSON Schema for the chat provider's `parameters`/
+ * `input_schema`. `unrepresentable: 'any'` is needed because `datetime` fields
+ * (core/validation.ts's `schemaForFieldKind`) accept `z.union([z.string(), z.date()])`, and
+ * `z.date()` has no native JSON Schema representation — it renders as an unconstrained `{}`
+ * member of the union rather than throwing. The `$schema` meta key is dropped; chat providers
+ * expect a bare parameters object, not a standalone schema document. */
+function toJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+  const { $schema, ...rest } = z.toJSONSchema(schema, { unrepresentable: 'any' });
+  return rest;
 }
 
 /**
@@ -124,7 +134,7 @@ export async function resolveAgentTools(
         spec: {
           name,
           description: toolDescription(model, operation),
-          parameters: zodToJsonSchema(toolInputSchema(model, operation)) as Record<string, unknown>,
+          parameters: toJsonSchema(toolInputSchema(model, operation)),
         },
       });
     }

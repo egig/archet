@@ -25,7 +25,7 @@ function schemaForFieldKind(f: FieldDefinition): ZodTypeAny {
     case 'json':
       // Q14: an explicit, narrow exception — a user-supplied live Zod schema is referenced
       // directly rather than re-derived, since arbitrary Zod schemas can't be reconstructed here.
-      return f.schema ?? z.record(z.unknown());
+      return f.schema ?? z.record(z.string(), z.unknown());
     case 'reference':
       return z.string().uuid();
     case 'tree':
