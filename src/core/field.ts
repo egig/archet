@@ -172,7 +172,7 @@ export interface TreeFieldDefinition extends BaseFieldDefinition {
   targetModel: string;
 }
 
-/** Stores a reference to a blob held by a `FileStorageAdapter` (see `core/storage.ts`), not the
+/** Stores a reference to a blob held by a `FileStorage` (see `core/storage.ts`), not the
  * bytes themselves — the column is `{ key, filename, mimeType, size }` (jsonb). `accept` is a
  * comma-separated list of mime patterns (`'image/png'`, `'image/*'`) checked against the
  * *sniffed* bytes of an upload, never the client-declared Content-Type — a mislabeled upload

@@ -1,5 +1,7 @@
+import { Readable } from 'node:stream';
 import { Hono, type Context } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
+import { UnableToReadFile, type FileStorage } from '@flystorage/file-storage';
 import type { FileFieldDefinition, ReferenceFieldDefinition } from '../core/field.js';
 import type { CustomOperationDefinition, ModelDefinition } from '../core/model.js';
 import { findRelationsTargeting } from '../core/many-to-many.js';
@@ -10,13 +12,7 @@ import { generateId } from '../core/id.js';
 import { fetchRow } from '../core/persistence.js';
 import { deriveFileFields, redactSensitiveFields } from '../core/serialize.js';
 import { buildParamsSchema } from '../core/validation.js';
-import {
-  DEFAULT_MAX_FILE_SIZE,
-  matchesAccept,
-  sniffMimeType,
-  type FileStorageAdapter,
-  type StoredFile,
-} from '../core/storage.js';
+import { DEFAULT_MAX_FILE_SIZE, matchesAccept, sniffMimeType, type StoredFile } from '../core/storage.js';
 import {
   authorizeRequest,
   resolveGrantedFields,
@@ -204,7 +200,7 @@ function storedFileOf(row: Record<string, unknown> | null, key: string): StoredF
  * schema-gen.ts), so there's nothing orphaned yet. A delete failure is logged, not thrown — the
  * record write already committed and must not be rolled back over a storage-side cleanup issue. */
 async function cleanupReplacedFiles(
-  storage: FileStorageAdapter | undefined,
+  storage: FileStorage | undefined,
   model: ModelDefinition,
   oldDoc: Record<string, unknown> | null,
   newDoc: Record<string, unknown>,
@@ -215,7 +211,7 @@ async function cleanupReplacedFiles(
     const newFile = storedFileOf(newDoc, key);
     if (oldFile && oldFile.key !== newFile?.key) {
       try {
-        await storage.delete(oldFile.key);
+        await storage.deleteFile(oldFile.key);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error(`cleanupReplacedFiles: failed to delete '${oldFile.key}' (model '${model.name}', field '${key}')`, err);
@@ -224,12 +220,12 @@ async function cleanupReplacedFiles(
   }
 }
 
-function requireStorage(storage: FileStorageAdapter | undefined): FileStorageAdapter {
+function requireStorage(storage: FileStorage | undefined): FileStorage {
   if (!storage) {
     throw new PipelineError({
       code: 'INTERNAL',
       status: 500,
-      message: 'this app has a `file` field but no FileStorageAdapter was passed to createApiRouter',
+      message: 'this app has a `file` field but no FileStorage was passed to createApiRouter',
     });
   }
   return storage;
@@ -245,13 +241,14 @@ function contentDisposition(file: StoredFile): string {
  * §5 pivot: one generic handler serves every model, dispatching by looking up `:model` in the
  * registry at request time — no per-model generated route files.
  *
- * `storage` is only required if some model in `registry` has a `file` field — see
- * `FileStorageAdapter` (core/storage.ts). Constructor-injected the same way `createConsoleRouter`
+ * `storage` is only required if some model in `registry` has a `file` field — a flystorage
+ * `FileStorage` (core/storage.ts), built by one of the `ratchet/storage/*` factories or
+ * `buildStorageAdapter` (`ratchet/storage`). Constructor-injected the same way `createConsoleRouter`
  * takes a `ConsoleAssetSource`: a storage backend isn't always resolvable from a plain config
  * value (e.g. Cloudflare R2 is an `env`-injected binding), so the app's own entry file builds and
  * passes in whichever adapter fits its deploy target.
  */
-export function createApiRouter(registry: Record<string, ModelDefinition>, db: AnyDb, storage?: FileStorageAdapter): Hono {
+export function createApiRouter(registry: Record<string, ModelDefinition>, db: AnyDb, storage?: FileStorage): Hono {
   const app = new Hono();
 
   app.onError((err, c) => {
@@ -301,9 +298,12 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
 
   // `GET /:model/:id/:field` — the only way a client ever reads a `file` field's bytes back
   // (Q9/Q12: the record's own JSON response only ever carries this route's URL, never the raw
-  // storage key). Reuses `getOneRow` so a soft-deleted record's file 404s the same way the
-  // record itself does. Gated by the same `read` field grant as the record's own JSON response —
-  // a role that can't see a `file` field's metadata can't fetch its bytes either.
+  // storage key). Uses `fetchRow`, not `getOneRow` — `getOneRow` (router/list.ts) already runs
+  // every row through `deriveFileFields` on its way out (so `?include=`d/listed rows are always
+  // response-shaped), which would strip the very storage `key` this route needs to read the
+  // blob back; `fetchRow` returns the row as persisted, same soft-delete exclusion by default.
+  // Gated by the same `read` field grant as the record's own JSON response — a role that can't
+  // see a `file` field's metadata can't fetch its bytes either.
   app.get('/:model/:id/:field', async (c) => {
     const model = resolveModel(registry, c.req.param('model'));
     resolveFileField(model, c.req.param('field'));
@@ -311,7 +311,7 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     if (granted !== '*' && !granted.has(c.req.param('field'))) {
       throw new PipelineError({ code: 'FORBIDDEN', status: 403, message: `missing read permission for field '${c.req.param('field')}'` });
     }
-    const row = await getOneRow(db, model, registry, c.req.param('id'), { includeDeleted: false, include: [] });
+    const row = await fetchRow(db, model, c.req.param('id'));
     if (!row) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
     if (model.api?.ownerField) {
       if (!user) throw new PipelineError({ code: 'INTERNAL', status: 500, message: `'${model.name}' combines api.ownerField with api.public — unsupported` });
@@ -320,10 +320,30 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     const stored = storedFileOf(row, c.req.param('field'));
     if (!stored) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
 
-    const blob = await requireStorage(storage).get(stored.key);
-    if (!blob) throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
-    return new Response(blob.data as BodyInit, {
-      headers: { 'content-type': blob.mimeType, 'content-disposition': contentDisposition(stored) },
+    // Streamed straight from the storage backend rather than buffered — the DB row already
+    // carries `stored.mimeType`, so there's no need to wait on flystorage's own stat/mimeType
+    // detection first. A missing blob (e.g. deleted out from under a row that still references
+    // it) surfaces as `UnableToReadFile` here, before any bytes are sent, so it still 404s
+    // cleanly; an error once streaming has actually started (rarer — the backend itself failing
+    // mid-read) just ends the connection, the same way any streamed HTTP response would. Any
+    // `UnableToReadFile` here maps to 404, not just one whose `wasFileNotFound` flag is set —
+    // adapters aren't consistent about setting it (flystorage's own `@flystorage/in-memory`
+    // throws a plain `Error` for a missing key, which `FileStorage.read()` still wraps as
+    // `UnableToReadFile` but leaves `wasFileNotFound: false`) — logged so an operator can still
+    // tell a real backend fault from an ordinary missing-blob 404.
+    let nodeStream: Readable;
+    try {
+      nodeStream = await requireStorage(storage).read(stored.key);
+    } catch (err) {
+      if (err instanceof UnableToReadFile) {
+        // eslint-disable-next-line no-console
+        console.error(`GET /${model.name}/${c.req.param('id')}/${c.req.param('field')}: storage.read('${stored.key}') failed`, err);
+        throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
+      }
+      throw err;
+    }
+    return new Response(Readable.toWeb(nodeStream) as unknown as ReadableStream, {
+      headers: { 'content-type': stored.mimeType, 'content-disposition': contentDisposition(stored) },
     });
   });
 
@@ -364,7 +384,11 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     }
 
     const key = `${model.name}/${c.req.param('field')}/${generateId()}`;
-    await requireStorage(storage).put(key, bytes, { mimeType });
+    // `Buffer.from(bytes)`, not `bytes` itself: flystorage's `write()` turns any non-`Readable`
+    // `contents` into a stream via Node's `Readable.from()`, which special-cases `Buffer` as one
+    // opaque chunk — a plain `Uint8Array` instead gets iterated byte-by-byte into a stream of
+    // individual numbers, silently corrupting the upload.
+    await requireStorage(storage).write(key, Buffer.from(bytes), { mimeType });
 
     const stored: StoredFile = { key, filename: file.name, mimeType, size: bytes.byteLength };
     return c.json({ data: stored }, 201);

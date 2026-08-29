@@ -26,7 +26,8 @@ async function execRows(db: AnyDb, query: SQL): Promise<Record<string, unknown>[
  */
 function toDriverValue(fieldDef: FieldDefinition | undefined, value: unknown): unknown {
   if (value instanceof Date) return value.toISOString();
-  if (fieldDef?.kind === 'json' && value !== null && typeof value === 'object') {
+  // `file` is jsonb too (`StoredFile`, see core/storage.ts) — same encoding need as `json`.
+  if ((fieldDef?.kind === 'json' || fieldDef?.kind === 'file') && value !== null && typeof value === 'object') {
     return JSON.stringify(value);
   }
   return value;
