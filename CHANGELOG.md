@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Docs site migrated from VitePress to [Fumadocs](https://fumadocs.dev) on React Router**: `docs/` is now a React Router (framework mode, SPA/prerendered, matching the console's own router) app with its own `package.json`, installed as part of the repo's Bun workspace. Content lives under `docs/content/docs/*.mdx`; the same guides, at the same `/docs/...` URL shape (`/guide/*` -> `/docs/*`).
+
 ### Added
 
 - **Agent read tools**: an `Agent` whose role holds a `read` grant now gets two builtin tools per granted resource — `list_<model>` (JSON-shaped `filters`/`sort`/`limit`/`offset`/`include` params, returns the same `{ data, meta }` envelope as `GET /api/:model`) and `findOne_<model>` (one row by id). They run through the exact same `listRows`/`getOneRow` path the REST GET routes use, so field-level `read` grants, `?include=` relation filtering, and `api.ownerField` scoping all apply identically — a chatting agent can't read anything the driving user couldn't. `action: '*'` now expands to these plus the existing write tools.

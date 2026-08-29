@@ -81,16 +81,19 @@ bun run serve              # ratchet serve inside example/
 
 ## Docs
 
-Docs are VitePress under [`docs/`](docs/):
+Docs are a [Fumadocs](https://fumadocs.dev) (React Router) site under [`docs/`](docs/),
+with its own `package.json` — install its dependencies once with `bun install`
+at the repo root (it's a Bun workspace member):
 
 ```sh
 bun run docs:dev       # local preview with hot reload
-bun run docs:build     # production build
+bun run docs:build     # prerendered static build to docs/build/client/
 ```
 
-User-facing changes should update the relevant guide in `docs/guide/` and add an
-entry to the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md) (Keep a
-Changelog format; mark breaking changes **Breaking:**).
+User-facing changes should update the relevant page in `docs/content/docs/` and
+add an entry to the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md)
+(Keep a Changelog format; mark breaking changes **Breaking:**) — the docs
+site's own Changelog page is generated from that file at build time.
 
 ## Submitting a change
 
@@ -115,7 +118,7 @@ Changelog format; mark breaking changes **Breaking:**).
 | `src/console/` | the console SPA (`client/`) and its server-side assets |
 | `src/cli/` | the `ratchet` CLI (`bin.ts`) |
 | `test/` | `bun:test` suites |
-| `docs/` | VitePress documentation |
+| `docs/` | Fumadocs documentation site |
 | `example/` | a working Ratchet app for manual testing |
 
 ## License

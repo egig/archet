@@ -1,0 +1,20 @@
+import type { Config } from '@react-router/dev/config';
+import { glob } from 'node:fs/promises';
+import { createGetUrl, getSlugs } from 'fumadocs-core/source';
+import { docsRoute } from './app/lib/shared';
+
+const getUrl = createGetUrl(docsRoute);
+
+export default {
+  ssr: false,
+  basename: '/ratchet/',
+  async prerender({ getStaticPaths }) {
+    const paths: string[] = [...getStaticPaths()];
+
+    for await (const entry of glob('**/*.mdx', { cwd: 'content/docs' })) {
+      paths.push(getUrl(getSlugs(entry)));
+    }
+
+    return paths;
+  },
+} satisfies Config;

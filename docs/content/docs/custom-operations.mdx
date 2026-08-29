@@ -1,4 +1,7 @@
-# Custom Operations
+---
+title: Custom Operations
+description: Named actions like `lock`/`unlock`, built from the same pipeline primitives.
+---
 
 Every model gets three builtin operations — `create`, `update`, `remove` — dispatched by the generic router. A **custom operation** is a fourth (fifth, sixth, ...) named operation a model declares itself, for a convenient action that's really just a specific write in disguise — the canonical example is a `lock`/`unlock` button that's really an `update` with `locked` set to a fixed value. The framework's own `Workspace` model (`src/workspace/models/workspace.model.ts`) is a real, worked example of exactly this pattern.
 
@@ -36,7 +39,7 @@ A custom operation is an extra key in `operations`, alongside `create`/`update`/
 
 `presetFields(values, opts?)` (from `ratchet/auth`) builds a `PipelineFn` that merges `values` on top of whatever's already in `ctx.input`, checks the combined set against the caller's field-write permission (see below), then runs it through the same `validate` + `persist` any `update` uses. `opts.permissionAction` (default `'update'`) lets you check against a different action's field grants if your model's base write isn't a plain update.
 
-For anything beyond "write these fixed fields," write your own `PipelineFn` — a custom operation composes with [`pipe()`](/guide/pipelines) exactly like `create`/`update`/`remove` do, and can do anything a pipeline function can: call `persist`/`persist.remove`, call an external API, send an email, or not touch the database at all.
+For anything beyond "write these fixed fields," write your own `PipelineFn` — a custom operation composes with [`pipe()`](/docs/pipelines) exactly like `create`/`update`/`remove` do, and can do anything a pipeline function can: call `persist`/`persist.remove`, call an external API, send an email, or not touch the database at all.
 
 ### Params
 
