@@ -9,6 +9,7 @@ import { queryKeys } from './query-keys.js';
 import { ReferenceCombobox } from './ReferenceCombobox.js';
 import { TreeCombobox } from './TreeCombobox.js';
 import { ManyToManyMultiSelect } from './ManyToManyMultiSelect.js';
+import { CodeEditor } from './CodeEditor.js';
 
 /** What a `file` field's form value looks like — either an existing record's read shape
  * (`{ url, filename, mimeType, size }`, from `deriveFileFields`) or a fresh upload's response
@@ -103,6 +104,12 @@ export function FieldInput(props: FieldInputProps) {
 
   const customRenderer = field.customType ? fieldRenderers[field.customType] : undefined;
   if (customRenderer) return customRenderer(props);
+
+  // built in regardless of `fieldRenderers` (no app-level registration needed) — a CodeJar editor
+  // for any `field.custom('code', ...)` field, e.g. the `website` domain's `globalCss` setting.
+  if (field.customType === 'code') {
+    return wrap(<CodeEditor value={(value as string) ?? ''} onChange={(v) => onChange(inputKey, v)} />);
+  }
 
   // the sibling `modelRef` value, for scoping an `actionRef` dropdown — '' (nothing picked) or
   // '*' both fall back to the registry-wide union.

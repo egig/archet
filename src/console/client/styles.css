@@ -6,3 +6,43 @@
    why a second `@source` can't just live here instead (this file has no way to know `modelsDir`,
    a per-consumer-project path). */
 @source ".";
+
+/* CodeJar-backed code input (CodeEditor.tsx) — plain Tailwind utility classes can't reach into
+   CodeJar's own `contenteditable` markup (it re-renders its `innerHTML` from `highlight()` on
+   every keystroke), so this lives here as real CSS instead. */
+.cj-editor {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 12rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  outline: none;
+}
+.cj-editor:focus {
+  border-color: #6b7280;
+}
+.cj-editor:empty:before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+}
+.cj-comment {
+  color: #6b7280;
+  font-style: italic;
+}
+.cj-string {
+  color: #b45309;
+}
+.cj-selector {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+.cj-property {
+  color: #7c3aed;
+}

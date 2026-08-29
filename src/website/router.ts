@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { listRowsByField } from '../core/persistence.js';
+import { getDomainSettings } from '../core/domain-settings-persistence.js';
 import { Page, Block } from './models/index.js';
+import { WebsiteDomain } from './domain.js';
 import { renderPage } from './render.js';
 
 type AnyDb = PgDatabase<any, any, any>;
@@ -18,9 +20,12 @@ async function findPublishedHomePage(db: AnyDb): Promise<Record<string, unknown>
 }
 
 async function renderPageResponse(db: AnyDb, page: Record<string, unknown>): Promise<Response> {
-  const blocks = await listRowsByField(db, Block, 'pageId', page.id as string);
+  const [blocks, settings] = await Promise.all([
+    listRowsByField(db, Block, 'pageId', page.id as string),
+    getDomainSettings(db, WebsiteDomain),
+  ]);
   blocks.sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
-  return new Response(renderPage(page, blocks), { headers: { 'content-type': 'text/html; charset=utf-8' } });
+  return new Response(renderPage(page, blocks, settings), { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
 /**

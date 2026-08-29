@@ -99,10 +99,19 @@ const DEFAULT_STYLES = `
 `;
 
 /** Builds the full HTML document for one page — `page` and `blocks` are plain row objects (as
- * returned by `core/persistence.ts`'s `listRowsByField`), not `ModelDefinition`-typed. */
-export function renderPage(page: Record<string, unknown>, blocks: Record<string, unknown>[]): string {
-  const title = escapeHtml(asString(page.title, 'Untitled'));
-  const metaDescription = asString(page.metaDescription);
+ * returned by `core/persistence.ts`'s `listRowsByField`), not `ModelDefinition`-typed. `settings`
+ * is the `website` domain's Domain Settings (`getDomainSettings(db, WebsiteDomain)`, ADR 0002) —
+ * defaults to `{}` so a caller with no settings row yet (or a test) still renders. */
+export function renderPage(
+  page: Record<string, unknown>,
+  blocks: Record<string, unknown>[],
+  settings: Record<string, unknown> = {},
+): string {
+  const siteTitle = asString(settings.title);
+  const pageTitle = asString(page.title, 'Untitled');
+  const title = escapeHtml(siteTitle && siteTitle !== pageTitle ? `${pageTitle} — ${siteTitle}` : pageTitle);
+  const metaDescription = asString(page.metaDescription) || asString(settings.description);
+  const globalCss = asString(settings.globalCss);
   const body = blocks.map(renderBlock).join('\n');
 
   return `<!doctype html>
@@ -112,7 +121,7 @@ export function renderPage(page: Record<string, unknown>, blocks: Record<string,
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 ${metaDescription ? `<meta name="description" content="${escapeAttr(metaDescription)}">\n` : ''}<style>${DEFAULT_STYLES}</style>
-</head>
+${globalCss ? `<style>${globalCss}</style>\n` : ''}</head>
 <body>
 <main class="rp-page">
 ${body}
