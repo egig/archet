@@ -9,6 +9,7 @@ import {
   setupStatus as apiSetupStatus,
   updateProfile as apiUpdateProfile,
   type AuthUser,
+  type SetupInput,
 } from './api.js';
 import { queryKeys } from './query-keys.js';
 
@@ -19,7 +20,7 @@ interface AuthState {
   setupRequired: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  completeSetup: (email: string, password: string) => Promise<void>;
+  completeSetup: (input: SetupInput) => Promise<void>;
   updateProfile: (input: { email?: string; password?: string }) => Promise<void>;
 }
 
@@ -66,8 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const setupMutation = useMutation({
-    mutationFn: async ({ email, password }: { email: string; password: string }) => {
-      await apiSetup(email, password);
+    mutationFn: async (input: SetupInput) => {
+      await apiSetup(input);
       return apiMe();
     },
     onSuccess: (user) => {
@@ -93,8 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logoutMutation]);
 
   const completeSetup = useCallback(
-    async (email: string, password: string) => {
-      await setupMutation.mutateAsync({ email, password });
+    async (input: SetupInput) => {
+      await setupMutation.mutateAsync(input);
     },
     [setupMutation],
   );
