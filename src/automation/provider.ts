@@ -32,7 +32,17 @@ export interface ChatMessage {
   toolResults?: ChatToolResult[];
 }
 
-export type ChatStopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal' | 'aborted';
+export type ChatStopReason =
+  | 'end_turn'
+  | 'tool_use'
+  | 'max_tokens'
+  | 'refusal'
+  | 'aborted'
+  // `runAgentTurn` hit `MAX_TOOL_ITERATIONS` without a final answer — distinct from `max_tokens`
+  // (a real length cutoff from the provider) so the console can label it accurately.
+  | 'max_iterations'
+  // the turn's wall-clock budget elapsed while waiting on the provider.
+  | 'timeout';
 
 export interface ChatUsage {
   inputTokens: number;
@@ -60,8 +70,28 @@ export interface ChatRequest {
   apiKey?: string;
   /** only meaningful to the openai-compatible adapter. */
   baseUrl?: string;
+  /** aborts the underlying SDK request (user cancel or `runAgentTurn`'s per-turn timeout) — every
+   * adapter must forward this to its SDK client so a hung connection actually gets torn down. */
+  signal?: AbortSignal;
 }
 
 export interface ChatProvider {
   stream(req: ChatRequest): AsyncIterable<ChatEvent>;
+}
+
+/**
+ * Parses one tool call's accumulated JSON-fragment input (both adapters stream it as fragments
+ * keyed by content-block/tool-call index, then parse once the block closes). On malformed JSON —
+ * a provider bug or a truncated stream — returns the raw string instead of throwing: `runAgentTurn`
+ * already rejects a non-object `call.input` as a normal tool error fed back to the model, so this
+ * turns a would-be uncaught exception (which crashes the whole turn) into that existing, harmless
+ * path instead of a special case.
+ */
+export function parseToolInput(json: string): unknown {
+  if (!json) return {};
+  try {
+    return JSON.parse(json);
+  } catch {
+    return json;
+  }
 }

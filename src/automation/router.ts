@@ -25,6 +25,31 @@ import { assertOwnsWorkspace } from '../workspace/pipeline.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
+/** Shown (as the whole message body) when a turn ends with nothing in `parts` — an abort or
+ * timeout before the first token, a content-filter refusal, or the tool-iteration cap with no
+ * closing prose. Keeps the row that gets persisted below (see Q13/persistence gate) from ever
+ * being silently dropped: every turn now always produces something the user can see. */
+const EMPTY_TURN_NOTICE: Record<string, string> = {
+  aborted: '_Stopped._',
+  refusal: '_The model declined to answer._',
+  max_tokens: '_Response was cut off (length limit) before producing any content._',
+  max_iterations: '_Stopped after too many tool-call rounds without a final answer._',
+  timeout: '_The agent turn timed out._',
+};
+
+/** The notice appended when a turn ends with nothing in `parts` — exported so it can be unit
+ * tested without a live DB/HTTP stack (see test/automation-router-notices.test.ts). */
+export function emptyTurnNotice(stopReason: string): string {
+  return EMPTY_TURN_NOTICE[stopReason] ?? '_The agent returned an empty response._';
+}
+
+/** The notice appended when `runAgentTurn` throws — a leading blank line only when some content
+ * already streamed before the failure, so the notice reads as a continuation rather than a
+ * standalone paragraph. */
+export function turnFailureNotice(message: string, hadPriorContent: boolean): string {
+  return `${hadPriorContent ? '\n\n' : ''}_Agent turn failed: ${message}_`;
+}
+
 async function loadActiveAgent(db: AnyDb, agentId: unknown): Promise<Record<string, unknown>> {
   if (typeof agentId !== 'string' || !agentId) {
     throw new PipelineError({ code: 'VALIDATION_ERROR', status: 400, fields: { agentId: 'required' } });
@@ -302,23 +327,38 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
           }
         }
       } catch (err) {
-        controller.appendText(`\n\n_Agent turn failed: ${err instanceof Error ? err.message : 'unknown error'}_`);
+        // written to `parts` too, not just the live `controller` stream — otherwise a turn that
+        // throws before any text/tool-call ever streamed leaves `parts` empty, the persistence
+        // step below is skipped, and the failure vanishes on the next history reload as if the
+        // turn never happened.
+        const message = err instanceof Error ? err.message : 'unknown error';
+        const notice = turnFailureNotice(message, !parts.isEmpty());
+        parts.appendText(notice);
+        controller.appendText(notice);
         stopReason = 'error';
       }
 
-      if (!parts.isEmpty()) {
-        await insertRow(
-          db,
-          Message,
-          {
-            chatId,
-            role: 'assistant',
-            content: parts.build(),
-            metadata: { stopReason, usage, model: agent.model },
-          },
-          user.id,
-        );
+      // a turn can legitimately end with nothing in `parts` (aborted or timed out before the
+      // first token, a content-filter refusal, the tool-iteration cap with no closing prose) —
+      // always persist a row so the chat never just goes silent; give it an explanatory notice
+      // when there is otherwise nothing to show.
+      if (parts.isEmpty()) {
+        const notice = emptyTurnNotice(stopReason);
+        parts.appendText(notice);
+        controller.appendText(notice);
       }
+
+      await insertRow(
+        db,
+        Message,
+        {
+          chatId,
+          role: 'assistant',
+          content: parts.build(),
+          metadata: { stopReason, usage, model: agent.model },
+        },
+        user.id,
+      );
       await updateRow(db, Chat, chatId, {});
     });
   });
