@@ -1,10 +1,16 @@
 import { Hono } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { listRowsByField } from '../core/persistence.js';
+import { getDomainSettings } from '../core/domain-settings-persistence.js';
 import { Page, Block } from './models/index.js';
-import { renderPage } from './render.js';
+import { WebsiteDomain } from './domain.js';
+import { renderPage, pagePathOf } from './render.js';
 
 type AnyDb = PgDatabase<any, any, any>;
+
+function escapeXml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 async function findPublishedPageBySlug(db: AnyDb, slug: string): Promise<Record<string, unknown> | null> {
   const rows = await listRowsByField(db, Page, 'slug', slug);
@@ -18,9 +24,12 @@ async function findPublishedHomePage(db: AnyDb): Promise<Record<string, unknown>
 }
 
 async function renderPageResponse(db: AnyDb, page: Record<string, unknown>): Promise<Response> {
-  const blocks = await listRowsByField(db, Block, 'pageId', page.id as string);
+  const [blocks, settings] = await Promise.all([
+    listRowsByField(db, Block, 'pageId', page.id as string),
+    getDomainSettings(db, WebsiteDomain),
+  ]);
   blocks.sort((a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0));
-  return new Response(renderPage(page, blocks), { headers: { 'content-type': 'text/html; charset=utf-8' } });
+  return new Response(renderPage(page, blocks, settings), { headers: { 'content-type': 'text/html; charset=utf-8' } });
 }
 
 /**
@@ -40,6 +49,35 @@ async function renderPageResponse(db: AnyDb, page: Record<string, unknown>): Pro
  */
 export function createWebsiteRouter(db: AnyDb): Hono {
   const app = new Hono();
+
+  // Registered before the `/:slug` catch-all below so a page slug can never shadow either of
+  // these two well-known paths (same mount-order reasoning as `serve.ts`'s doc comment).
+  app.get('/robots.txt', async (c) => {
+    const settings = await getDomainSettings(db, WebsiteDomain);
+    const siteUrl = typeof settings.siteUrl === 'string' ? settings.siteUrl.replace(/\/+$/, '') : '';
+    const lines = ['User-agent: *', settings.noindex ? 'Disallow: /' : 'Allow: /'];
+    if (siteUrl) lines.push(`Sitemap: ${siteUrl}/sitemap.xml`);
+    return c.text(`${lines.join('\n')}\n`);
+  });
+
+  // `sitemap.xml` requires every `<loc>` to be an absolute URL (the spec doesn't allow relative
+  // ones) — with no `siteUrl` configured there's nothing valid to emit, so this 404s rather than
+  // publish a sitemap search engines would reject anyway (see `domain.ts`'s doc comment).
+  app.get('/sitemap.xml', async (c) => {
+    const settings = await getDomainSettings(db, WebsiteDomain);
+    const siteUrl = typeof settings.siteUrl === 'string' ? settings.siteUrl.replace(/\/+$/, '') : '';
+    if (!siteUrl) return c.notFound();
+    const pages = await listRowsByField(db, Page, 'status', 'published');
+    const urls = pages
+      .map((page) => {
+        const loc = `${siteUrl}${pagePathOf(page)}`;
+        const lastmod = typeof page.publishedAt === 'string' ? `<lastmod>${page.publishedAt.slice(0, 10)}</lastmod>` : '';
+        return `<url><loc>${escapeXml(loc)}</loc>${lastmod}</url>`;
+      })
+      .join('\n');
+    const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+    return new Response(body, { headers: { 'content-type': 'application/xml; charset=utf-8' } });
+  });
 
   app.get('/', async (c) => {
     const home = await findPublishedHomePage(db);

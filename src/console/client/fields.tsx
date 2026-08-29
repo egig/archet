@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { ConsoleFieldMeta, ConsoleModelMeta } from '../serialize-model.js';
-import { listRows, uploadFile } from './api.js';
+import { listRows, uploadFile, uploadDomainSettingsFile } from './api.js';
 import { useModels } from './models.js';
 import { useFieldRenderers } from './field-renderers.js';
 import { useFieldInputOverrides } from './field-input-overrides.js';
@@ -9,6 +9,7 @@ import { queryKeys } from './query-keys.js';
 import { ReferenceCombobox } from './ReferenceCombobox.js';
 import { TreeCombobox } from './TreeCombobox.js';
 import { ManyToManyMultiSelect } from './ManyToManyMultiSelect.js';
+import { CodeEditor } from './CodeEditor.js';
 
 /** What a `file` field's form value looks like — either an existing record's read shape
  * (`{ url, filename, mimeType, size }`, from `deriveFileFields`) or a fresh upload's response
@@ -55,8 +56,14 @@ export interface FieldInputProps {
   /** create vs update — a `writeAs` (e.g. password) field is required on create but optional
    * (blank = leave unchanged) on update. */
   mode: 'create' | 'update';
-  /** only needed by `kind: 'file'`, to build its upload URL (`POST /api/:modelName/:field/upload`). */
+  /** only needed by `kind: 'file'`, to build its upload URL (`POST /api/:modelName/:field/upload`).
+   * Mutually exclusive with `domainName` — a field belongs to a model's create/update form or a
+   * Domain's settings form, never both. */
   modelName?: string;
+  /** `kind: 'file'`'s Domain Settings equivalent of `modelName` — set by `DomainSettingsForm`,
+   * builds the upload URL `POST {MOUNT_PREFIX}/meta/domains/:domainName/settings/:field/upload`
+   * instead (`console/router.ts`). */
+  domainName?: string;
   /** the record being edited, for `kind: 'tree'` (`TreeCombobox` excludes it and its descendants
    * from the parent picker — reparenting under either would create a cycle). Absent on create,
    * where there's no id yet. */
@@ -77,13 +84,14 @@ export function resourceFieldKey(model: ConsoleModelMeta | undefined): string | 
 }
 
 export function FieldInput(props: FieldInputProps) {
-  const { field, inputKey, value, onChange, error, mode, modelName, recordId } = props;
+  const { field, inputKey, value, onChange, error, mode, modelName, domainName, recordId } = props;
   const { models: modelRefOptions } = useModels();
   const fieldRenderers = useFieldRenderers();
   const fieldInputOverrides = useFieldInputOverrides();
   const required = field.writeAs ? mode === 'create' && field.required : field.required;
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadFile(modelName!, field.key, file),
+    mutationFn: (file: File) =>
+      domainName ? uploadDomainSettingsFile(domainName, field.key, file) : uploadFile(modelName!, field.key, file),
     onSuccess: (result) => onChange(inputKey, result),
   });
 
@@ -103,6 +111,12 @@ export function FieldInput(props: FieldInputProps) {
 
   const customRenderer = field.customType ? fieldRenderers[field.customType] : undefined;
   if (customRenderer) return customRenderer(props);
+
+  // built in regardless of `fieldRenderers` (no app-level registration needed) — a CodeJar editor
+  // for any `field.custom('code', ...)` field, e.g. the `website` domain's `globalCss` setting.
+  if (field.customType === 'code') {
+    return wrap(<CodeEditor value={(value as string) ?? ''} onChange={(v) => onChange(inputKey, v)} />);
+  }
 
   // the sibling `modelRef` value, for scoping an `actionRef` dropdown — '' (nothing picked) or
   // '*' both fall back to the registry-wide union.
@@ -300,10 +314,10 @@ export function FieldInput(props: FieldInputProps) {
             type="file"
             accept={field.accept}
             required={required && !stored}
-            disabled={uploadMutation.isPending || !modelName}
+            disabled={uploadMutation.isPending || (!modelName && !domainName)}
             onChange={(e) => {
               const picked = e.target.files?.[0];
-              if (!picked || !modelName) return;
+              if (!picked || (!modelName && !domainName)) return;
               uploadMutation.mutate(picked);
             }}
             className={inputClass}

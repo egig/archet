@@ -1,7 +1,6 @@
-import { Readable } from 'node:stream';
 import { Hono, type Context } from 'hono';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import { UnableToReadFile, type FileStorage } from '@flystorage/file-storage';
+import type { FileStorage } from '@flystorage/file-storage';
 import type { FileFieldDefinition } from '../core/field.js';
 import type { CustomOperationDefinition, ModelDefinition } from '../core/model.js';
 import type { OperationContext } from '../core/pipeline.js';
@@ -11,6 +10,7 @@ import { fetchRow } from '../core/persistence.js';
 import { deriveFileFields, redactSensitiveFields } from '../core/serialize.js';
 import { buildParamsSchema } from '../core/validation.js';
 import { DEFAULT_MAX_FILE_SIZE, matchesAccept, sniffMimeType, type StoredFile } from '../core/storage.js';
+import { streamStoredFile } from '../core/file-serving.js';
 import {
   authorizeRequest,
   resolveGrantedFields,
@@ -162,11 +162,6 @@ function requireStorage(storage: FileStorage | undefined): FileStorage {
   return storage;
 }
 
-function contentDisposition(file: StoredFile): string {
-  const safeName = file.filename.replace(/["\r\n]/g, '');
-  const disposition = file.mimeType.startsWith('image/') ? 'inline' : 'attachment';
-  return `${disposition}; filename="${safeName}"`;
-}
 
 /**
  * §5 pivot: one generic handler serves every model, dispatching by looking up `:model` in the
@@ -261,21 +256,10 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
     // adapters aren't consistent about setting it (flystorage's own `@flystorage/in-memory`
     // throws a plain `Error` for a missing key, which `FileStorage.read()` still wraps as
     // `UnableToReadFile` but leaves `wasFileNotFound: false`) — logged so an operator can still
-    // tell a real backend fault from an ordinary missing-blob 404.
-    let nodeStream: Readable;
-    try {
-      nodeStream = await requireStorage(storage).read(stored.key);
-    } catch (err) {
-      if (err instanceof UnableToReadFile) {
-        // eslint-disable-next-line no-console
-        console.error(`GET /${model.name}/${c.req.param('id')}/${c.req.param('field')}: storage.read('${stored.key}') failed`, err);
-        throw new PipelineError({ code: 'NOT_FOUND', status: 404 });
-      }
-      throw err;
-    }
-    return new Response(Readable.toWeb(nodeStream) as unknown as ReadableStream, {
-      headers: { 'content-type': stored.mimeType, 'content-disposition': contentDisposition(stored) },
-    });
+    // tell a real backend fault from an ordinary missing-blob 404. No `cacheControl`: this URL
+    // stays the same across a file being replaced (it's keyed by row `id`, not by the storage
+    // key), so caching it would risk serving stale bytes — see `streamStoredFile`'s doc comment.
+    return streamStoredFile(requireStorage(storage), stored, `GET /${model.name}/${c.req.param('id')}/${c.req.param('field')}`);
   });
 
   // `POST /:model/:field/upload` — the two-step upload flow (Q3): this stores the blob and hands
