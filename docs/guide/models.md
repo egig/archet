@@ -49,7 +49,7 @@ interface FieldCommonOptions<T> {
 ```
 
 - **`required`** and **`default`** are mutually exclusive — a field with a default is never absent, so declaring both throws at definition time.
-- **`indexed`** gates whether a field can appear in `?filter=` or `?sort=` on the REST API (see [REST API](/guide/router)).
+- **`indexed`** gates whether a field can appear in `?filter=` or `?sort=` on the REST API (see [REST API](/guide/router)) — and, for a `string`/`text` field, whether the console's list-view search box can find it (see [Console](/guide/console#list-view)).
 - **`sensitive`** marks a field as stored but stripped from every HTTP response — e.g. a password hash.
 - **`writeAs`** is for a field written under a different, undeclared input key. For example, a `passwordHash` column declares `writeAs: 'password'` because a pipeline function (`hashPassword`) synthesizes the real column from a plaintext `password` key that never appears in `fields`. The console form reads this to know which key to submit under.
 - **`displayText`** is the label shown for this field in console list-view column headers and form labels; when omitted it defaults to the field key humanized (e.g. `roleId` -> "Role Id").

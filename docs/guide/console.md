@@ -74,6 +74,18 @@ export const Customer = defineModel('customers', {
 
 A `field.reference(...)` on a model automatically renders as a dropdown in the generated form, populated from the target model's rows and labeled with its `displayField`. A field with `sensitive: true` (e.g. `passwordHash`) never round-trips to the client; one with `writeAs` submits under its declared input key instead of its column name; one with `displayText` uses that as its list/form label instead of a humanized field key (see [Common options](/guide/models#common-options)).
 
+## List view
+
+Every model's list view has a small toolbar above the table:
+
+- **Search** — a single free-text box, shown whenever the model has at least one field declared `indexed: true` with kind `string` or `text`. It debounces as you type and matches like the REST API's `ilike` filter operator would: case-insensitive, substring, OR'd across every eligible field. **A field that isn't `indexed: true` (or isn't `string`/`text`) is invisible to search**, the same gate that already applies to `?filter=`/`?sort=` (see [Common options](/guide/models#common-options) and [REST API](/guide/router)) — a common field like a `title` or `description` won't be found unless it's indexed.
+- **Filter** — the manual clause builder (`field`/`operator`/`value`, with AND/OR groups), unchanged; also gated on `indexed: true`.
+- **Sort** — click a column header for an instant single-key sort (shift-click to add a secondary key), or open the Sort panel to build a multi-level sort and click **Apply**. Only header clicks apply immediately; the panel stages its edits until Apply is clicked.
+- **Columns** — show/hide individual columns. `id` is always shown.
+- **Export CSV** — downloads every row matching the current filter/search/sort (not just the visible page), respecting the current column show/hide selection, capped at 5,000 rows (a banner says so if the export was truncated).
+
+On a plain model list page, Search/Filter/Sort/Columns are ad-hoc and live in the URL (`?q=`, `?filter=`, `?sort=`, `?cols=`) so they survive a reload and can be shared as a link. On a saved Workspace View tab, Filter and Sort are persisted to the tab instead (so they're still there next time the tab is opened); Search and Columns stay per-session there and reset when the tab is reopened.
+
 ## Domains
 
 A **Domain** groups related models — declare a model inside a top-level subdirectory of `modelsDir` and it belongs to that Domain:

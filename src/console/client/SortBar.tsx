@@ -107,17 +107,27 @@ function SortKeyRow({
 
 export interface SortBarProps {
   model: ConsoleModelMeta;
+  /** the in-progress draft — every row/level edit here updates the draft via `onChange` only; it
+   * doesn't touch the table or get persisted until `onApply` runs. Header-click sorting bypasses
+   * this draft entirely and applies instantly (see `RowTable`'s `headerClickSort`) — it's only the
+   * panel's multi-level builder (add level, reorder, flip direction) that benefits from staging
+   * edits, the same reasoning `FilterBar`'s clause builder already uses. */
   value: SortKey[];
-  /** every edit applies immediately — a `SortKey` is always complete (unlike a half-built filter
-   * clause), so there's no draft/Apply step. The caller decides what "apply" means: write the URL
-   * `?sort=` param (`ModelListPage`) or persist to the `workspace_views` row (`WorkspaceViewTable`). */
   onChange: (next: SortKey[]) => void;
+  /** when set, the bar shows an "Apply" button that hands back the current draft — the caller
+   * decides what "apply" means: write the URL `?sort=` param (`ModelListPage`) or persist to the
+   * `workspace_views` row (`WorkspaceViewTable`). */
+  onApply?: (value: SortKey[]) => void;
+  /** whether `value` differs from the last-applied set — drives the Apply button's enabled state. */
+  dirty?: boolean;
+  /** an apply is in flight (persisting) — shows "Applying…" and keeps the button disabled. */
+  applying?: boolean;
 }
 
 /** Multi-column sort editor — an ordered list of `[field, direction]` levels, the exact shape
  * `router/query.ts` consumes as `?sort=`. Revealed by `RowTable`'s "Sort" toggle, next to the
  * `FilterBar` it's modelled on. */
-export function SortBar({ model, value, onChange }: SortBarProps) {
+export function SortBar({ model, value, onChange, onApply, dirty, applying }: SortBarProps) {
   const options = useMemo(() => sortableOptions(model), [model]);
   const usedKeys = useMemo(() => new Set(value.map((k) => k.field)), [value]);
   const firstUnused = options.find((o) => !usedKeys.has(o.key));
@@ -152,16 +162,28 @@ export function SortBar({ model, value, onChange }: SortBarProps) {
         />
       ))}
 
-      {firstUnused && (
-        <button
-          type="button"
-          onClick={() => onChange([...value, { field: firstUnused.key, direction: 'asc' }])}
-          className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          Add sort
-        </button>
-      )}
+      <div className="flex items-center gap-3">
+        {firstUnused && (
+          <button
+            type="button"
+            onClick={() => onChange([...value, { field: firstUnused.key, direction: 'asc' }])}
+            className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            Add sort
+          </button>
+        )}
+        {onApply && (
+          <button
+            type="button"
+            disabled={!dirty || applying}
+            onClick={() => onApply(value)}
+            className="ml-auto rounded bg-gray-900 px-3 py-1 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
+          >
+            {applying ? 'Applying…' : 'Apply'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
