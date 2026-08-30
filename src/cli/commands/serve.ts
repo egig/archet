@@ -13,7 +13,7 @@ import { createNodeFsAssetSource } from '../../console/node-assets.js';
 import { buildStorageAdapter } from '../../core/storage-config.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
 import { existsSync } from 'node:fs';
-import { createWebRouter, createWebAssetsRouter, createPublicAssetsRouter } from '../../web/router.js';
+import { createWebRouter, createWebAssetsRouter } from '../../web/router.js';
 import { webEntrySrc } from '../build-web.js';
 import type { RouteObject } from 'react-router';
 
@@ -78,18 +78,20 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   // never be able to shadow it.
   app.route('/_site-assets', createSiteAssetsRouter(db, storage, domainSettingsRegistry));
 
-  // The web app, last (its `/*` is a catch-all): built client assets, then `publicDir`, then the
-  // SSR + `.data` handler. When the site isn't opted into, `/` simply 404s (no Page/Block
-  // fallback — see docs/adr/0003).
+  // The web app, last (its `/*` is a catch-all): built client assets under `/_ratchet`, then the
+  // one `/` mount — a `publicDir` static file if the request matches one, else the SSR + `.data`
+  // handler (`createWebRouter` folds the `publicDir` lookup in; a second `/` mount would shadow it,
+  // see that file). When the site isn't opted into, `/` simply 404s (no Page/Block fallback — see
+  // docs/adr/0003).
   if (webManifest) {
     app.route('/_ratchet', createWebAssetsRouter(generatedDir));
-    app.route('/', createPublicAssetsRouter(dirs.publicDir));
     app.route(
       '/',
       createWebRouter({
         routes: webManifest.routes,
         resourceRouteIds: webManifest.resourceRouteIds,
         entrySrc: await webEntrySrc(dirs),
+        publicDir: dirs.publicDir,
         db,
         registry,
         domainSettingsRegistry,
