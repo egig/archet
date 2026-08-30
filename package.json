@@ -27,6 +27,7 @@
     "./website": "./dist/website/index.js",
     "./website/console-forms": "./dist/website/console-forms.js",
     "./web": "./dist/web/index.js",
+    "./web/router": "./dist/web/router.js",
     "./console": "./dist/console/index.js",
     "./console/client": "./dist/console/client/index.js",
     "./console/node": "./dist/console/node-assets.js",
