@@ -1,7 +1,7 @@
 /**
- * A CodeJar-backed code input — used in place of a plain `<textarea>` wherever the console edits
- * source text a person actually reads as code (currently: the `website` domain's `globalCss`
- * setting, see `field-renderers` wiring in `fields.tsx`). CodeJar (github.com/antonmedv/codejar)
+ * A CodeJar-backed code input — used in place of a plain `<textarea>` for any
+ * `field.custom('code', …)` field, wherever the console edits source text a person actually reads
+ * as code (see `field-renderers` wiring in `fields.tsx`). CodeJar (github.com/antonmedv/codejar)
  * turns a `contenteditable` `<div>` into an editor with sane Tab/Enter/auto-indent behavior,
  * driven entirely by re-rendering `innerHTML` from a `highlight()` callback on every keystroke —
  * it owns cursor save/restore around that call, so `highlight()` below only has to worry about

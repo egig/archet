@@ -17,7 +17,7 @@ export const Agent = defineModel('agents', {
     systemPrompt: field.text({ required: true }),
     providerId: field.reference('providers', { required: true, indexed: true, displayText: 'Provider' }),
     roleId: field.reference('roles', { required: false, indexed: true, displayText: 'Role' }),
-    model: field.string({ default: 'claude-opus-5', maxLength: 255 }),
+    model: field.string({ default: 'openrouter/auto', maxLength: 255 }),
     // provider-specific passthrough (e.g. { effort: 'high' }) — ignored by adapters that don't
     // support a given key.
     config: field.json({ required: false }),

@@ -9,7 +9,6 @@ import { toErrorResponse } from '../router/errors.js';
 import { readJsonBody } from '../router/create-router.js';
 import { Workspace, DEFAULT_WORKSPACE_NAME } from '../workspace/index.js';
 import { Agent, Provider } from '../automation/models/index.js';
-import { seedWebsite } from '../website/seed.js';
 import { User, Role, registerPipeline } from './models/index.js';
 import { resolveSessionUser } from './pipeline.js';
 import {
@@ -160,11 +159,6 @@ export function createAuthRouter(db: AnyDb): App {
         providerId: provider.id,
         roleId: role.id,
       });
-
-      // A fresh instance's public site (the scaffolded `@egig/ratchet/web` routes) isn't empty —
-      // seed the four starter pages + the `website` Domain Settings. Idempotent (no-op once any
-      // `Page` row exists), so re-running a manually-reopened setup can't double it.
-      await seedWebsite(txDb);
 
       return created;
     });

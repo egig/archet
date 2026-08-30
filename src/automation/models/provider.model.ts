@@ -13,7 +13,7 @@ export const Provider = defineModel('providers', {
     // which wire protocol this credential speaks — picks the adapter in
     // `src/automation/providers/index.ts` (`resolveProvider`). `run-turn.ts` reads it off this
     // row, never off the `Agent` (an agent only chooses *which* Provider via `providerId`).
-    kind: field.enum(['anthropic', 'openai'], { default: 'anthropic', indexed: true }),
+    kind: field.enum(['anthropic', 'openai'], { default: 'openai', indexed: true }),
     // base URL override — meaningful to the openai-compatible adapter (Azure OpenAI, Groq,
     // Together, OpenRouter, local vLLM/Ollama, ...); left blank to use a provider's default endpoint.
     url: field.string({ required: false, maxLength: 2048 }),

@@ -10,13 +10,14 @@ We replaced the renderer with **`src/web/`**: the developer writes `routes/**/*.
 convention, and Ratchet scans them at codegen time, server-renders them, and bundles the client
 with `Bun.build`.
 
-The `website` domain stays, reduced to content management: `Page` (now a single sanitized
-rich-text `body` instead of `Block` rows — the block builder, the Page Builder screen, and
-`render.ts` are all gone), a new `Contact` model for the scaffolded contact form, and
-`WebsiteDomain` settings (site title, description, favicon, `ogImage`, `siteUrl`, `noindex` —
-`headHtml`/`globalCss` dropped, since the shell is now the consumer's own `routes/root.tsx` +
+The `website` domain does **not** stay in the framework. Content management is scaffolded source
+instead: `ratchet init` writes `models/website/` — a `Page` model (a single sanitized `body` text
+field, no `Block` rows and no rich-text editor — the block builder, the Page Builder screen, and
+`render.ts` are all gone), a `Contact` model for the scaffolded contact form, and a
+`settings.domain.ts` declaring the `website` Domain Settings (site title, description, favicon,
+`ogImage`, `siteUrl`, `noindex`; the shell is the consumer's own `routes/root.tsx` +
 `public/theme.css`). `ratchet init` scaffolds a `routes/$.tsx` that renders a published `Page` by
-slug, and `/api/auth/setup` seeds starter pages so a fresh site isn't empty.
+slug; there is no first-run seeding.
 
 ## Why data mode, not framework mode
 

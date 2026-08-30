@@ -64,9 +64,8 @@ describe('generate() against a self-contained model fixture', () => {
     const { modelCount } = await generate({ modelsDir, generatedDir });
     // 2 user models + 3 built-in auth models (User/Role/Session) + 4 built-in
     // automation models (Agent/Chat/Message/Provider) + 3 built-in workspace
-    // models (Workspace/WorkspaceView/WorkTitle) + 2 built-in website models
-    // (Page/Contact) — built-ins are always present.
-    expect(modelCount).toBe(14);
+    // models (Workspace/WorkspaceView/WorkTitle) — built-ins are always present.
+    expect(modelCount).toBe(12);
 
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
@@ -156,22 +155,7 @@ describe('generate() against a self-contained model fixture', () => {
     expect(schemaSrc).toContain("pgTable('providers'");
   });
 
-  it('always includes the built-in Page/Contact models, imported from `@egig/ratchet/website`', async () => {
-    await generate({ modelsDir, generatedDir });
-    const registrySrc = await import('node:fs/promises').then((fs) =>
-      fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
-    );
-    const schemaSrc = await import('node:fs/promises').then((fs) =>
-      fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
-    );
-    for (const name of ['Page', 'Contact']) {
-      expect(registrySrc).toContain(`import { ${name} as _${name} } from '@egig/ratchet/website';`);
-    }
-    expect(schemaSrc).toContain("pgTable('pages'");
-    expect(schemaSrc).toContain("pgTable('contacts'");
-  });
-
-  it("assigns the built-in auth models to the 'auth' Domain, the built-in automation models to the 'automation' Domain, the built-in workspace models to the 'workspace' Domain, and the built-in website models to the 'website' Domain (ADR 0001), grouping them in the console sidebar", async () => {
+  it("assigns the built-in auth models to the 'auth' Domain, the built-in automation models to the 'automation' Domain, and the built-in workspace models to the 'workspace' Domain (ADR 0001), grouping them in the console sidebar", async () => {
     await generate({ modelsDir, generatedDir });
     const registrySrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
@@ -187,10 +171,6 @@ describe('generate() against a self-contained model fixture', () => {
     for (const name of ['Workspace', 'WorkspaceView', 'WorkTitle']) {
       expect(registrySrc).toContain(`domain: "workspace"`);
       expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "workspace" } };`);
-    }
-    for (const name of ['Page', 'Contact']) {
-      expect(registrySrc).toContain(`domain: "website"`);
-      expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "website" } };`);
     }
     // a flat, non-domain user model (customer.model.ts, invoice.model.ts) stays a plain re-export.
     expect(registrySrc).toContain('export { Customer } from');
@@ -248,9 +228,8 @@ describe('generate() against a self-contained model fixture', () => {
     });
     try {
       const { domainCount } = await generate({ modelsDir: domainModelsDir, generatedDir });
-      // 1 user Domain + 1 built-in Automation Domain + 1 built-in Website Domain (both always
-      // present, see below).
-      expect(domainCount).toBe(3);
+      // 1 user Domain + 1 built-in Automation Domain (always present, see below).
+      expect(domainCount).toBe(2);
       const domainsSrc = await import('node:fs/promises').then((fs) =>
         fs.readFile(path.join(generatedDir, 'domains.ts'), 'utf8'),
       );
@@ -260,14 +239,13 @@ describe('generate() against a self-contained model fixture', () => {
     }
   });
 
-  it('always includes the built-in Automation Domain (Chat console menu) and Website Domain, imported from `@egig/ratchet/automation`/`@egig/ratchet/website`', async () => {
+  it('always includes the built-in Automation Domain (Chat console menu), imported from `@egig/ratchet/automation`', async () => {
     const { domainCount } = await generate({ modelsDir, generatedDir });
-    expect(domainCount).toBe(2);
+    expect(domainCount).toBe(1);
     const domainsSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'domains.ts'), 'utf8'),
     );
     expect(domainsSrc).toContain(`export { AutomationDomain } from '@egig/ratchet/automation';`);
-    expect(domainsSrc).toContain(`export { WebsiteDomain } from '@egig/ratchet/website';`);
   });
 
   it("rejects Domain Settings declared under a folder that doesn't match their own domain name", async () => {
@@ -304,9 +282,9 @@ describe('generate() against a self-contained model fixture', () => {
     }
   });
 
-  it("emits the builtin RoleForm and PageForm entries to console-forms.ts when the app declares no *.form.tsx of its own", async () => {
+  it("emits the builtin RoleForm entry to console-forms.ts when the app declares no *.form.tsx of its own", async () => {
     const { formCount } = await generate({ modelsDir, generatedDir });
-    expect(formCount).toBe(2); // BUILTIN_FORMS' RoleForm + PageForm (builtins.ts) — always present by default
+    expect(formCount).toBe(1); // BUILTIN_FORMS' RoleForm (builtins.ts) — always present by default
     const formsSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'console-forms.ts'), 'utf8'),
     );
@@ -314,8 +292,6 @@ describe('generate() against a self-contained model fixture', () => {
     expect(formsSrc).toContain("from '@egig/ratchet/console/client'");
     expect(formsSrc).toContain(`import { RoleForm as rolesForm } from '@egig/ratchet/auth/console-forms';`);
     expect(formsSrc).toContain(`"roles": rolesForm,`);
-    expect(formsSrc).toContain(`import { PageForm as pagesForm } from '@egig/ratchet/website/console-forms';`);
-    expect(formsSrc).toContain(`"pages": pagesForm,`);
   });
 
   it("emits a customForms entry for a `<model.name>.form.tsx`, imported by relative path (not the file's own basename)", async () => {
@@ -327,7 +303,7 @@ describe('generate() against a self-contained model fixture', () => {
     });
     try {
       const { formCount } = await generate({ modelsDir: formsModelsDir, generatedDir });
-      expect(formCount).toBe(3); // the scanned customers form, plus the builtin RoleForm + PageForm
+      expect(formCount).toBe(2); // the scanned customers form, plus the builtin RoleForm
       const formsSrc = await import('node:fs/promises').then((fs) =>
         fs.readFile(path.join(generatedDir, 'console-forms.ts'), 'utf8'),
       );
@@ -346,14 +322,13 @@ describe('generate() against a self-contained model fixture', () => {
     });
     try {
       const { formCount } = await generate({ modelsDir: formsModelsDir, generatedDir });
-      expect(formCount).toBe(2); // the app's own roles.form.tsx, plus the builtin PageForm (not also the builtin RoleForm)
+      expect(formCount).toBe(1); // the app's own roles.form.tsx replaces the builtin RoleForm
       const formsSrc = await import('node:fs/promises').then((fs) =>
         fs.readFile(path.join(generatedDir, 'console-forms.ts'), 'utf8'),
       );
       expect(formsSrc).not.toContain('@egig/ratchet/auth/console-forms');
       expect(formsSrc).toContain(`import rolesForm from '../`);
       expect(formsSrc).toContain(`"roles": rolesForm,`);
-      expect(formsSrc).toContain(`import { PageForm as pagesForm } from '@egig/ratchet/website/console-forms';`);
     } finally {
       await rm(formsModelsDir, { recursive: true, force: true });
     }

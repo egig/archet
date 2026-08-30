@@ -24,8 +24,6 @@
     "./auth/console-forms": "./dist/auth/console-forms.js",
     "./automation": "./dist/automation/index.js",
     "./workspace": "./dist/workspace/index.js",
-    "./website": "./dist/website/index.js",
-    "./website/console-forms": "./dist/website/console-forms.js",
     "./web": "./dist/web/index.js",
     "./web/router": "./dist/web/router.js",
     "./console": "./dist/console/index.js",
@@ -63,10 +61,8 @@
     "drizzle-orm": "^0.36.4",
     "openai": "^7.5.0",
     "postgres": "^3.4.5",
-    "quill": "^2.0.3",
     "react-router": "^8.3.0",
     "remark-gfm": "^4.0.1",
-    "sanitize-html": "^2.17.7",
     "tailwindcss": "^4.3.3",
     "turbo-stream": "^3",
     "uuidv7": "^1.0.2",
@@ -119,6 +115,7 @@
     "drizzle-kit": "^0.28.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "sanitize-html": "^2.17.7",
     "typescript": "^5.7.2"
   },
   "trustedDependencies": [

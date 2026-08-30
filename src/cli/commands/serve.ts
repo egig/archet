@@ -70,8 +70,8 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
     dirs.consolePath,
     createConsoleRouter(createNodeFsAssetSource(generatedDir), registry, db, dirs.consolePath, domainSettingsRegistry, storage),
   );
-  // `/_site-assets/*` — a `field.file({ public: true })` Domain Settings value (e.g. the website
-  // Domain's favicon/social share image), served with no auth at all. Fixed, non-configurable
+  // `/_site-assets/*` — a `field.file({ public: true })` Domain Settings value (e.g. a site's
+  // favicon / social-share image), served with no auth at all. Fixed, non-configurable
   // prefix (unlike `consolePath`) so a public asset's URL never moves; mounted before the web app
   // below for the same reason `/api`/the console are — that catch-all `/*` route must never be
   // able to shadow it.

@@ -1,11 +1,5 @@
 @import "tailwindcss";
 
-/* Vendored Quill 2 `snow` theme — the editor CSS for `RichTextEditor.tsx` (`field.custom('richtext')`).
-   Kept as a checked-in copy (self-contained, no `url()`/`@font-face`) rather than a runtime
-   `import 'quill/dist/quill.snow.css'`, which would emit a stray file the console's Tailwind-built
-   stylesheet never links. Refresh it from `node_modules/quill/dist/quill.snow.css` on a Quill bump. */
-@import "./quill.snow.css";
-
 /* Scans this directory for the Tailwind classes the console client's own components use.
    `build-console.ts`'s `writeConsoleCssEntry` wraps this file with an extra `@source` over
    `modelsDir` at build time, so a consumer's `*.form.tsx` gets scanned too — see that function for
@@ -51,22 +45,4 @@
 }
 .cj-property {
   color: #7c3aed;
-}
-
-/* Quill rich-text input (RichTextEditor.tsx) — the `field.custom('richtext')` editor. The vendored
-   `snow` theme (imported at the top of this file) styles Quill's own internals; this just gives the
-   editing area a sensible height and squares off the toolbar/editor borders inside our wrapper. */
-.rt-editor .ql-toolbar {
-  border-top-left-radius: 0.25rem;
-  border-top-right-radius: 0.25rem;
-  border-color: #d1d5db;
-}
-.rt-editor .ql-container {
-  border-bottom-left-radius: 0.25rem;
-  border-bottom-right-radius: 0.25rem;
-  border-color: #d1d5db;
-  font-size: 0.875rem;
-}
-.rt-editor .ql-editor {
-  min-height: 12rem;
 }

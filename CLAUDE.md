@@ -75,7 +75,7 @@ bun test
 `schema.ts`, `validators.ts`, `registry.ts`, `domains.ts`, `console-forms.ts`,
 `console-field-inputs.ts`. `BUILTIN_MODELS` / `BUILTIN_DOMAINS` / `BUILTIN_FORMS`
 ([src/codegen/builtins.ts](src/codegen/builtins.ts)) inject the framework's own models (auth,
-automation, workspace, website) into the same scan — those live in `src/*/models/` and aren't
+automation, workspace) into the same scan — those live in `src/*/models/` and aren't
 reachable by the consumer-dir walk, so their domain and import path are assigned explicitly.
 
 ### The server is assembled, never hand-written
@@ -84,8 +84,8 @@ reachable by the consumer-dir walk, so their domain and import path are assigned
 `domains.ts`, builds a name→`ModelDefinition` map, and mounts routers on one `App` in a
 **registration-order-sensitive** sequence (most specific prefix first): `/api/auth`,
 `/api/automation`, `/api` (generic `/api/:model`), then the console at `consolePath` (can be `/`),
-then `/_site-assets`, then the website catch-all `/`. Don't reorder without understanding the
-catch-all shadowing rules documented in that file.
+then `/_site-assets`, then — when the consumer opts into `src/web/` — the `routes/` catch-all `/`.
+Don't reorder without understanding the catch-all shadowing rules documented in that file.
 
 ### The router (`src/router/`) — no framework
 
@@ -137,7 +137,7 @@ Each is a self-contained set of builtin models + a router + pipeline helpers, wi
 | `src/auth/` | User/Role/Permission/Session, `/api/auth/*` (register/login/logout/me/setup), cookie/token/password helpers, `presetFields()` |
 | `src/automation/` | `Agent`/`Provider`/`Chat`/`Message`, `/api/automation/*`, agent tool exposure + turn runner. Chat uses assistant-ui (`useDataStreamRuntime`) + `assistant-stream`; vendored+restyled components in `src/console/client/chat/`. `Message.content` is a JSON parts blob. See [docs-internal/](docs-internal/) for the re-architecture plan. |
 | `src/workspace/` | `Workspace` model + saved views; console right-panel |
-| `src/website/` | public page rendering, `/:slug` catch-all, `/_site-assets/*` for public `field.file` values |
+| `src/web/` | the consumer's own `routes/**/*.tsx` React Router data-mode site — SSR + client bundle + the `/` catch-all; `/_site-assets/*` (`src/router/site-assets.ts`) serves public `field.file` Domain Settings values. There is no built-in `website` domain — `ratchet init` scaffolds `models/website/` (Page/Contact/settings) as consumer source. |
 
 ### Console client (`src/console/client/`)
 

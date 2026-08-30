@@ -126,12 +126,21 @@ export async function loader({ params, context }) {
 Throwing a `Response` from a loader works as expected — `redirect('/login')`,
 `new Response(null, { status: 403 })`, `data(x, { status: 404 })`.
 
-## Console-managed pages
+## Content-managed pages (scaffolded)
 
-The `website` domain is content management only — it has a `Page` model (`slug`, `title`,
-`metaDescription`, a sanitized rich-text `body`, `status`, `navLocation`/`navOrder`) edited in the
-console, and Ratchet no longer renders it. Your `routes/` render it. The scaffolded `routes/$.tsx`
-is a splat route that looks a published page up by slug:
+There is no built-in `website` domain. `ratchet init` scaffolds `models/website/` in your project
+— editable source you own:
+
+- **`page.model.ts`** — a `Page` model (`slug`, `title`, `metaDescription`, a `body` text field,
+  `status`, `navLocation`/`navOrder`), edited in the console. `body` is sanitized with
+  [`sanitize-html`](https://github.com/apostrophecms/sanitize-html) on every write (allowlisted
+  tags/attributes, no scripts, no `javascript:` URLs), so rendering it with
+  `dangerouslySetInnerHTML` is safe.
+- **`contact.model.ts`** — a `Contact` model for the contact form.
+- **`settings.domain.ts`** — the `website` Domain Settings (`title`, `description`, `siteUrl`,
+  `noindex`, `favicon`, `ogImage`), read by the routes through `settings.get('website')`.
+
+The scaffolded `routes/$.tsx` is a splat route that looks a published page up by slug:
 
 ```tsx
 export async function loader({ params, context }) {
@@ -147,10 +156,9 @@ export async function loader({ params, context }) {
 // … <article dangerouslySetInnerHTML={{ __html: page.body }} />
 ```
 
-`body` is sanitized (allowlisted tags/attributes, no scripts, no `javascript:` URLs) on every
-write, so rendering it with `dangerouslySetInnerHTML` is safe. `ratchet init` also scaffolds
-`routes/root.tsx` (header/footer nav built from the pages that set `navLocation`) and a
-`routes/contact.tsx` whose `action` inserts a row into the builtin `contacts` model:
+`ratchet init` also scaffolds `routes/root.tsx` (header/footer nav built from the pages that set
+`navLocation`) and a `routes/contact.tsx` whose `action` inserts a row into the `contacts` model
+(no public write endpoint — the insert goes straight through the loader `context.db`):
 
 ```tsx
 export async function action({ request, context }) {
@@ -165,8 +173,7 @@ export async function action({ request, context }) {
 }
 ```
 
-On first `/api/auth/setup`, Ratchet seeds four starter pages (About, Services, Terms, Privacy) and
-the `website` title/description, so a fresh install's site isn't blank.
+There is no first-run seeding — create your pages in the console (Pages).
 
 ## Build & serve
 
@@ -178,8 +185,9 @@ the `website` title/description, so a fresh install's site isn't blank.
 
 `react` / `react-dom` are peer dependencies (the console already needs them); `react-router` is
 what your route files import directly. `ratchet init` scaffolds `routes/root.tsx`,
-`routes/index.tsx` (a hand-authored landing page), `routes/$.tsx`, `routes/contact.tsx`, and
-`public/theme.css` (a production-ready light/dark theme).
+`routes/index.tsx` (a hand-authored landing page), `routes/$.tsx`, `routes/contact.tsx`,
+`public/theme.css` (a production-ready light/dark theme), and the `models/website/` content set
+above.
 
 ## Current limitations
 

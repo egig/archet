@@ -24,6 +24,9 @@ function packageJson(name: string): string {
           '@egig/ratchet': RATCHET_VERSION,
           'drizzle-orm': '^0.36.4',
           postgres: '^3.4.5',
+          // `sanitize-html` cleans `Page.body` on every write (models/website/page.model.ts) so
+          // routes/$.tsx can render it with `dangerouslySetInnerHTML`.
+          'sanitize-html': '^2.17.7',
           zod: '^3.24.1',
           // `react`/`react-dom` are `@egig/ratchet`'s `peerDependencies` — the console SPA and the
           // web app's SSR both need exactly one copy. `react-router` is what `routes/**` import
@@ -36,6 +39,7 @@ function packageJson(name: string): string {
           '@types/bun': '^1.4.0',
           '@types/react': '^19.2.0',
           '@types/react-dom': '^19.2.0',
+          '@types/sanitize-html': '^2.16.1',
           'drizzle-kit': '^0.28.1',
           typescript: '^5.7.2',
         },
@@ -84,6 +88,150 @@ const EXAMPLE_MODEL = `import { defineModel, field } from '@egig/ratchet/core';
 export const Example = defineModel('examples', {
   fields: {
     name: field.string({ required: true, maxLength: 255 }),
+  },
+});
+`;
+
+// models/website/ — the public site's content, all editable source in your project (it used to be
+// a built-in "website" domain in @egig/ratchet). The routes/ files below render these rows.
+
+const WEBSITE_PAGE_MODEL = `import { defineModel, field, pipe, validate, persist, PipelineError, type PipelineFn } from '@egig/ratchet/core';
+import sanitizeHtml from 'sanitize-html';
+
+// First path segments a page slug can't take — each is already answered by something else (a
+// route file, a framework asset prefix, the REST mount) before routes/\$.tsx could match it.
+const RESERVED_FIRST_SEGMENTS = new Set(['api', 'contact', '_ratchet', '_site-assets']);
+
+const assertSlugNotReserved: PipelineFn = (ctx) => {
+  const slug = ctx.input.slug;
+  if (typeof slug !== 'string') return ctx;
+  const first = slug.replace(/^\\/+/, '').split('/')[0]?.toLowerCase();
+  if (first && RESERVED_FIRST_SEGMENTS.has(first)) {
+    throw new PipelineError({
+      code: 'VALIDATION_ERROR',
+      status: 400,
+      fields: { slug: \`can't start with '\${first}' — that path is reserved\` },
+    });
+  }
+  return ctx;
+};
+
+// The tags/attributes a page body may contain. Everything else survives as text but loses its
+// tag; \`a[href]\` is restricted to http/https/mailto so a body can never carry \`javascript:\`.
+const ALLOWED: sanitizeHtml.IOptions = {
+  allowedTags: ['p', 'br', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'a', 'strong', 'em', 'blockquote', 'pre', 'code', 'span'],
+  allowedAttributes: { a: ['href', 'name', 'target', 'rel'], span: ['class'], code: ['class'], pre: ['class'] },
+  allowedSchemes: ['http', 'https', 'mailto'],
+  allowProtocolRelative: false,
+};
+
+// Sanitize \`body\` on every write so routes/\$.tsx can render it with dangerouslySetInnerHTML
+// without a second pass. No-op unless \`body\` is a string in this write's input.
+const sanitizeBody: PipelineFn = (ctx) => {
+  if (typeof ctx.input.body !== 'string') return ctx;
+  return { ...ctx, input: { ...ctx.input, body: sanitizeHtml(ctx.input.body, ALLOWED) } };
+};
+
+/**
+ * One page of the public site. Edited in the console, rendered by routes/\$.tsx (by slug) and
+ * linked from routes/root.tsx (header/footer nav, from \`navLocation\`/\`navOrder\`). \`status\` gates
+ * whether a page is live — routes filter \`where status = 'published'\`.
+ */
+export const Page = defineModel('pages', {
+  fields: {
+    slug: field.string({ required: true, unique: true, indexed: true, maxLength: 255 }),
+    title: field.string({ required: true, maxLength: 255 }),
+    metaDescription: field.string({ required: false, maxLength: 300, displayText: 'Meta description' }),
+    body: field.text({ required: true, displayText: 'Content' }),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft', indexed: true }),
+    navLocation: field.enum(['none', 'header', 'footer'] as const, {
+      default: 'none',
+      displayText: 'Navigation',
+      description: 'Where this page links from — the top nav, the footer, or nowhere.',
+    }),
+    navOrder: field.integer({ default: 0, displayText: 'Navigation order' }),
+  },
+  operations: {
+    create: pipe(assertSlugNotReserved, sanitizeBody, validate, persist),
+    update: pipe(assertSlugNotReserved, sanitizeBody, validate, persist),
+  },
+  console: { label: 'Pages', displayField: 'title' },
+});
+`;
+
+const WEBSITE_CONTACT_MODEL = `import { defineModel, field } from '@egig/ratchet/core';
+
+/**
+ * A message submitted through the public site's contact form (routes/contact.tsx). That route's
+ * server \`action\` inserts rows straight through its loader \`context.db\` with its own honeypot +
+ * validation — there's no public write API — so \`contacts\` stays permission-gated like every other
+ * model and the console is the only place a row is read, triaged (\`status\`), or deleted.
+ */
+export const Contact = defineModel('contacts', {
+  fields: {
+    name: field.string({ required: true, maxLength: 255 }),
+    email: field.string({ required: true, maxLength: 320 }),
+    message: field.text({ required: true }),
+    status: field.enum(['new', 'read', 'archived'] as const, {
+      default: 'new',
+      indexed: true,
+      description: 'Triage state — new submissions arrive as “new”.',
+    }),
+  },
+  console: { label: 'Contacts', displayField: 'email' },
+});
+`;
+
+const WEBSITE_DOMAIN = `import { defineDomain, field } from '@egig/ratchet/core';
+
+/**
+ * Site-wide settings, console-editable (Settings → Website) and read by the routes/ files through
+ * \`getWebContext(context).settings.get('website')\`:
+ *
+ * - \`title\` is the site name, suffixed onto each page's \`<title>\`.
+ * - \`description\` is the \`<meta name="description">\` fallback for a page that sets none.
+ * - \`siteUrl\` is the real public origin (e.g. "https://acme.com", no trailing slash) — used to
+ *   build absolute canonical / og:url URLs.
+ * - \`noindex\` adds a \`robots\` noindex meta tag to every page — for a staging / pre-launch site.
+ * - \`favicon\`/\`ogImage\` are \`field.file({ public: true })\`: served unauthenticated from a fixed
+ *   \`/_site-assets/*\` URL, since a browser tab and a social crawler fetch them with no session.
+ */
+export const WebsiteSettings = defineDomain('website', {
+  settings: {
+    title: field.string({
+      maxLength: 255,
+      displayText: 'Site title',
+      description: 'The site name — appended to every page title, e.g. "Page — Site".',
+    }),
+    description: field.text({
+      displayText: 'Site description',
+      description: 'Fallback <meta name="description"> for a page that doesn’t set its own.',
+    }),
+    siteUrl: field.string({
+      maxLength: 255,
+      displayText: 'Site URL',
+      description: 'The site’s real public origin, e.g. "https://acme.com" (no trailing slash). Used for canonical and Open Graph URLs.',
+    }),
+    noindex: field.boolean({
+      default: false,
+      displayText: 'Discourage search engines',
+      description: 'Sitewide noindex — for a staging or pre-launch site. Adds a robots meta tag to every page.',
+    }),
+    favicon: field.file({
+      public: true,
+      preview: 'image',
+      accept: 'image/png,image/x-icon,image/svg+xml',
+      maxSize: 2 * 1024 * 1024,
+      displayText: 'Favicon',
+    }),
+    ogImage: field.file({
+      public: true,
+      preview: 'image',
+      accept: 'image/png,image/jpeg',
+      maxSize: 2 * 1024 * 1024,
+      displayText: 'Social share image',
+      description: 'Default og:image/twitter:image for a page that doesn’t set its own — ideally 1200×630.',
+    }),
   },
 });
 `;
@@ -225,9 +373,9 @@ const INDEX_ROUTE = `import { Link } from 'react-router';
 
 export const meta = () => [{ title: 'Home' }];
 
-// The landing page is hand-authored here (edit it freely). The other pages — About, Services,
-// Terms, Privacy — are content-managed: they're rows in the "pages" table, edited in the console,
-// and rendered by routes/$.tsx.
+// The landing page is hand-authored here (edit it freely). Other pages are content-managed: create
+// them in the console (Pages), give one a slug like "about", and routes/$.tsx renders it. The
+// links below point at pages you'll want to create there (or repoint them).
 export default function Home() {
   return (
     <>
@@ -323,7 +471,7 @@ export default function ContentPage() {
   return (
     <article className="container prose">
       <h1>{page.title}</h1>
-      {/* page.body is sanitized server-side on every write (see @egig/ratchet's sanitizeBody). */}
+      {/* page.body is sanitized server-side on every write (see models/website/page.model.ts). */}
       <div dangerouslySetInnerHTML={{ __html: page.body }} />
     </article>
   );
@@ -337,9 +485,9 @@ import type { ActionFunctionArgs } from 'react-router';
 
 const EMAIL_RE = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
 
-// Runs on the server only. Inserts a row into the builtin "contacts" model — no public API is
-// exposed for it, so this is the submission path. "company" is a honeypot: a real person never
-// sees or fills it.
+// Runs on the server only. Inserts a row into the "contacts" model (models/website/contact.model.ts)
+// — no public API is exposed for it, so this is the submission path. "company" is a honeypot: a
+// real person never sees or fills it.
 export async function action({ request, context }: ActionFunctionArgs) {
   const form = await request.formData();
   if (form.get('company')) return { ok: true as const }; // bot — pretend it worked
@@ -618,14 +766,14 @@ async function appendGitignore(cwd: string): Promise<void> {
 }
 
 /** Scaffolds a full starter project — package.json, tsconfig.json, ratchet.config.ts, an example
- * model, drizzle/migrations/, and a working public site: a hand-authored landing page plus the
- * routes that render the console-managed pages (About/Services/Terms/Privacy — seeded on first
- * `/setup`) and the contact form. No server entry file to write: `ratchet serve` (framework-owned,
- * see src/cli/commands/serve.ts) boots the API directly from ratchet.config.ts + the generated
- * registry. Never overwrites a file that's already there — safe to re-run in a partially set-up
- * directory. */
+ * model, drizzle/migrations/, and a working public site: a hand-authored landing page, a
+ * `models/website/` content set (a `Page` model + a `Contact` model + the `website` Domain
+ * Settings, all editable source), and the routes that render them plus the contact form. No server
+ * entry file to write: `ratchet serve` (framework-owned, see src/cli/commands/serve.ts) boots the
+ * API directly from ratchet.config.ts + the generated registry. Never overwrites a file that's
+ * already there — safe to re-run in a partially set-up directory. */
 export async function runInit(cwd: string): Promise<void> {
-  await mkdir(path.join(cwd, 'models'), { recursive: true });
+  await mkdir(path.join(cwd, 'models', 'website'), { recursive: true });
   await mkdir(path.join(cwd, '.ratchet'), { recursive: true });
   await mkdir(path.join(cwd, 'drizzle', 'migrations'), { recursive: true });
   await mkdir(path.join(cwd, 'routes'), { recursive: true });
@@ -636,6 +784,9 @@ export async function runInit(cwd: string): Promise<void> {
   await writeIfAbsent(path.join(cwd, 'tsconfig.json'), TSCONFIG, 'tsconfig.json');
   await writeIfAbsent(path.join(cwd, 'ratchet.config.ts'), RATCHET_CONFIG, 'ratchet.config.ts');
   await writeIfAbsent(path.join(cwd, 'models', 'example.model.ts'), EXAMPLE_MODEL, 'models/example.model.ts');
+  await writeIfAbsent(path.join(cwd, 'models', 'website', 'page.model.ts'), WEBSITE_PAGE_MODEL, 'models/website/page.model.ts');
+  await writeIfAbsent(path.join(cwd, 'models', 'website', 'contact.model.ts'), WEBSITE_CONTACT_MODEL, 'models/website/contact.model.ts');
+  await writeIfAbsent(path.join(cwd, 'models', 'website', 'settings.domain.ts'), WEBSITE_DOMAIN, 'models/website/settings.domain.ts');
   await writeIfAbsent(path.join(cwd, 'routes', 'root.tsx'), ROOT_ROUTE, 'routes/root.tsx');
   await writeIfAbsent(path.join(cwd, 'routes', 'index.tsx'), INDEX_ROUTE, 'routes/index.tsx');
   await writeIfAbsent(path.join(cwd, 'routes', '$.tsx'), SPLAT_ROUTE, 'routes/$.tsx');
@@ -649,5 +800,5 @@ export async function runInit(cwd: string): Promise<void> {
   console.log('  2. set DATABASE_URL');
   console.log('  3. bun run generate   (writes .ratchet/* + SQL migration files)');
   console.log('  4. bun run migrate && bun run serve   (or `bun run dev` for local push-based iteration)');
-  console.log('  5. open the console, complete setup — starter pages are seeded automatically');
+  console.log('  5. open the console, complete setup, then add your pages under Pages');
 }
