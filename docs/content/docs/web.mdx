@@ -124,8 +124,8 @@ export async function loader({ params, context }) {
 - **`requirePermission(resource, action)`** — throws a `401`/`403` `Response` (React Router routes
   it to the nearest `ErrorBoundary`).
 
-Throwing a `Response` from a loader works as expected — `redirect('/login')`, `new Response(null,
-{ status: 403 })`, `data(x, { status: 404 })`.
+Throwing a `Response` from a loader works as expected — `redirect('/login')`,
+`new Response(null, { status: 403 })`, `data(x, { status: 404 })`.
 
 ## Build & serve
 
