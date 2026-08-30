@@ -95,7 +95,7 @@ dist/
 *.log
 `;
 
-const ROOT_ROUTE = `import { Link, NavLink, Outlet, isRouteErrorResponse, useRouteError } from 'react-router';
+const ROOT_ROUTE = `import { Link, NavLink, Outlet, isRouteErrorResponse, useLoaderData, useRouteError } from 'react-router';
 import { Meta, Scripts, getWebContext } from '@egig/ratchet/web';
 import { sql } from 'drizzle-orm';
 import type { LoaderFunctionArgs } from 'react-router';
@@ -136,9 +136,8 @@ export const meta = ({ data }: { data: Awaited<ReturnType<typeof loader>> }) => 
   ];
 };
 
-export default function Root({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> }) {
-  const site = loaderData?.site ?? {};
-  const nav = loaderData?.nav ?? [];
+export default function Root() {
+  const { site, nav } = useLoaderData<typeof loader>();
   const siteName = typeof site.title === 'string' && site.title ? site.title : 'My site';
   const header = nav.filter((p) => p.navLocation === 'header');
   const footer = nav.filter((p) => p.navLocation === 'footer');
