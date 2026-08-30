@@ -1,20 +1,26 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { watch } from 'node:fs';
 import { generate } from '../../codegen/generate.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
 import { writeDrizzleKitConfig } from '../drizzle-kit-config.js';
 import { runDrizzleKit } from '../run-drizzle-kit.js';
 import { buildConsoleClient, type ConsoleClientHandle } from '../build-console.js';
+import { buildWebClient } from '../build-web.js';
 
 const DEBOUNCE_MS = 200;
 
 async function generateAndPush(cwd: string, dirs: ReturnType<typeof resolveDirs>): Promise<void> {
-  await generate({ modelsDir: dirs.modelsDir, generatedDir: dirs.generatedDir });
+  await generate({ modelsDir: dirs.modelsDir, generatedDir: dirs.generatedDir, routesDir: dirs.routesDir });
   const drizzleConfigFile = await writeDrizzleKitConfig(cwd, dirs.generatedDir, dirs.migrationsDir);
   // §7: `dev` is the one place `push` is used — immediate schema sync, no migration files.
   // `--force` auto-approves data-loss statements; acceptable because this only ever targets a
   // local dev database, never staging/prod (which always goes through generate+migrate instead).
   await runDrizzleKit(['push', '--config', drizzleConfigFile, '--force'], cwd);
+  // rebuild the web client bundle after each regenerate (the route module set may have changed).
+  // Bun.build has no incremental watch API, so this is a one-shot rebuild — cheap for the small
+  // trees this targets; a proper dev watch loop is phase 6.
+  await buildWebClient(dirs, { mode: 'dev' });
 }
 
 /** §6: watch model files; on change, regenerate + push + restart the dev server. */
@@ -94,6 +100,17 @@ export async function runDev(cwd: string): Promise<void> {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => void restart(`${filename} changed`), DEBOUNCE_MS);
   });
+
+  // The developer's React Router site — regenerate the route manifests + restart on any change.
+  // (The web client bundle rebuild is driven by `buildWebClient`'s own dev watcher — phase 4/6.)
+  if (existsSync(dirs.routesDir)) {
+    watch(dirs.routesDir, { recursive: true }, (_event, filename) => {
+      if (!filename || !/\.(tsx|ts|jsx|js)$/.test(filename)) return;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => void restart(`${filename} changed`), DEBOUNCE_MS);
+    });
+    console.log(`[dev] watching ${dirs.routesDir} for changes`);
+  }
 
   const shutdown = async () => {
     if (shuttingDown) return;

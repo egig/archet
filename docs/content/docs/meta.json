@@ -13,6 +13,7 @@
     "router",
     "auth",
     "console",
+    "web",
     "deploy",
     "---Project---",
     "changelog"

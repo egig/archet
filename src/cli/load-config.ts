@@ -34,6 +34,8 @@ export function resolveDirs(cwd: string, config: FrameworkConfig) {
     modelsDir: path.resolve(cwd, config.modelsDir ?? 'models'),
     generatedDir: path.resolve(cwd, config.generatedDir ?? '.ratchet'),
     migrationsDir: path.resolve(cwd, config.migrationsDir ?? 'migrations'),
+    routesDir: path.resolve(cwd, config.routesDir ?? 'routes'),
+    publicDir: path.resolve(cwd, config.publicDir ?? 'public'),
     consolePath: resolveConsolePath(config),
     brand: config.brand ?? {},
   };

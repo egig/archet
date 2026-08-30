@@ -7,12 +7,17 @@ import { runDrizzleKit } from '../run-drizzle-kit.js';
 
 export async function runGenerate(cwd: string): Promise<void> {
   const config = await loadConfig(cwd);
-  const { modelsDir, generatedDir, migrationsDir } = resolveDirs(cwd, config);
+  const { modelsDir, generatedDir, migrationsDir, routesDir } = resolveDirs(cwd, config);
 
-  const { modelCount, domainCount, formCount, fieldInputCount, files } = await generate({ modelsDir, generatedDir });
+  const { modelCount, domainCount, formCount, fieldInputCount, routeCount, files } = await generate({
+    modelsDir,
+    generatedDir,
+    routesDir,
+  });
 
   console.log(
-    `generated ${modelCount} model(s), ${domainCount} domain settings, ${formCount} custom console form(s), ${fieldInputCount} custom console field input(s) -> ${path.relative(cwd, generatedDir)}/`,
+    `generated ${modelCount} model(s), ${domainCount} domain settings, ${formCount} custom console form(s), ${fieldInputCount} custom console field input(s)` +
+      `${routeCount > 0 ? `, ${routeCount} web route(s)` : ''} -> ${path.relative(cwd, generatedDir)}/`,
   );
   for (const file of files) {
     console.log(`  ${path.relative(cwd, file)}`);

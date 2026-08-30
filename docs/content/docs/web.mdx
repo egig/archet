@@ -1,0 +1,147 @@
+---
+title: Web App
+description: A server-rendered React Router data-mode site, bundled with Bun.
+---
+
+`@egig/ratchet/web` (the `src/web/` package) lets you build the public-facing site as code:
+you write `routes/**/*.tsx` in a folder convention, and Ratchet scans them at codegen time,
+server-renders them with streaming SSR, and bundles the client with `Bun.build` — no Vite, no
+React Router framework-mode plugin. It replaces the old `Page`/`Block` page renderer at `/`.
+
+The site is **opt-in**: it's mounted only when `routes/root.tsx` exists. Without it, `/` returns
+404.
+
+## Layout
+
+```
+routes/
+  root.tsx          # renders the whole <html> document — required
+  index.tsx         # /
+  about.tsx         # /about
+  blog/
+    _layout.tsx     # layout component wrapping /blog/* (renders <Outlet/>)
+    index.tsx       # /blog
+    $slug.tsx       # /blog/:slug
+  _marketing/       # leading _ = pathless layout group (no URL segment)
+    _layout.tsx
+    pricing.tsx     # /pricing
+  sitemap[.]xml.tsx # /sitemap.xml   ([x] escapes a literal character)
+  $.tsx             # splat — matches anything unmatched
+public/             # static files served at /  (favicon.ico, robots.txt, /img/…)
+```
+
+- **Dynamic segment**: a file or folder named `$name` → `:name`. Bare `$` → splat.
+- **Folder = nesting.** A folder with no `_layout.tsx` (and no `<folder>.tsx` sibling) is a
+  path-only prefix route.
+- **Resource route**: a module that exports a `loader`/`action` but **no `default`** returns its
+  loader's raw `Response` — no React render. Use it for sitemaps, feeds, webhooks, OG images.
+
+Configure the directories in `ratchet.config.ts` (defaults shown):
+
+```ts
+export default defineConfig({
+  // …
+  routesDir: 'routes',
+  publicDir: 'public',
+});
+```
+
+## Route modules
+
+Each `routes/**/*.tsx` may export:
+
+| Export | Runs | Purpose |
+| --- | --- | --- |
+| `default` | client + server | the route component |
+| `loader` | **server only** | data for the component (see context below) |
+| `action` | **server only** | handle a non-GET submission |
+| `meta` | client + server | `[{ title }, { name, content }, …]` — merged leaf-first |
+| `ErrorBoundary` | client + server | rendered when this route or a child throws |
+| `headers` | **server only** | response headers for the document / `.data` response |
+| `handle`, `shouldRevalidate` | client + server | standard React Router route config |
+
+`loader`/`action`/`headers` and their now-dead imports are stripped from the browser bundle at
+build time. Anything with real side effects that must never reach the browser (a database client,
+`node:*` code) belongs in a `*.server.ts` file — those are emptied for the client build.
+
+### `root.tsx`
+
+Renders the `<html>`. Import `<Meta />` and `<Scripts />` from `@egig/ratchet/web` and place them
+in `<head>` / end of `<body>`:
+
+```tsx
+import { Outlet } from 'react-router';
+import { Meta, Scripts, getWebContext } from '@egig/ratchet/web';
+import type { LoaderFunctionArgs } from 'react-router';
+
+export async function loader({ context }: LoaderFunctionArgs) {
+  const settings = await getWebContext(context).settings.get('website');
+  return { settings };
+}
+
+export const meta = ({ data }) => [{ title: data?.settings?.title ?? 'My site' }];
+
+export default function Root({ loaderData }) {
+  return (
+    <html lang="en">
+      <head><meta charSet="utf-8" /><Meta /></head>
+      <body><Outlet /><Scripts /></body>
+    </html>
+  );
+}
+```
+
+If `root.tsx` doesn't export an `ErrorBoundary`, a framework default renders one (with the right
+HTTP status).
+
+## Loaders always run on the server
+
+Ratchet uses **single fetch**: `loader`/`action` never run in the browser. On the first request
+they run during SSR; on a later client navigation the browser fetches one turbo-stream
+`<path>.data` response and the server runs the loaders for it. So a loader can always reach the
+database directly through its `context`:
+
+```tsx
+import { getWebContext } from '@egig/ratchet/web';
+import { sql } from 'drizzle-orm';
+
+export async function loader({ params, context }) {
+  const { db, session, settings } = getWebContext(context);
+  const rows = await db.execute(sql`select * from products where sku = ${params.sku}`);
+  if (!rows[0]) throw new Response('Not found', { status: 404 });
+  return { product: rows[0] };
+}
+```
+
+`context` (`WebLoaderContext`) holds:
+
+- **`db`** — the Drizzle client.
+- **`session`** — the resolved session (`{ user, permissions, can(resource, action) }`) from the
+  same `ratchet_session` cookie the console and REST API use, or `null`.
+- **`settings.get(domain)`** — a per-request memoized Domain Settings reader.
+- **`registry`** — the name → model map.
+- **`storage`** — the `FileStorage` adapter.
+- **`requirePermission(resource, action)`** — throws a `401`/`403` `Response` (React Router routes
+  it to the nearest `ErrorBoundary`).
+
+Throwing a `Response` from a loader works as expected — `redirect('/login')`, `new Response(null,
+{ status: 403 })`, `data(x, { status: 404 })`.
+
+## Build & serve
+
+- `ratchet generate` scans `routesDir` and writes `.ratchet/app-routes.{server,client}.ts`.
+- `ratchet dev` regenerates + rebuilds the client bundle + restarts on any change under
+  `routesDir` (full reload — no HMR yet).
+- `ratchet build` emits a hashed client bundle + manifest.
+- `ratchet serve` mounts the site at `/` (after `/api/*`, the console, and `/_site-assets`).
+
+`react` / `react-dom` are peer dependencies (the console already needs them); `react-router` is
+what your route files import directly. `ratchet init` scaffolds `routes/root.tsx`,
+`routes/index.tsx`, and `public/`.
+
+## Current limitations
+
+Single client bundle (no route-level code splitting), no `+types` typegen, every client
+navigation re-runs all matched loaders server-side (no `?_routes=` filter), no `<Link>` prefetch,
+no `clientLoader`/`clientAction`/`links`, no HMR. All are additive to lift later — see
+[ADR 0003](https://github.com/egig/ratchet/blob/main/docs/adr/0003-web-app-react-router-data-mode.md).

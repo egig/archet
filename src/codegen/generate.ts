@@ -11,10 +11,15 @@ import { generateRegistrySource } from './registry-gen.js';
 import { generateDomainsSource } from './domains-gen.js';
 import { generateCustomFormsSource } from './forms-gen.js';
 import { generateFieldInputsSource } from './field-inputs-gen.js';
+import { scanRoutes } from '../web/scan-routes.js';
+import { generateClientRoutesSource, generateServerRoutesSource } from '../web/routes-gen.js';
 
 export interface GenerateOptions {
   modelsDir: string;
   generatedDir: string;
+  /** the developer's React Router site (see `src/web/`). When omitted or when
+   * `<routesDir>/root.tsx` is absent, no route manifests are written. */
+  routesDir?: string;
 }
 
 export interface GenerateResult {
@@ -22,6 +27,8 @@ export interface GenerateResult {
   domainCount: number;
   formCount: number;
   fieldInputCount: number;
+  /** number of route modules scanned under `routesDir` (0 when the site isn't opted into) */
+  routeCount: number;
   files: string[];
 }
 
@@ -71,11 +78,28 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
   await writeFile(customFormsFile, customFormsSrc, 'utf8');
   await writeFile(fieldInputsFile, fieldInputsSrc, 'utf8');
 
+  const files = [schemaFile, validatorsFile, registryFile, domainsFile, customFormsFile, fieldInputsFile];
+
+  // The developer's React Router site — only when opted into (`<routesDir>/root.tsx` exists).
+  let routeCount = 0;
+  if (opts.routesDir) {
+    const routes = await scanRoutes(opts.routesDir);
+    if (routes.rootFile) {
+      const serverRoutesFile = path.join(opts.generatedDir, 'app-routes.server.ts');
+      const clientRoutesFile = path.join(opts.generatedDir, 'app-routes.client.ts');
+      await writeFile(serverRoutesFile, generateServerRoutesSource(routes, opts.generatedDir), 'utf8');
+      await writeFile(clientRoutesFile, generateClientRoutesSource(routes, opts.generatedDir), 'utf8');
+      files.push(serverRoutesFile, clientRoutesFile);
+      routeCount = routes.modules.length + 1;
+    }
+  }
+
   return {
     modelCount: scanned.length,
     domainCount: scannedDomains.length,
     formCount: forms.length,
     fieldInputCount: scannedFieldInputs.length,
-    files: [schemaFile, validatorsFile, registryFile, domainsFile, customFormsFile, fieldInputsFile],
+    routeCount,
+    files,
   };
 }

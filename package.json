@@ -26,6 +26,7 @@
     "./workspace": "./dist/workspace/index.js",
     "./website": "./dist/website/index.js",
     "./website/console-forms": "./dist/website/console-forms.js",
+    "./web": "./dist/web/index.js",
     "./console": "./dist/console/index.js",
     "./console/client": "./dist/console/client/index.js",
     "./console/node": "./dist/console/node-assets.js",
@@ -63,6 +64,7 @@
     "postgres": "^3.4.5",
     "react-router": "^8.3.0",
     "remark-gfm": "^4.0.1",
+    "turbo-stream": "^3",
     "uuidv7": "^1.0.2",
     "zod": "^4.5.1"
   },
