@@ -21,10 +21,8 @@ function packageJson(name: string): string {
           typecheck: 'tsc -p tsconfig.json --noEmit',
         },
         dependencies: {
-          '@hono/node-server': '^1.13.7',
           '@egig/ratchet': RATCHET_VERSION,
           'drizzle-orm': '^0.36.4',
-          hono: '^4.6.14',
           postgres: '^3.4.5',
           zod: '^3.24.1',
         },

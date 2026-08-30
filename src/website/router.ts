@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { App } from '../router/http-app.js';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { listRowsByField } from '../core/persistence.js';
 import { getDomainSettings } from '../core/domain-settings-persistence.js';
@@ -38,7 +38,7 @@ async function renderPageResponse(db: AnyDb, page: Record<string, unknown>): Pro
  * `/api/blocks` REST routes (unchanged from any other model) plus the console's Page Builder
  * screen; this router only ever reads.
  *
- * Must be mounted LAST in the app's Hono composition — after `/api/*` and the console router
+ * Must be mounted LAST in the app's route composition — after `/api/*` and the console router
  * (see `cli/commands/serve.ts`). Its `/:slug` route is a catch-all that would otherwise swallow
  * every other mount; mounting it last also resolves the one reserved-path check that can't happen
  * at write time (`pipeline.ts`'s `assertSlugNotReserved` only knows to reject `api`, since the
@@ -47,8 +47,8 @@ async function renderPageResponse(db: AnyDb, page: Record<string, unknown>): Pro
  * whichever router is mounted first claims the path and this one only ever receives what nothing
  * else claimed.
  */
-export function createWebsiteRouter(db: AnyDb): Hono {
-  const app = new Hono();
+export function createWebsiteRouter(db: AnyDb): App {
+  const app = new App();
 
   // Registered before the `/:slug` catch-all below so a page slug can never shadow either of
   // these two well-known paths (same mount-order reasoning as `serve.ts`'s doc comment).

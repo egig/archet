@@ -23,10 +23,9 @@
  * chosen driver's peer dependencies yourself (`@flystorage/aws-s3` + `@aws-sdk/client-s3` for
  * `driver: 's3'`) — only the one you pick, not every cloud SDK.
  */
-import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
-import { createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
+import { App, createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
 import { createAuthRouter } from '@egig/ratchet/auth';
 import { buildStorageAdapter } from '@egig/ratchet/storage';
 import * as registryModule from '../../../.ratchet/registry.js';
@@ -45,10 +44,10 @@ const storage = await buildStorageAdapter(
   '', // no local-fs fallback dir needed — this config never falls back to `driver: 'local'`
 );
 
-const app = new Hono();
+const app = new App();
 app.route('/api/auth', createAuthRouter(db));
 app.route('/api', createApiRouter(registry, db, storage));
 
-// A Hono app's own `.fetch` matches Vercel's "fetch Web Standard" function export convention
-// directly — no adapter needed.
+// `App`'s own `.fetch` (router/http-app.ts) matches Vercel's "fetch Web Standard" function export
+// convention directly — no adapter needed.
 export default app;

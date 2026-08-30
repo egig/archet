@@ -18,7 +18,7 @@ function readCookie(request: Request | undefined, name: string): string | null {
 
 /** `Authorization: Bearer <token>` first (an explicit header wins if a caller somehow sends
  * both), falling back to the `ratchet_session` cookie — shared by the pipeline's `requireAuth`
- * and every plain Hono handler in `src/auth/router.ts` so both paths accept either transport. */
+ * and every plain route handler in `src/auth/router.ts` so both paths accept either transport. */
 export function resolveSessionToken(request: Request | undefined): string | null {
   const header = request?.headers.get('authorization');
   if (header?.startsWith('Bearer ')) {

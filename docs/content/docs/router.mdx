@@ -82,12 +82,12 @@ Every route shares the same error shape. Common codes:
 
 ## Building your own router
 
-`ratchet/router` exports the pieces `ratchet serve` composes for you, if you need to mount them yourself (e.g. inside a custom Hono app):
+`ratchet/router` exports the pieces `ratchet serve` composes for you, if you need to mount them yourself (e.g. inside a custom `App`):
 
 ```ts
-import { createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
+import { App, createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
 
 const registry = buildRegistryMap(registryModule); // from .ratchet/registry.ts
-const app = new Hono();
+const app = new App();
 app.route('/api', createApiRouter(registry, db));
 ```

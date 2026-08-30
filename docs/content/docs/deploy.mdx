@@ -3,7 +3,7 @@ title: Deploying
 description: Running `ratchet serve`, and deploying to a VPS, Vercel, or Cloudflare Workers.
 ---
 
-`ratchet serve` runs on [Bun](https://bun.sh) — that's the CLI's own runtime, for local development. The bundle from `ratchet build` targets plain Node instead (`dist/server.js`, built with `@hono/node-server`), so a VPS/container host doesn't need Bun installed at all. Beyond that, `/api`, `/api/auth`, and the console are built as plain [Hono](https://hono.dev) routers that take a `db` and a `registry` as arguments rather than constructing them internally, so they run on any runtime Hono supports. Nothing in `ratchet build`/`ratchet generate`/`ratchet migrate` targets those runtimes — they stay Bun-only dev tooling. Deploying to one is a thin entry file you own, composing `createApiRouter`/`createAuthRouter`/`createConsoleRouter` yourself with a driver and asset source that fit the target — keeping whatever path you mount the console at in sync with `consolePath` in `ratchet.config.ts` is on you (see [Console](/docs/console)).
+`ratchet serve` runs on [Bun](https://bun.sh) — that's the CLI's own runtime, for local development. The bundle from `ratchet build` targets plain Node instead (`dist/server.js`, built with a small Node `http`-to-Fetch bridge, `ratchet/router`'s `serveNode`), so a VPS/container host doesn't need Bun installed at all. Beyond that, `/api`, `/api/auth`, and the console are built as plain `App` routers (`ratchet/router`'s `App`, built directly on the Fetch API's `Request`/`Response` — no framework dependency) that take a `db` and a `registry` as arguments rather than constructing them internally, so they run on any runtime with a Fetch-compatible `Request`/`Response` (which is effectively every modern JS runtime — Node, Bun, Deno, Cloudflare Workers, Vercel Functions). Nothing in `ratchet build`/`ratchet generate`/`ratchet migrate` targets those runtimes — they stay Bun-only dev tooling. Deploying to one is a thin entry file you own, composing `createApiRouter`/`createAuthRouter`/`createConsoleRouter` yourself with a driver and asset source that fit the target — keeping whatever path you mount the console at in sync with `consolePath` in `ratchet.config.ts` is on you (see [Console](/docs/console)).
 
 ## Local development
 
@@ -15,7 +15,7 @@ Nothing else to configure — see [CLI Reference](/docs/cli).
 
 ## VPS / container
 
-`ratchet build` bundles a Node server entry to `dist/server.js` (postgres.js + `@hono/node-server`, console assets read straight off disk). Ship that file, `.ratchet/`, and a `DATABASE_URL`:
+`ratchet build` bundles a Node server entry to `dist/server.js` (postgres.js + `serveNode`, console assets read straight off disk). Ship that file, `.ratchet/`, and a `DATABASE_URL`:
 
 ```sh
 ratchet build
@@ -30,21 +30,20 @@ Vercel Functions default to a Node.js runtime — the same postgres.js driver as
 
 ```ts
 // api/index.ts
-import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
-import { createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
+import { App, createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
 import { createAuthRouter } from '@egig/ratchet/auth';
 import * as registryModule from '../.ratchet/registry.js';
 
 const registry = buildRegistryMap(registryModule as Record<string, unknown>);
 const db = drizzle(neon(process.env.DATABASE_URL!));
 
-const app = new Hono();
+const app = new App();
 app.route('/api/auth', createAuthRouter(db));
 app.route('/api', createApiRouter(registry, db));
 
-export default app; // a Hono app's own `.fetch` matches Vercel's fetch-export convention directly
+export default app; // App's own `.fetch` matches Vercel's fetch-export convention directly
 ```
 
 ```json

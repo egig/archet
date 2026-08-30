@@ -32,11 +32,10 @@
  * customized it (see docs/guide/console.md) — ratchet doesn't patch this file for you.
  */
 import { Readable } from 'node:stream';
-import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { FileStorage, FileWasNotFound, type StatEntry, type StorageAdapter } from '@flystorage/file-storage';
-import { createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
+import { App, createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
 import { createAuthRouter } from '@egig/ratchet/auth';
 import { createConsoleRouter, type ConsoleAsset, type ConsoleAssetSource, type ConsoleManifest } from '@egig/ratchet/console';
 import { createWebsiteRouter } from '@egig/ratchet/website';
@@ -172,7 +171,7 @@ export default {
     // every path (see `FrameworkConfig.consolePath`). The website router (public page rendering)
     // goes last of all — see `src/website/router.ts`'s doc comment for why mount order is what
     // keeps a page slug from ever shadowing `/api`/the console.
-    const app = new Hono();
+    const app = new App();
     app.route('/api/auth', createAuthRouter(db));
     app.route('/api', createApiRouter(registry, db, new FileStorage(new R2StorageAdapter(env.FILES))));
     app.route(CONSOLE_PATH, createConsoleRouter(createAssetsBindingSource(env.ASSETS), registry, db, CONSOLE_PATH));

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { getMimeType } from 'hono/utils/mime';
+import { getMimeType } from '../router/mime.js';
 import type { ConsoleAsset, ConsoleAssetSource, ConsoleManifest } from './router.js';
 
 function isEnoent(err: unknown): boolean {

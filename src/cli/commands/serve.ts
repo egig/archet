@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Hono } from 'hono';
+import { App } from '../../router/http-app.js';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { createApiRouter } from '../../router/create-router.js';
@@ -43,7 +43,7 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   // `example/deploy/cloudflare/worker.ts`.
   const storage = await buildStorageAdapter(config.storage, path.join(generatedDir, 'storage'));
 
-  const app = new Hono();
+  const app = new App();
   // more specific prefix first: `/api/auth/*` and `/api/automation/*` must win over the generic
   // `/api/:model` pattern, and all three must win over the console router — which is registered
   // next since `consolePath` can be '/' (root mount), where its own catch-all would otherwise

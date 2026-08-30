@@ -6,3 +6,7 @@ export { buildRegistryMap, buildDomainSettingsRegistryMap } from './registry-map
 export { toErrorResponse } from './errors.js';
 export type { ErrorResponse, ErrorResponseBody } from './errors.js';
 export type { FileStorage, StoredFile } from '../core/storage.js';
+export { App, Ctx, setCookie, deleteCookie } from './http-app.js';
+export type { Handler, ErrorHandler, CookieOptions } from './http-app.js';
+export { serveNode } from './node-server.js';
+export type { ServeNodeOptions } from './node-server.js';
