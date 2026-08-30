@@ -1,4 +1,4 @@
-import { Hono, type Context } from 'hono';
+import { App, type Ctx } from './http-app.js';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { FileStorage } from '@flystorage/file-storage';
 import type { FileFieldDefinition } from '../core/field.js';
@@ -103,7 +103,7 @@ function toResponseRow(model: ModelDefinition, row: Record<string, unknown>): Re
   return deriveFileFields(model, redactSensitiveFields(model, row));
 }
 
-export async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
+export async function readJsonBody(c: Ctx): Promise<Record<string, unknown>> {
   try {
     const body: unknown = await c.req.json();
     if (typeof body !== 'object' || body === null || Array.isArray(body)) {
@@ -174,12 +174,12 @@ function requireStorage(storage: FileStorage | undefined): FileStorage {
  * value (e.g. Cloudflare R2 is an `env`-injected binding), so the app's own entry file builds and
  * passes in whichever adapter fits its deploy target.
  */
-export function createApiRouter(registry: Record<string, ModelDefinition>, db: AnyDb, storage?: FileStorage): Hono {
-  const app = new Hono();
+export function createApiRouter(registry: Record<string, ModelDefinition>, db: AnyDb, storage?: FileStorage): App {
+  const app = new App();
 
   app.onError((err, c) => {
     const { status, body } = toErrorResponse(err);
-    return c.json(body, status as never);
+    return c.json(body, status);
   });
 
   app.get('/:model', async (c) => {
@@ -353,9 +353,10 @@ export function createApiRouter(registry: Record<string, ModelDefinition>, db: A
   // `POST /:model/:id/:operation` — the one generic route for every custom operation (core/
   // model.ts's `CustomOperationDefinition`, e.g. `lock`/`unlock`): always POST, always record-
   // scoped, regardless of what the operation's own pipeline does internally (Q12). Must be
-  // registered after `/:model/:field/upload` above — Hono resolves two routes with the same
-  // segment count by registration order, not by preferring the static ('upload') segment, so this
-  // route registered first would shadow every model's upload endpoint. `'upload'` is also a
+  // registered after `/:model/:field/upload` above — this router (router/http-app.ts) resolves
+  // two routes with the same segment count by registration order, not by preferring the static
+  // ('upload') segment, so this route registered first would shadow every model's upload endpoint.
+  // `'upload'` is also a
   // reserved operation name (`RESERVED_OPERATION_NAMES`, core/model.ts) as a second line of
   // defense. `create`/`update`/`remove` 404 here too — they already have dedicated routes above
   // that apply this router's own field-permission check (`assertWriteFieldsAllowed`); dispatching

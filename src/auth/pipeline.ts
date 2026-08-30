@@ -17,7 +17,7 @@ export const hashPassword: PipelineFn = async (ctx) => {
 };
 
 /** Resolves a `Bearer` token to a live session + active user. Shared by the `requireAuth`
- * pipeline fn and the plain Hono handlers in `src/auth/router.ts` (e.g. `GET /me`) so both paths
+ * pipeline fn and the plain route handlers in `src/auth/router.ts` (e.g. `GET /me`) so both paths
  * apply the exact same session/expiry/active checks. Throws 401 UNAUTHENTICATED otherwise. */
 export async function resolveSessionUser(db: AnyDb, request: Request | undefined): Promise<UserRow> {
   const token = resolveSessionToken(request);

@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { App } from '../router/http-app.js';
 import { createAssistantStreamResponse } from 'assistant-stream';
 import type { ReadonlyJSONObject } from 'assistant-stream/utils';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
@@ -161,12 +161,12 @@ function toHistoryRow(row: Record<string, unknown>) {
   };
 }
 
-export function createAutomationRouter(db: AnyDb, registry: Record<string, ModelDefinition>): Hono {
-  const app = new Hono();
+export function createAutomationRouter(db: AnyDb, registry: Record<string, ModelDefinition>): App {
+  const app = new App();
 
   app.onError((err, c) => {
     const { status, body } = toErrorResponse(err);
-    return c.json(body, status as never);
+    return c.json(body, status);
   });
 
   // ── Thread list (assistant-ui RemoteThreadListAdapter) ──────────────────────────────────────

@@ -7,7 +7,7 @@ import { emptyTurnNotice, turnFailureNotice } from '../src/automation/router.js'
 // no row at all: the failure vanished on the next history reload as if the turn never happened.
 // The fix always persists a row and fills it with one of these notices when `parts` would
 // otherwise be empty. These are pure functions extracted so that fix is covered without spinning
-// up the full Hono + Postgres stack the route itself needs.
+// up the full router + Postgres stack the route itself needs.
 describe('emptyTurnNotice', () => {
   it('has a specific notice for every non-normal stopReason the loop can end on', () => {
     expect(emptyTurnNotice('aborted')).toBe('_Stopped._');

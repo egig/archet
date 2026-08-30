@@ -1,4 +1,4 @@
-import { Hono, type Context } from 'hono';
+import { App, type Ctx } from '../router/http-app.js';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { FileStorage } from '@flystorage/file-storage';
 import type { ModelDefinition } from '../core/model.js';
@@ -69,7 +69,7 @@ function renderShell(manifest: ConsoleManifest, mountPath: string): string {
 }
 
 function serveShell(assetSource: ConsoleAssetSource, mountPath: string) {
-  return async (c: Context) => {
+  return async (c: Ctx) => {
     const manifest = await assetSource.getManifest();
     if (!manifest) {
       return c.text(
@@ -84,7 +84,7 @@ function serveShell(assetSource: ConsoleAssetSource, mountPath: string) {
 /** `app.route(mountPath, ...)` prefixes route *matching* but doesn't rewrite `c.req.path` — strip
  * the prefix ourselves so what we hand `assetSource` is the path relative to `${mountPath}/assets/`,
  * regardless of where this router got mounted. */
-function assetPathFrom(c: Context, mountPath: string): string {
+function assetPathFrom(c: Ctx, mountPath: string): string {
   const rest = mountPath === '/' ? c.req.path : c.req.path.slice(mountPath.length);
   return rest.replace(/^\/assets\//, '');
 }
@@ -95,11 +95,11 @@ function assetPathFrom(c: Context, mountPath: string): string {
  * registry map `createApiRouter` (src/router/create-router.ts) uses for `/api/:model`, so the two
  * never drift. Deliberately namespaced under `/meta` rather than `/api` so it never collides with
  * the top-level `/api` router even when `mountPath` is '/' (root mount). Mirrors
- * src/auth/router.ts's `createXRouter(...) -> Hono` shape.
+ * src/auth/router.ts's `createXRouter(...) -> App` shape.
  *
  * `mountPath` must match wherever the caller actually mounts the returned router — it's only used
- * to compute absolute asset URLs and strip the matched prefix back off `c.req.path`, since Hono's
- * `.route()` doesn't rewrite `c.req.path` itself.
+ * to compute absolute asset URLs and strip the matched prefix back off `c.req.path`, since
+ * `App.route()` (router/http-app.ts) doesn't rewrite `c.req.path` itself.
  *
  * `domainSettingsRegistry` (name -> DomainDefinition, default `{}`) backs the `/meta/domains*`
  * routes below the same way `registry` backs `/meta/models*` — optional, and defaulted, so an
@@ -115,12 +115,12 @@ export function createConsoleRouter(
   mountPath: string,
   domainSettingsRegistry: Record<string, DomainDefinition> = {},
   storage?: FileStorage,
-): Hono {
-  const app = new Hono();
+): App {
+  const app = new App();
 
   app.onError((err, c) => {
     const { status, body } = toErrorResponse(err);
-    return c.json(body, status as never);
+    return c.json(body, status);
   });
 
   app.get('/meta/models', async (c) => {

@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { App } from './http-app.js';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { FileStorage } from '@flystorage/file-storage';
 import type { DomainDefinition } from '../core/domain.js';
@@ -29,12 +29,12 @@ export function createSiteAssetsRouter(
   db: AnyDb,
   storage: FileStorage | undefined,
   domainSettingsRegistry: Record<string, DomainDefinition>,
-): Hono {
-  const app = new Hono();
+): App {
+  const app = new App();
 
   app.onError((err, c) => {
     const { status, body } = toErrorResponse(err);
-    return c.json(body, status as never);
+    return c.json(body, status);
   });
 
   app.get('/:domain/:field/:token', async (c) => {

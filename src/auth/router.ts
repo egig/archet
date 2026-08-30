@@ -1,5 +1,4 @@
-import { Hono, type Context } from 'hono';
-import { setCookie, deleteCookie } from 'hono/cookie';
+import { App, type Ctx, setCookie, deleteCookie } from '../router/http-app.js';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import type { OperationContext } from '../core/pipeline.js';
 import { PipelineError } from '../core/pipeline.js';
@@ -46,7 +45,7 @@ async function issueSession(db: AnyDb, userId: string) {
  * and non-browser API clients (the `Authorization` header, still returned in the body) both
  * work. `Secure` is conditional on the request's own protocol — hardcoding it on would break
  * plain-http `ratchet dev`. */
-function setSessionCookie(c: Context, token: string): void {
+function setSessionCookie(c: Ctx, token: string): void {
   setCookie(c, SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'Lax',
@@ -56,7 +55,7 @@ function setSessionCookie(c: Context, token: string): void {
   });
 }
 
-function clearSessionCookie(c: Context): void {
+function clearSessionCookie(c: Ctx): void {
   deleteCookie(c, SESSION_COOKIE_NAME, { path: '/' });
 }
 
@@ -89,12 +88,12 @@ function resolveProviderKind(body: Record<string, unknown>): 'anthropic' | 'open
 
 /** `/api/auth/*` — setup/register/login/logout/me. Mount before the generic `/api/:model`
  * router (src/router/create-router.ts) so this more specific prefix wins. */
-export function createAuthRouter(db: AnyDb): Hono {
-  const app = new Hono();
+export function createAuthRouter(db: AnyDb): App {
+  const app = new App();
 
   app.onError((err, c) => {
     const { status, body } = toErrorResponse(err);
-    return c.json(body, status as never);
+    return c.json(body, status);
   });
 
   app.get('/setup', async (c) => {
