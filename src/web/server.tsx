@@ -9,6 +9,7 @@ import {
 } from 'react-router';
 import { DocumentContext } from './document.js';
 import { buildWebContext, type BuildWebContextDeps } from './context.js';
+import { encodeDataResponse, encodeRedirectResponse, routePathnameFromData } from './single-fetch.js';
 
 /**
  * SSR + `.data` handler for the web app (docs/adr/0003). Phase 3 renders the document buffered
@@ -93,15 +94,33 @@ export function createWebServer(
     });
   }
 
-  function handleData(): Promise<Response> {
-    // Phase 4: run matched loaders/actions via queryRoute/query + turbo-stream encode.
-    return Promise.resolve(new Response('.data protocol not yet implemented', { status: 501 }));
+  async function handleData(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const realUrl = new URL(routePathnameFromData(url.pathname) + url.search, url.origin);
+    const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+    const realRequest = new Request(realUrl, {
+      method: request.method,
+      headers: request.headers,
+      body: hasBody ? await request.arrayBuffer() : undefined,
+    });
+
+    const requestContext = await buildWebContext(realRequest, deps);
+    const result = await query(realRequest, { requestContext });
+
+    if (result instanceof Response) {
+      const location = result.headers.get('location');
+      if (location && result.status >= 300 && result.status < 400) {
+        return encodeRedirectResponse(location, result.status);
+      }
+      return result;
+    }
+    return encodeDataResponse(result);
   }
 
   return {
     async handle(request: Request): Promise<Response> {
       const url = new URL(request.url);
-      if (url.pathname.endsWith('.data')) return handleData();
+      if (url.pathname.endsWith('.data')) return handleData(request);
       return handleDocument(request);
     },
   };

@@ -126,10 +126,21 @@ describe('web SSR handler', () => {
     expect(await res.text()).toContain('404');
   });
 
-  it('501s on a .data request (phase 4 not yet implemented)', async () => {
-    const { server, routesDir, genDir } = await buildServer({ 'root.tsx': ROOT, 'index.tsx': INDEX });
+  it('serves a loader result over .data as turbo-stream', async () => {
+    const { server, routesDir, genDir } = await buildServer({ 'root.tsx': ROOT, 'about.tsx': ABOUT_WITH_LOADER });
     cleanup.push(routesDir, genDir);
-    const res = await server.handle(new Request('http://localhost/_root.data'));
-    expect(res.status).toBe(501);
+    const res = await server.handle(new Request('http://localhost/about.data'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/x-turbo');
+    const { decode } = await import('turbo-stream');
+    const payload = (await decode(res.body!.pipeThrough(new TextDecoderStream()))) as Record<string, { data?: { tagline: string } }>;
+    expect(payload['about']?.data?.tagline).toBe('we make things');
+  });
+
+  it('replays a loader redirect over .data with the x-ratchet-redirect header', async () => {
+    const { server, routesDir, genDir } = await buildServer({ 'root.tsx': ROOT, 'go.tsx': REDIRECTOR });
+    cleanup.push(routesDir, genDir);
+    const res = await server.handle(new Request('http://localhost/go.data'));
+    expect(res.headers.get('x-ratchet-redirect')).toBe('/');
   });
 });

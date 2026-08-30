@@ -9,4 +9,4 @@
 export { Meta, Scripts, DocumentContext } from './document.js';
 export type { MetaFunction, MetaDescriptor, RouteHandle } from './document.js';
 export { DefaultRootErrorBoundary } from './error-boundary.js';
-export { singleFetchHandler, dataPathname } from './single-fetch.js';
+export { singleFetchHandler, dataPathname, createSingleFetchDataStrategy } from './single-fetch.js';
