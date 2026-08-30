@@ -136,6 +136,21 @@ describeIfDb('auth system (against a live Postgres)', () => {
         id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
         title varchar NOT NULL, locked boolean NOT NULL DEFAULT false
       )`);
+    // setup also seeds the `website` domain's starter content (src/website/seed.ts) inside the
+    // same transaction — the `pages` table and the shared domain-settings table need to exist for
+    // that to succeed. Both are dropped in `afterAll`.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS pages (
+        id uuid PRIMARY KEY, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz, created_by_id uuid,
+        slug varchar NOT NULL, title varchar NOT NULL, meta_description varchar, body text,
+        status varchar NOT NULL DEFAULT 'draft', nav_location varchar NOT NULL DEFAULT 'none',
+        nav_order integer NOT NULL DEFAULT 0, published_at timestamptz
+      )`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS ratchet_domain_settings (
+        domain varchar PRIMARY KEY, values jsonb NOT NULL DEFAULT '{}', updated_at timestamptz NOT NULL
+      )`);
+
     // register/setup/admin-created-user all provision a default `Workspace` (see
     // `workspace/provisioning.ts`'s `createDefaultWorkspace`) — needed for those flows to work,
     // even though this suite otherwise has nothing to do with the workspace domain. No
@@ -163,7 +178,7 @@ describeIfDb('auth system (against a live Postgres)', () => {
 
   beforeEach(async () => {
     // `workspaces` is deliberately not truncated here — see the beforeAll note above.
-    await db.execute(sql`TRUNCATE TABLE notes, lockable_docs, sessions, users, roles, agents, providers`);
+    await db.execute(sql`TRUNCATE TABLE notes, lockable_docs, sessions, users, roles, agents, providers, pages, ratchet_domain_settings`);
   });
 
   afterAll(async () => {
@@ -174,6 +189,8 @@ describeIfDb('auth system (against a live Postgres)', () => {
     await db.execute(sql`DROP TABLE IF EXISTS providers`);
     await db.execute(sql`DROP TABLE IF EXISTS users`);
     await db.execute(sql`DROP TABLE IF EXISTS roles`);
+    await db.execute(sql`DROP TABLE IF EXISTS pages`);
+    await db.execute(sql`DROP TABLE IF EXISTS ratchet_domain_settings`);
     await client.end();
   });
 
@@ -322,6 +339,37 @@ describeIfDb('auth system (against a live Postgres)', () => {
       }[];
       expect(agents.length).toBe(1);
       expect(agents[0]).toEqual({ name: 'Ratchet', provider_id: provider.id, role_id: roles[0]!.id });
+    });
+
+    it('seeds the four starter website pages + the website domain settings, once (idempotent)', async () => {
+      const doSetup = () =>
+        authApp.request('/setup', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: 'admin@example.com', password: 'hunter2', providerApiKey: 'sk-test-key' }),
+        });
+
+      const first = await doSetup();
+      expect(first.status).toBe(201);
+
+      const pages = (await db.execute(
+        sql`SELECT slug, status, nav_location FROM pages ORDER BY slug`,
+      )) as unknown as { slug: string; status: string; nav_location: string }[];
+      expect(pages.map((p) => p.slug)).toEqual(['about', 'privacy', 'services', 'terms']);
+      expect(pages.every((p) => p.status === 'published')).toBe(true);
+      expect(pages.find((p) => p.slug === 'about')!.nav_location).toBe('header');
+      expect(pages.find((p) => p.slug === 'privacy')!.nav_location).toBe('footer');
+
+      const settings = (await db.execute(
+        sql`SELECT values FROM ratchet_domain_settings WHERE domain = 'website'`,
+      )) as unknown as { values: { title?: string } }[];
+      expect(typeof settings[0]?.values.title).toBe('string');
+
+      // a second setup attempt 409s and doesn't re-seed
+      const second = await doSetup();
+      expect(second.status).toBe(409);
+      const count = (await db.execute(sql`SELECT count(*)::int AS n FROM pages`)) as unknown as { n: number }[];
+      expect(count[0]!.n).toBe(4);
     });
   });
 

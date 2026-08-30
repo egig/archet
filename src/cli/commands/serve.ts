@@ -60,10 +60,9 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   // more specific prefix first: `/api/auth/*` and `/api/automation/*` must win over the generic
   // `/api/:model` pattern, and all three must win over the console router — which is registered
   // next since `consolePath` can be '/' (root mount), where its own catch-all would otherwise
-  // swallow every path. The website router (public page rendering) is registered last of all —
-  // its own `/:slug` route is a catch-all too, and mounting it last means a page slug that
-  // happens to collide with `/api` or the console's mount point always loses to the router
-  // already claiming that path (see `website/router.ts`'s own doc comment).
+  // swallow every path. The web app (below) is registered last of all — its own `/*` is a
+  // catch-all, so mounting it last means a route that collides with `/api` or the console's mount
+  // point always loses to the router already claiming that path.
   app.route('/api/auth', createAuthRouter(db));
   app.route('/api/automation', createAutomationRouter(db, registry));
   app.route('/api', createApiRouter(registry, db, storage));
@@ -73,16 +72,15 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   );
   // `/_site-assets/*` — a `field.file({ public: true })` Domain Settings value (e.g. the website
   // Domain's favicon/social share image), served with no auth at all. Fixed, non-configurable
-  // prefix (unlike `consolePath`) so a public asset's URL never moves; mounted before the website
-  // router below for the same reason `/api`/the console are — that catch-all `/:slug` route must
-  // never be able to shadow it.
+  // prefix (unlike `consolePath`) so a public asset's URL never moves; mounted before the web app
+  // below for the same reason `/api`/the console are — that catch-all `/*` route must never be
+  // able to shadow it.
   app.route('/_site-assets', createSiteAssetsRouter(db, storage, domainSettingsRegistry));
 
   // The web app, last (its `/*` is a catch-all): built client assets under `/_ratchet`, then the
   // one `/` mount — a `publicDir` static file if the request matches one, else the SSR + `.data`
   // handler (`createWebRouter` folds the `publicDir` lookup in; a second `/` mount would shadow it,
-  // see that file). When the site isn't opted into, `/` simply 404s (no Page/Block fallback — see
-  // docs/adr/0003).
+  // see that file). When the site isn't opted into, `/` simply 404s (see docs/adr/0003).
   if (webManifest) {
     app.route('/_ratchet', createWebAssetsRouter(generatedDir));
     app.route(

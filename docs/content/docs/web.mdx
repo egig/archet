@@ -5,8 +5,7 @@ description: A server-rendered React Router data-mode site, bundled with Bun.
 
 `@egig/ratchet/web` (the `src/web/` package) lets you build the public-facing site as code:
 you write `routes/**/*.tsx` in a folder convention, and Ratchet scans them at codegen time,
-server-renders them with streaming SSR, and bundles the client with `Bun.build` — no Vite, no
-React Router framework-mode plugin. It replaces the old `Page`/`Block` page renderer at `/`.
+server-renders them with streaming SSR, and bundles the client with `Bun.build`.
 
 The site is **opt-in**: it's mounted only when `routes/root.tsx` exists. Without it, `/` returns
 404.
@@ -127,6 +126,48 @@ export async function loader({ params, context }) {
 Throwing a `Response` from a loader works as expected — `redirect('/login')`,
 `new Response(null, { status: 403 })`, `data(x, { status: 404 })`.
 
+## Console-managed pages
+
+The `website` domain is content management only — it has a `Page` model (`slug`, `title`,
+`metaDescription`, a sanitized rich-text `body`, `status`, `navLocation`/`navOrder`) edited in the
+console, and Ratchet no longer renders it. Your `routes/` render it. The scaffolded `routes/$.tsx`
+is a splat route that looks a published page up by slug:
+
+```tsx
+export async function loader({ params, context }) {
+  const { db } = getWebContext(context);
+  const rows = await db.execute(
+    sql`select title, body, meta_description from pages
+        where slug = ${params['*']} and status = 'published' and deleted_at is null limit 1`,
+  );
+  const page = rows[0];
+  if (!page) throw data('Not found', { status: 404 });
+  return { page };
+}
+// … <article dangerouslySetInnerHTML={{ __html: page.body }} />
+```
+
+`body` is sanitized (allowlisted tags/attributes, no scripts, no `javascript:` URLs) on every
+write, so rendering it with `dangerouslySetInnerHTML` is safe. `ratchet init` also scaffolds
+`routes/root.tsx` (header/footer nav built from the pages that set `navLocation`) and a
+`routes/contact.tsx` whose `action` inserts a row into the builtin `contacts` model:
+
+```tsx
+export async function action({ request, context }) {
+  const form = await request.formData();
+  if (form.get('company')) return { ok: true }; // honeypot
+  const { db } = getWebContext(context);
+  await db.execute(
+    sql`insert into contacts (id, created_at, updated_at, name, email, message, status)
+        values (${crypto.randomUUID()}, now(), now(), ${name}, ${email}, ${message}, 'new')`,
+  );
+  return { ok: true };
+}
+```
+
+On first `/api/auth/setup`, Ratchet seeds four starter pages (About, Services, Terms, Privacy) and
+the `website` title/description, so a fresh install's site isn't blank.
+
 ## Build & serve
 
 - `ratchet generate` scans `routesDir` and writes `.ratchet/app-routes.{server,client}.ts`.
@@ -137,7 +178,8 @@ Throwing a `Response` from a loader works as expected — `redirect('/login')`,
 
 `react` / `react-dom` are peer dependencies (the console already needs them); `react-router` is
 what your route files import directly. `ratchet init` scaffolds `routes/root.tsx`,
-`routes/index.tsx`, and `public/`.
+`routes/index.tsx` (a hand-authored landing page), `routes/$.tsx`, `routes/contact.tsx`, and
+`public/theme.css` (a production-ready light/dark theme).
 
 ## Current limitations
 

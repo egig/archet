@@ -10,6 +10,7 @@ import { ReferenceCombobox } from './ReferenceCombobox.js';
 import { TreeCombobox } from './TreeCombobox.js';
 import { ManyToManyMultiSelect } from './ManyToManyMultiSelect.js';
 import { CodeEditor } from './CodeEditor.js';
+import { RichTextEditor } from './RichTextEditor.js';
 
 /** What a `file` field's form value looks like — either an existing record's read shape
  * (`{ url, filename, mimeType, size }`, from `deriveFileFields`) or a fresh upload's response
@@ -113,9 +114,15 @@ export function FieldInput(props: FieldInputProps) {
   if (customRenderer) return customRenderer(props);
 
   // built in regardless of `fieldRenderers` (no app-level registration needed) — a CodeJar editor
-  // for any `field.custom('code', ...)` field, e.g. the `website` domain's `globalCss` setting.
+  // for any `field.custom('code', ...)` field.
   if (field.customType === 'code') {
     return wrap(<CodeEditor value={(value as string) ?? ''} onChange={(v) => onChange(inputKey, v)} />);
+  }
+
+  // likewise built in — a Quill rich-text editor for any `field.custom('richtext', ...)` field,
+  // e.g. the `website` domain's `Page.body`.
+  if (field.customType === 'richtext') {
+    return wrap(<RichTextEditor value={(value as string) ?? ''} onChange={(v) => onChange(inputKey, v)} />);
   }
 
   // the sibling `modelRef` value, for scoping an `actionRef` dropdown — '' (nothing picked) or

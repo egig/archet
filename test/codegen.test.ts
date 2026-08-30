@@ -65,7 +65,7 @@ describe('generate() against a self-contained model fixture', () => {
     // 2 user models + 3 built-in auth models (User/Role/Session) + 4 built-in
     // automation models (Agent/Chat/Message/Provider) + 3 built-in workspace
     // models (Workspace/WorkspaceView/WorkTitle) + 2 built-in website models
-    // (Page/Block) — built-ins are always present.
+    // (Page/Contact) — built-ins are always present.
     expect(modelCount).toBe(14);
 
     const schemaSrc = await import('node:fs/promises').then((fs) =>
@@ -156,7 +156,7 @@ describe('generate() against a self-contained model fixture', () => {
     expect(schemaSrc).toContain("pgTable('providers'");
   });
 
-  it('always includes the built-in Page/Block models, imported from `@egig/ratchet/website`', async () => {
+  it('always includes the built-in Page/Contact models, imported from `@egig/ratchet/website`', async () => {
     await generate({ modelsDir, generatedDir });
     const registrySrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'registry.ts'), 'utf8'),
@@ -164,11 +164,11 @@ describe('generate() against a self-contained model fixture', () => {
     const schemaSrc = await import('node:fs/promises').then((fs) =>
       fs.readFile(path.join(generatedDir, 'schema.ts'), 'utf8'),
     );
-    for (const name of ['Page', 'Block']) {
+    for (const name of ['Page', 'Contact']) {
       expect(registrySrc).toContain(`import { ${name} as _${name} } from '@egig/ratchet/website';`);
     }
     expect(schemaSrc).toContain("pgTable('pages'");
-    expect(schemaSrc).toContain("pgTable('blocks'");
+    expect(schemaSrc).toContain("pgTable('contacts'");
   });
 
   it("assigns the built-in auth models to the 'auth' Domain, the built-in automation models to the 'automation' Domain, the built-in workspace models to the 'workspace' Domain, and the built-in website models to the 'website' Domain (ADR 0001), grouping them in the console sidebar", async () => {
@@ -188,7 +188,7 @@ describe('generate() against a self-contained model fixture', () => {
       expect(registrySrc).toContain(`domain: "workspace"`);
       expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "workspace" } };`);
     }
-    for (const name of ['Page', 'Block']) {
+    for (const name of ['Page', 'Contact']) {
       expect(registrySrc).toContain(`domain: "website"`);
       expect(registrySrc).toContain(`export const ${name} = { ..._${name}, console: { ..._${name}.console, domain: "website" } };`);
     }

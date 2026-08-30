@@ -1,6 +1,6 @@
 import { defineModel, field, pipe, validate, persist, PipelineError, type PipelineFn } from '../../core/index.js';
 import { presetFields } from '../../auth/pipeline.js';
-import { assertSlugNotReserved, assertSingleHomePage } from '../pipeline.js';
+import { assertSlugNotReserved, sanitizeBody } from '../pipeline.js';
 
 /** `status`/`publishedAt` are only ever written by the `publish`/`unpublish` operations below —
  * never by a plain `update` — so there's exactly one path to change publish state, and exactly
@@ -25,33 +25,37 @@ export const publishPage: PipelineFn = (ctx) => presetFields({ status: 'publishe
 export const unpublishPage: PipelineFn = (ctx) => presetFields({ status: 'draft', publishedAt: null })(ctx);
 
 /**
- * One page of the site the `website` built-in domain serves (see `src/website/router.ts`) —
- * ordered `Block` rows (`block.model.ts`) attached through the `blocks` `referenceToMany` below
- * are its content. Authored through the console's Page Builder screen
- * (`console/client/PageBuilderPage.tsx`), not the generic per-model form (see `page.form.tsx`,
- * which replaces it — the generic form's auto-derived `blocks` multi-select would let someone
- * "attach" blocks that were never built for this page).
+ * One page of the public site. Ratchet no longer renders pages itself — the `website` domain is
+ * pure content management, and the site is served by the consuming app's own
+ * `@egig/ratchet/web` routes (`ratchet init` scaffolds `routes/$.tsx`, which looks a `Page` up by
+ * slug and renders `body`). `body` is a rich-text HTML string authored with the console's Quill
+ * editor (`field.custom('richtext', …)`, rendered by `console/client/RichTextEditor.tsx`) and
+ * sanitized server-side on every write by `sanitizeBody` (`../pipeline.ts`) — an allowlist pass so
+ * a page body can never carry script/`on*`/`javascript:` into a visitor's browser.
  *
- * At most one `Page` may have `isHome: true` (enforced by `assertSingleHomePage`, which
- * atomically clears any previous holder) — that's the page `GET /` serves. Every other page is
- * served at its own `slug`. `assertSlugNotReserved` rejects a `slug` that would collide with the
- * framework's own `/api` router; a collision with the console's mount point can only be checked
- * at request time (the console's `consolePath` isn't known when this model is defined) — see
- * `router.ts`'s own doc comment for how mount order handles that instead.
+ * `navLocation`/`navOrder` drive the scaffolded `root.tsx`'s header/footer navigation: a page with
+ * `navLocation: 'header'` shows in the top nav, `'footer'` in the footer, `'none'` nowhere,
+ * ordered by `navOrder` ascending. `assertSlugNotReserved` rejects a `slug` that would be shadowed
+ * by a scaffolded route file (`contact`) or a framework asset path.
  */
 export const Page = defineModel('pages', {
   fields: {
     slug: field.string({ required: true, unique: true, indexed: true, maxLength: 255 }),
     title: field.string({ required: true, maxLength: 255 }),
     metaDescription: field.string({ required: false, maxLength: 300, displayText: 'Meta description' }),
+    body: field.custom('richtext', field.text({ required: true, displayText: 'Content' })),
     status: field.enum(['draft', 'published'] as const, { default: 'draft', indexed: true }),
-    isHome: field.boolean({ default: false, displayText: 'Home page' }),
+    navLocation: field.enum(['none', 'header', 'footer'] as const, {
+      default: 'none',
+      displayText: 'Navigation',
+      description: 'Where this page links from — the top nav, the footer, or nowhere.',
+    }),
+    navOrder: field.integer({ default: 0, displayText: 'Navigation order' }),
     publishedAt: field.datetime({ required: false, displayText: 'Published at' }),
-    blocks: field.referenceToMany('blocks', { inverseColumn: 'pageId', displayText: 'Blocks' }),
   },
   operations: {
-    create: pipe(assertSlugNotReserved, assertSingleHomePage, validate, persist),
-    update: pipe(assertSlugNotReserved, forbidPublishStateInUpdate, assertSingleHomePage, validate, persist),
+    create: pipe(assertSlugNotReserved, sanitizeBody, validate, persist),
+    update: pipe(assertSlugNotReserved, forbidPublishStateInUpdate, sanitizeBody, validate, persist),
     publish: {
       pipeline: publishPage,
       description: 'Publishes the page, making it reachable at its slug.',
