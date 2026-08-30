@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { watch } from 'node:fs';
 import { generate } from '../../codegen/generate.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
@@ -9,7 +10,7 @@ import { buildConsoleClient, type ConsoleClientHandle } from '../build-console.j
 const DEBOUNCE_MS = 200;
 
 async function generateAndPush(cwd: string, dirs: ReturnType<typeof resolveDirs>): Promise<void> {
-  await generate({ modelsDir: dirs.modelsDir, generatedDir: dirs.generatedDir });
+  await generate({ modelsDir: dirs.modelsDir, generatedDir: dirs.generatedDir, routesDir: dirs.routesDir });
   const drizzleConfigFile = await writeDrizzleKitConfig(cwd, dirs.generatedDir, dirs.migrationsDir);
   // §7: `dev` is the one place `push` is used — immediate schema sync, no migration files.
   // `--force` auto-approves data-loss statements; acceptable because this only ever targets a
@@ -94,6 +95,17 @@ export async function runDev(cwd: string): Promise<void> {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => void restart(`${filename} changed`), DEBOUNCE_MS);
   });
+
+  // The developer's React Router site — regenerate the route manifests + restart on any change.
+  // (The web client bundle rebuild is driven by `buildWebClient`'s own dev watcher — phase 4/6.)
+  if (existsSync(dirs.routesDir)) {
+    watch(dirs.routesDir, { recursive: true }, (_event, filename) => {
+      if (!filename || !/\.(tsx|ts|jsx|js)$/.test(filename)) return;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => void restart(`${filename} changed`), DEBOUNCE_MS);
+    });
+    console.log(`[dev] watching ${dirs.routesDir} for changes`);
+  }
 
   const shutdown = async () => {
     if (shuttingDown) return;

@@ -68,6 +68,13 @@ export interface FrameworkConfig {
   generatedDir?: string;
   /** default: 'migrations' — git-tracked; separate from generatedDir (Q8) */
   migrationsDir?: string;
+  /** default: 'routes' — the developer's React Router data-mode site (see `src/web/`). Scanned by
+   * `ratchet generate` (folder convention); the SSR router is mounted at `/` only when
+   * `<routesDir>/root.tsx` exists. */
+  routesDir?: string;
+  /** default: 'public' — static files served at `/` (favicon.ico, robots.txt, /images/…), before
+   * the web SSR catch-all. */
+  publicDir?: string;
   /** default: '/console' — where the console SPA (and its `/meta/models` metadata API) is
    * mounted. Must start with '/', have no trailing slash (except the bare '/' root value), and
    * must not collide with the framework's own '/api' or '/api/auth' routers — '/' mounts the
