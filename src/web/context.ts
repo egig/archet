@@ -35,6 +35,12 @@ export interface WebLoaderContext {
   requirePermission(resource: string, action: string): void;
 }
 
+/** Narrow a route handler's `context` (typed `unknown`/`RouterContextProvider` by React Router)
+ * to Ratchet's `WebLoaderContext`. Single fetch guarantees it's always the real object. */
+export function getWebContext(context: unknown): WebLoaderContext {
+  return context as WebLoaderContext;
+}
+
 function permissionAllows(permissions: PermissionRow[], resource: string, action: string): boolean {
   return permissions.some((p) => (p.resource === resource || p.resource === '*') && (p.action === action || p.action === '*'));
 }

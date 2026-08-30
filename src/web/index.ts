@@ -8,5 +8,7 @@
  */
 export { Meta, Scripts, DocumentContext } from './document.js';
 export type { MetaFunction, MetaDescriptor, RouteHandle } from './document.js';
+export { getWebContext } from './context.js';
+export type { WebLoaderContext, WebSession } from './context.js';
 export { DefaultRootErrorBoundary } from './error-boundary.js';
 export { singleFetchHandler, dataPathname, createSingleFetchDataStrategy } from './single-fetch.js';

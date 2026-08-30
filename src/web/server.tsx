@@ -1,4 +1,4 @@
-import { renderToString } from 'react-dom/server';
+import { renderToReadableStream } from 'react-dom/server';
 import {
   createStaticHandler,
   createStaticRouter,
@@ -30,6 +30,20 @@ const SCRIPT_ESCAPE: Record<string, string> = { '&': '\\u0026', '>': '\\u003e', 
 const SCRIPT_ESCAPE_RE = new RegExp(`[&><${LS}${PS}]`, 'g');
 function escapeForScript(json: string): string {
   return json.replace(SCRIPT_ESCAPE_RE, (m) => SCRIPT_ESCAPE[m]!);
+}
+
+/** Emit `prefix` (the doctype) before the first chunk of the React stream. */
+function prependChunk(prefix: Uint8Array): TransformStream<Uint8Array, Uint8Array> {
+  let sent = false;
+  return new TransformStream({
+    transform(chunk, controller) {
+      if (!sent) {
+        controller.enqueue(prefix);
+        sent = true;
+      }
+      controller.enqueue(chunk);
+    },
+  });
 }
 
 function serializeErrors(errors: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -82,14 +96,35 @@ export function createWebServer(
       JSON.stringify(JSON.stringify(hydrationData)),
     )});`;
 
-    const html = renderToString(
-      <DocumentContext.Provider value={{ hydrationScript, entrySrc }}>
-        <StaticRouterProvider router={router} context={result} hydrate={false} />
-      </DocumentContext.Provider>,
-    );
+    // Streaming SSR: the shell flushes first, <Suspense> boundaries stream in. `onError` on a
+    // post-shell error keeps the connection alive (React swaps in the client fallback on
+    // hydration); a shell error rejects the promise and we fall through to a 500.
+    let didError = false;
+    let stream: ReadableStream<Uint8Array>;
+    try {
+      stream = await renderToReadableStream(
+        <DocumentContext.Provider value={{ hydrationScript, entrySrc }}>
+          <StaticRouterProvider router={router} context={result} hydrate={false} />
+        </DocumentContext.Provider>,
+        {
+          onError(error: unknown) {
+            didError = true;
+            console.error('[web] SSR render error:', error);
+          },
+        },
+      );
+    } catch (shellError) {
+      console.error('[web] SSR shell error:', shellError);
+      return new Response('<!DOCTYPE html><title>Server Error</title><h1>500 — server error</h1>', {
+        status: 500,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
 
-    return new Response(`<!DOCTYPE html>${html}`, {
-      status: result.statusCode,
+    const doctype = new TextEncoder().encode('<!DOCTYPE html>');
+    const body = stream.pipeThrough(prependChunk(doctype));
+    return new Response(body, {
+      status: didError ? 500 : result.statusCode,
       headers: { 'content-type': 'text/html; charset=utf-8' },
     });
   }

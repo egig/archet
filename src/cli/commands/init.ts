@@ -25,15 +25,17 @@ function packageJson(name: string): string {
           'drizzle-orm': '^0.36.4',
           postgres: '^3.4.5',
           zod: '^3.24.1',
+          // `react`/`react-dom` are `@egig/ratchet`'s `peerDependencies` — the console SPA and the
+          // web app's SSR both need exactly one copy. `react-router` is what `routes/**` import
+          // directly (loaders, `<Link>`, `useLoaderData`, …).
+          react: '^19.2.0',
+          'react-dom': '^19.2.0',
+          'react-router': '^8.3.0',
         },
         devDependencies: {
           '@types/bun': '^1.4.0',
-          // `react`/`react-dom` are `@egig/ratchet`'s own `peerDependencies` (the console SPA needs
-          // exactly one copy, so it can't just bundle its own) — a consumer app provides them, even
-          // though it never imports React directly itself unless it authors a `*.form.tsx`/
-          // `*.input.tsx` (docs/guide/console.md's Custom forms/Custom field inputs), which does.
           '@types/react': '^19.2.0',
-          react: '^19.2.0',
+          '@types/react-dom': '^19.2.0',
           'drizzle-kit': '^0.28.1',
           typescript: '^5.7.2',
         },
@@ -62,7 +64,7 @@ const TSCONFIG = `{
     "sourceMap": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "models", "logic", "ratchet.config.ts"],
+  "include": ["src", "models", "routes", "logic", "ratchet.config.ts"],
   "exclude": ["dist", "node_modules", ".ratchet"]
 }
 `;
@@ -91,6 +93,75 @@ dist/
 .ratchet/
 .env
 *.log
+`;
+
+const ROOT_ROUTE = `import { Outlet, isRouteErrorResponse, useRouteError } from 'react-router';
+import { Meta, Scripts, getWebContext } from '@egig/ratchet/web';
+import type { LoaderFunctionArgs } from 'react-router';
+
+// The root route renders the whole HTML document. Its loader reads the website Domain Settings
+// (console-editable: site title, favicon, headHtml, globalCss, …) off the injected \`context\`.
+export async function loader({ context }: LoaderFunctionArgs) {
+  const settings = await getWebContext(context).settings.get('website');
+  return { settings };
+}
+
+export const meta = ({ data }: { data: Awaited<ReturnType<typeof loader>> }) => {
+  const title = typeof data?.settings?.title === 'string' ? data.settings.title : 'My site';
+  return [{ title }];
+};
+
+export default function Root({ loaderData }: { loaderData: Awaited<ReturnType<typeof loader>> }) {
+  const settings = loaderData?.settings ?? {};
+  const globalCss = typeof settings.globalCss === 'string' ? settings.globalCss : '';
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Meta />
+        {globalCss ? <style dangerouslySetInnerHTML={{ __html: globalCss }} /> : null}
+      </head>
+      <body>
+        <Outlet />
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const heading = isRouteErrorResponse(error) ? \`\${error.status} \${error.statusText}\` : 'Something went wrong';
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <title>{heading}</title>
+      </head>
+      <body>
+        <h1>{heading}</h1>
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+`;
+
+const INDEX_ROUTE = `export const meta = () => [{ title: 'Home' }];
+
+export default function Home() {
+  return (
+    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '3rem', maxWidth: 640, margin: '0 auto' }}>
+      <h1>It works</h1>
+      <p>
+        Edit <code>routes/index.tsx</code>, or add <code>routes/about.tsx</code>,{' '}
+        <code>routes/blog/$slug.tsx</code>, … Loaders run on the server with a{' '}
+        <code>context</code> (db, session, settings).
+      </p>
+    </main>
+  );
+}
 `;
 
 function sanitizePackageName(dirName: string): string {
@@ -144,12 +215,16 @@ export async function runInit(cwd: string): Promise<void> {
   await mkdir(path.join(cwd, 'models'), { recursive: true });
   await mkdir(path.join(cwd, '.ratchet'), { recursive: true });
   await mkdir(path.join(cwd, 'drizzle', 'migrations'), { recursive: true });
+  await mkdir(path.join(cwd, 'routes'), { recursive: true });
+  await mkdir(path.join(cwd, 'public'), { recursive: true });
 
   const pkgName = sanitizePackageName(path.basename(cwd));
   await writeIfAbsent(path.join(cwd, 'package.json'), packageJson(pkgName), 'package.json');
   await writeIfAbsent(path.join(cwd, 'tsconfig.json'), TSCONFIG, 'tsconfig.json');
   await writeIfAbsent(path.join(cwd, 'ratchet.config.ts'), RATCHET_CONFIG, 'ratchet.config.ts');
   await writeIfAbsent(path.join(cwd, 'models', 'example.model.ts'), EXAMPLE_MODEL, 'models/example.model.ts');
+  await writeIfAbsent(path.join(cwd, 'routes', 'root.tsx'), ROOT_ROUTE, 'routes/root.tsx');
+  await writeIfAbsent(path.join(cwd, 'routes', 'index.tsx'), INDEX_ROUTE, 'routes/index.tsx');
   await appendGitignore(cwd);
 
   console.log('');
