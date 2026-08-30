@@ -74,6 +74,13 @@ function isRouteFile(name: string): boolean {
   return ROUTE_FILE_RE.test(name) && !IGNORE_FILE_RE.test(name);
 }
 
+function fileNameCompare(a: string, b: string): number {
+  const aIndex = baseName(a) === 'index';
+  const bIndex = baseName(b) === 'index';
+  if (aIndex !== bIndex) return aIndex ? -1 : 1;
+  return a.localeCompare(b);
+}
+
 async function scanModule(file: string, routesDir: string): Promise<RouteModule> {
   const source = await readFile(file, 'utf8');
   const loader = file.endsWith('x') ? 'tsx' : 'ts';
@@ -101,9 +108,19 @@ interface DirScan {
 }
 
 async function scanDir(dir: string, routesDir: string): Promise<DirScan> {
+  // `readdir` order is filesystem-dependent (not guaranteed alphabetical) — sort explicitly so the
+  // generated route tree, and thus `.ratchet/app-routes.*.ts`, is deterministic across machines/runs.
+  // `index` sorts first within its directory (it has no path of its own to alphabetize by, and
+  // conventionally reads as "this folder's default").
   const entries = await readdir(dir, { withFileTypes: true });
-  const fileNames = entries.filter((e) => e.isFile() && isRouteFile(e.name)).map((e) => e.name);
-  const dirNames = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  const fileNames = entries
+    .filter((e) => e.isFile() && isRouteFile(e.name))
+    .map((e) => e.name)
+    .sort(fileNameCompare);
+  const dirNames = entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
   const isFolderName = new Set(dirNames);
 
   const routes: RouteNode[] = [];
