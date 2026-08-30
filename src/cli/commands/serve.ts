@@ -9,10 +9,13 @@ import { createAuthRouter } from '../../auth/router.js';
 import { createAutomationRouter } from '../../automation/router.js';
 import { createConsoleRouter } from '../../console/router.js';
 import { createSiteAssetsRouter } from '../../router/site-assets.js';
-import { createWebsiteRouter } from '../../website/router.js';
 import { createNodeFsAssetSource } from '../../console/node-assets.js';
 import { buildStorageAdapter } from '../../core/storage-config.js';
 import { loadConfig, resolveDirs } from '../load-config.js';
+import { existsSync } from 'node:fs';
+import { createWebRouter, createWebAssetsRouter, createPublicAssetsRouter } from '../../web/router.js';
+import { webEntrySrc } from '../build-web.js';
+import type { RouteObject } from 'react-router';
 
 /**
  * §5/§6: the dynamic `/api/:model` router only needs a registry (name -> ModelDefinition) and a
@@ -31,6 +34,16 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   const domainsFile = path.join(generatedDir, 'domains.ts');
   const domainsModule = (await import(pathToFileURL(domainsFile).href)) as Record<string, unknown>;
   const domainSettingsRegistry = buildDomainSettingsRegistryMap(domainsModule);
+
+  // The developer's React Router site — mounted only when opted into (`ratchet generate` wrote
+  // `.ratchet/app-routes.server.ts` because `<routesDir>/root.tsx` exists).
+  const serverRoutesFile = path.join(generatedDir, 'app-routes.server.ts');
+  const webManifest = existsSync(serverRoutesFile)
+    ? ((await import(pathToFileURL(serverRoutesFile).href)) as {
+        routes: RouteObject[];
+        resourceRouteIds: ReadonlySet<string>;
+      })
+    : null;
 
   const client = postgres(config.db.connectionString);
   const db = drizzle(client);
@@ -64,7 +77,26 @@ export async function runServe(cwd: string): Promise<ReturnType<typeof Bun.serve
   // router below for the same reason `/api`/the console are — that catch-all `/:slug` route must
   // never be able to shadow it.
   app.route('/_site-assets', createSiteAssetsRouter(db, storage, domainSettingsRegistry));
-  app.route('/', createWebsiteRouter(db));
+
+  // The web app, last (its `/*` is a catch-all): built client assets, then `publicDir`, then the
+  // SSR + `.data` handler. When the site isn't opted into, `/` simply 404s (no Page/Block
+  // fallback — see docs/adr/0003).
+  if (webManifest) {
+    app.route('/_ratchet', createWebAssetsRouter(generatedDir));
+    app.route('/', createPublicAssetsRouter(dirs.publicDir));
+    app.route(
+      '/',
+      createWebRouter({
+        routes: webManifest.routes,
+        resourceRouteIds: webManifest.resourceRouteIds,
+        entrySrc: await webEntrySrc(dirs),
+        db,
+        registry,
+        domainSettingsRegistry,
+        storage,
+      }),
+    );
+  }
 
   const port = Number(process.env.PORT ?? 3000);
   const server = Bun.serve({ fetch: app.fetch, port });

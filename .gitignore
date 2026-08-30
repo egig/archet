@@ -14,4 +14,4 @@ dist/
 !/example/deploy/
 local*
 .claude/plans
-docs-internal
+docs-internaltest/.tmp/

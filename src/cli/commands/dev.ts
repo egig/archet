@@ -6,6 +6,7 @@ import { loadConfig, resolveDirs } from '../load-config.js';
 import { writeDrizzleKitConfig } from '../drizzle-kit-config.js';
 import { runDrizzleKit } from '../run-drizzle-kit.js';
 import { buildConsoleClient, type ConsoleClientHandle } from '../build-console.js';
+import { buildWebClient } from '../build-web.js';
 
 const DEBOUNCE_MS = 200;
 
@@ -16,6 +17,10 @@ async function generateAndPush(cwd: string, dirs: ReturnType<typeof resolveDirs>
   // `--force` auto-approves data-loss statements; acceptable because this only ever targets a
   // local dev database, never staging/prod (which always goes through generate+migrate instead).
   await runDrizzleKit(['push', '--config', drizzleConfigFile, '--force'], cwd);
+  // rebuild the web client bundle after each regenerate (the route module set may have changed).
+  // Bun.build has no incremental watch API, so this is a one-shot rebuild — cheap for the small
+  // trees this targets; a proper dev watch loop is phase 6.
+  await buildWebClient(dirs, { mode: 'dev' });
 }
 
 /** §6: watch model files; on change, regenerate + push + restart the dev server. */

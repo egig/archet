@@ -1,5 +1,5 @@
 import { relativeImportSpecifier } from '../codegen/paths.js';
-import type { RouteModule, RouteNode, ScannedRoutes } from './scan-routes.js';
+import { isResourceRoute, type RouteModule, type RouteNode, type ScannedRoutes } from './scan-routes.js';
 
 /**
  * Turns a `ScannedRoutes` tree (scan-routes.ts) into the two generated manifests:
@@ -88,7 +88,15 @@ function imports(scanned: ScannedRoutes, generatedDir: string): string {
     .join('\n');
 }
 
-export function generateServerRoutesSource(scanned: ScannedRoutes, generatedDir: string): string {
+/** the `@egig/ratchet/web` import in the generated manifests — overridable so tests can point at
+ * `src/web/index.ts` directly (the published specifier only resolves against an installed dist). */
+const DEFAULT_WEB_PACKAGE = '@egig/ratchet/web';
+
+export function generateServerRoutesSource(
+  scanned: ScannedRoutes,
+  generatedDir: string,
+  webPackage: string = DEFAULT_WEB_PACKAGE,
+): string {
   const rootA = importAlias('root');
   const rootFields = ['id: "root"', 'path: "/"', `Component: ${rootA}.default`];
   if (scanned.root!.exports.includes('loader')) rootFields.push(`loader: ${rootA}.loader`);
@@ -102,10 +110,12 @@ export function generateServerRoutesSource(scanned: ScannedRoutes, generatedDir:
   const rh = handleExpr(rootA, scanned.root!);
   if (rh) rootFields.push(`handle: ${rh}`);
 
+  const resourceIds = scanned.modules.filter(isResourceRoute).map((m) => m.id);
+
   return [
     HEADER,
     `import type { RouteObject } from 'react-router';`,
-    `import { DefaultRootErrorBoundary as __DefaultRootErrorBoundary } from '@egig/ratchet/web';`,
+    `import { DefaultRootErrorBoundary as __DefaultRootErrorBoundary } from '${webPackage}';`,
     imports(scanned, generatedDir),
     ``,
     `export const routes: RouteObject[] = [`,
@@ -114,10 +124,18 @@ export function generateServerRoutesSource(scanned: ScannedRoutes, generatedDir:
     `  ] },`,
     `];`,
     ``,
+    `/** route ids with a \`loader\`/\`action\` but no component — the SSR handler returns their`,
+    ` *  loader's raw \`Response\` instead of rendering. */`,
+    `export const resourceRouteIds: ReadonlySet<string> = new Set(${JSON.stringify(resourceIds)});`,
+    ``,
   ].join('\n');
 }
 
-export function generateClientRoutesSource(scanned: ScannedRoutes, generatedDir: string): string {
+export function generateClientRoutesSource(
+  scanned: ScannedRoutes,
+  generatedDir: string,
+  webPackage: string = DEFAULT_WEB_PACKAGE,
+): string {
   const rootA = importAlias('root');
   const rootFields = ['id: "root"', 'path: "/"', `Component: ${rootA}.default`];
   if (scanned.root!.exports.includes('loader')) rootFields.push(`loader: __sf("root")`);
@@ -133,7 +151,7 @@ export function generateClientRoutesSource(scanned: ScannedRoutes, generatedDir:
   return [
     HEADER,
     `import type { RouteObject } from 'react-router';`,
-    `import { DefaultRootErrorBoundary as __DefaultRootErrorBoundary, singleFetchHandler as __sf } from '@egig/ratchet/web';`,
+    `import { DefaultRootErrorBoundary as __DefaultRootErrorBoundary, singleFetchHandler as __sf } from '${webPackage}';`,
     imports(scanned, generatedDir),
     ``,
     `export const routes: RouteObject[] = [`,
