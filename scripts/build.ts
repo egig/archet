@@ -1,13 +1,18 @@
-import { readdirSync, statSync, chmodSync, copyFileSync } from 'node:fs';
+import { readdirSync, statSync, chmodSync, copyFileSync, cpSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SRC_DIRS = ['core', 'cli', 'codegen', 'router', 'auth', 'automation', 'workspace', 'web', 'console'];
 
+// `ratchet init`'s scaffold source — a verbatim project tree, not framework code. Kept out of the
+// build's entrypoint walk (its .ts/.tsx must not be transformed) and copied wholesale into dist/.
+const STUBS_SRC = path.join(ROOT, 'src', 'cli', 'stubs');
+
 function walk(dir: string, out: string[]): string[] {
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
+    if (full === STUBS_SRC) continue;
     if (statSync(full).isDirectory()) {
       walk(full, out);
     } else if (/\.(ts|tsx)$/.test(entry) && !entry.endsWith('.test.ts') && !entry.endsWith('.d.ts')) {
@@ -63,6 +68,10 @@ async function main(): Promise<void> {
     path.join(ROOT, 'src', 'console', 'client', 'styles.css'),
     path.join(ROOT, 'dist', 'console', 'client', 'styles.css'),
   );
+
+  // The `ratchet init` scaffold — copied verbatim so init.ts resolves `../stubs` from
+  // dist/cli/commands/ the same way it does from src/cli/commands/.
+  cpSync(STUBS_SRC, path.join(ROOT, 'dist', 'cli', 'stubs'), { recursive: true });
 }
 
 main().catch((err: unknown) => {

@@ -76,7 +76,7 @@ export default function HomePage() {
           </Link>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-px bg-fd-border sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-px bg-fd-border sm:grid-cols-2 lg:grid-cols-3 mx-auto max-w-4xl">
         {features.map((feature) => (
           <div key={feature.title} className="flex flex-col gap-2 bg-fd-background p-8">
             <h2 className="font-semibold">{feature.title}</h2>

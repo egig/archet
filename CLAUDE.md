@@ -55,7 +55,11 @@ bun test
 
 ## The consumer workflow (also how `example/` works)
 
-1. `ratchet init` — scaffold `package.json`, `ratchet.config.ts`, `models/`, `migrations/`.
+1. `ratchet init` — scaffold `package.json`, `ratchet.config.ts`, `models/`, `migrations/`. The
+   scaffold is a real project tree in [src/cli/stubs/](src/cli/stubs/), copied verbatim by
+   [src/cli/commands/init.ts](src/cli/commands/init.ts) (only `package.json`'s `name` is templated;
+   `stubs/gitignore` is written as `.gitignore`). `scripts/build.ts` copies the tree to
+   `dist/cli/stubs/`. Edit the stub files, not string constants.
 2. Write `models/**/*.model.ts` with `defineModel` / `field.*`.
 3. `ratchet generate` — regenerate `.ratchet/*` (schema, validators, registry, domains, console
    forms/field-inputs), **then run `drizzle-kit generate`** to emit reviewable SQL migration files.

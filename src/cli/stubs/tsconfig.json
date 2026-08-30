@@ -16,6 +16,6 @@
     "sourceMap": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "example", "test"],
-  "exclude": ["dist", "node_modules", "example/.ratchet", "src/cli/stubs"]
+  "include": ["src", "models", "routes", "logic", "ratchet.config.ts"],
+  "exclude": ["dist", "node_modules", ".ratchet"]
 }

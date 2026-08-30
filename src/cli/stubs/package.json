@@ -1,0 +1,33 @@
+{
+  "name": "ratchet-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "ratchet dev",
+    "serve": "ratchet serve",
+    "generate": "ratchet generate",
+    "migrate": "ratchet migrate",
+    "studio": "ratchet studio",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@egig/ratchet": "^0.1.0",
+    "drizzle-orm": "^0.36.4",
+    "postgres": "^3.4.5",
+    "sanitize-html": "^2.17.7",
+    "zod": "^3.24.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/sanitize-html": "^2.16.1",
+    "drizzle-kit": "^0.28.1",
+    "typescript": "^5.7.2"
+  }
+}
