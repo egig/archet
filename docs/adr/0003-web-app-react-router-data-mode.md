@@ -6,12 +6,17 @@ That serves a marketing site an operator edits without deploying, but it's a dea
 with real behavior — a route that runs a query, a form that does more than store fields, a layout
 composed from components.
 
-We replaced the renderer (not the models) with **`src/web/`**: the developer writes
-`routes/**/*.tsx` in a folder convention, and Ratchet scans them at codegen time, server-renders
-them, and bundles the client with `Bun.build`. The `website` package stays in the tree, unmounted
-— its `WebsiteDomain` settings (site title, favicon, `headHtml`, `globalCss`, …) are still
-console-editable and are read by the web app's `routes/root.tsx` loader through the injected
-`context`.
+We replaced the renderer with **`src/web/`**: the developer writes `routes/**/*.tsx` in a folder
+convention, and Ratchet scans them at codegen time, server-renders them, and bundles the client
+with `Bun.build`.
+
+The `website` domain stays, reduced to content management: `Page` (now a single sanitized
+rich-text `body` instead of `Block` rows — the block builder, the Page Builder screen, and
+`render.ts` are all gone), a new `Contact` model for the scaffolded contact form, and
+`WebsiteDomain` settings (site title, description, favicon, `ogImage`, `siteUrl`, `noindex` —
+`headHtml`/`globalCss` dropped, since the shell is now the consumer's own `routes/root.tsx` +
+`public/theme.css`). `ratchet init` scaffolds a `routes/$.tsx` that renders a published `Page` by
+slug, and `/api/auth/setup` seeds starter pages so a fresh site isn't empty.
 
 ## Why data mode, not framework mode
 

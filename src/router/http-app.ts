@@ -42,8 +42,8 @@ function matchSegments(pattern: string[], pathSegments: string[]): Record<string
 /** Normalizes an `app.route()` mount prefix (`'/'`, `'/api'`, `'/api/auth'`, never trailing-slashed
  * except the root itself) and, given a full request path, strips it back off — returning `null`
  * when the path isn't actually under this prefix. Mounting at `'/'` consumes nothing (the whole
- * path is still handed to the sub-app), matching how `website/router.ts` and a root `consolePath`
- * both expect to see the full path space. */
+ * path is still handed to the sub-app), matching how the web app's catch-all router and a root
+ * `consolePath` both expect to see the full path space. */
 function stripPrefix(path: string, prefix: string): string | null {
   if (prefix === '/') return path;
   if (path === prefix) return '/';

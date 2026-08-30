@@ -3,7 +3,7 @@ import { WorkTitle } from '../workspace/models/index.js';
 import { Agent, Chat, Message, Provider } from '../automation/models/index.js';
 import { AutomationDomain } from '../automation/domain.js';
 import { Workspace, WorkspaceView } from '../workspace/models/index.js';
-import { Page, Block } from '../website/models/index.js';
+import { Page, Contact } from '../website/models/index.js';
 import { WebsiteDomain } from '../website/domain.js';
 import type { ScannedModel } from './scan.js';
 import type { ScannedDomain } from './scan-domains.js';
@@ -29,7 +29,7 @@ export const BUILTIN_MODELS: ScannedModel[] = [
   { filePath: '@egig/ratchet/workspace (Workspace)', exportName: 'Workspace', model: Workspace, builtinPackage: '@egig/ratchet/workspace', domain: 'workspace' },
   { filePath: '@egig/ratchet/workspace (WorkspaceView)', exportName: 'WorkspaceView', model: WorkspaceView, builtinPackage: '@egig/ratchet/workspace', domain: 'workspace' },
   { filePath: '@egig/ratchet/website (Page)', exportName: 'Page', model: Page, builtinPackage: '@egig/ratchet/website', domain: 'website' },
-  { filePath: '@egig/ratchet/website (Block)', exportName: 'Block', model: Block, builtinPackage: '@egig/ratchet/website', domain: 'website' },
+  { filePath: '@egig/ratchet/website (Contact)', exportName: 'Contact', model: Contact, builtinPackage: '@egig/ratchet/website', domain: 'website' },
 ];
 
 /**

@@ -15,7 +15,7 @@ type AnyDb = PgDatabase<any, any, any>;
  * side of that flag (`core/field.ts`), mirroring `core/serialize.ts`'s `siteAssetUrl`, the URL
  * this route must match: `GET /_site-assets/:domain/:field/:token`. Deliberately its own tiny
  * router, not folded into `console/router.ts` (which owns writing Domain Settings, behind a
- * session) or a given domain's own router (e.g. `website/router.ts`) — a public site asset's URL
+ * session) or the web app's routes — a public site asset's URL
  * shouldn't move if `consolePath` is ever reconfigured, and this stays domain-agnostic so a
  * second Domain adding its own `public: true` file field needs no new router, just a registry
  * entry (see `cli/commands/serve.ts`, mounted at the fixed `/_site-assets` prefix).

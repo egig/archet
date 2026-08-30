@@ -38,7 +38,6 @@ import { FileStorage, FileWasNotFound, type StatEntry, type StorageAdapter } fro
 import { App, createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
 import { createAuthRouter } from '@egig/ratchet/auth';
 import { createConsoleRouter, type ConsoleAsset, type ConsoleAssetSource, type ConsoleManifest } from '@egig/ratchet/console';
-import { createWebsiteRouter } from '@egig/ratchet/website';
 import * as registryModule from '../../.ratchet/registry.js';
 
 const CONSOLE_PATH = '/console';
@@ -168,14 +167,15 @@ export default {
 
     // `/api/auth` and `/api` are registered before the console router so they keep precedence if
     // `CONSOLE_PATH` is ever set to '/' (root mount) — its own catch-all would otherwise swallow
-    // every path (see `FrameworkConfig.consolePath`). The website router (public page rendering)
-    // goes last of all — see `src/website/router.ts`'s doc comment for why mount order is what
-    // keeps a page slug from ever shadowing `/api`/the console.
+    // every path (see `FrameworkConfig.consolePath`).
+    //
+    // The public site (`@egig/ratchet/web` routes) isn't mounted here — this skeleton only serves
+    // the API + console. To serve the site from a Worker, mount `createWebRouter` from
+    // `@egig/ratchet/web/router` last of all (its `/*` is a catch-all).
     const app = new App();
     app.route('/api/auth', createAuthRouter(db));
     app.route('/api', createApiRouter(registry, db, new FileStorage(new R2StorageAdapter(env.FILES))));
     app.route(CONSOLE_PATH, createConsoleRouter(createAssetsBindingSource(env.ASSETS), registry, db, CONSOLE_PATH));
-    app.route('/', createWebsiteRouter(db));
 
     return app.fetch(request);
   },

@@ -276,7 +276,7 @@ export async function buildServerBundle(cwd: string, dirs: Dirs): Promise<void> 
     `import { createAuthRouter } from '@egig/ratchet/auth';`,
     `import { createConsoleRouter } from '@egig/ratchet/console';`,
     `import { createNodeFsAssetSource } from '@egig/ratchet/console/node';`,
-    hasWeb ? `import { createWebRouter, createWebAssetsRouter, createPublicAssetsRouter } from '@egig/ratchet/web/router';` : null,
+    hasWeb ? `import { createWebRouter, createWebAssetsRouter } from '@egig/ratchet/web/router';` : null,
     hasWeb ? `import { routes as webRoutes, resourceRouteIds } from './app-routes.server.js';` : null,
     `import * as registryModule from './registry.js';`,
     `import * as domainsModule from './domains.js';`,
@@ -292,9 +292,8 @@ export async function buildServerBundle(cwd: string, dirs: Dirs): Promise<void> 
     `app.route('/api', createApiRouter(registry, db));`,
     `app.route(${JSON.stringify(dirs.consolePath)}, createConsoleRouter(createNodeFsAssetSource(${JSON.stringify(path.relative(cwd, dirs.generatedDir))}), registry, db, ${JSON.stringify(dirs.consolePath)}, domainSettingsRegistry));`,
     hasWeb ? `app.route('/_ratchet', createWebAssetsRouter(${JSON.stringify(path.relative(cwd, dirs.generatedDir))}));` : null,
-    hasWeb ? `app.route('/', createPublicAssetsRouter(${JSON.stringify(path.relative(cwd, dirs.publicDir))}));` : null,
     hasWeb
-      ? `app.route('/', createWebRouter({ routes: webRoutes, resourceRouteIds, entrySrc: ${JSON.stringify(await webEntrySrc(dirs))}, db, registry, domainSettingsRegistry, storage: undefined }));`
+      ? `app.route('/', createWebRouter({ routes: webRoutes, resourceRouteIds, entrySrc: ${JSON.stringify(await webEntrySrc(dirs))}, publicDir: ${JSON.stringify(path.relative(cwd, dirs.publicDir))}, db, registry, domainSettingsRegistry, storage: undefined }));`
       : null,
     ``,
     `const port = Number(process.env.PORT ?? 3000);`,
