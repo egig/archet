@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Agent chat: a failed turn no longer dumps the raw provider error (often a whole HTTP/JSON response body) into the chat bubble. The full error — stack and `cause` included — is now logged server-side (`[automation] chat turn failed …`); the chat shows a single clean line, with a plain-language explanation for the common cases (bad API key, rate limit / quota, provider outage, unreachable provider, oversized conversation, unknown model) and a generic "see the server logs" fallback otherwise.
 - `ratchet serve`/`dev`: with a `routes/` site opted in, the SSR handler was unreachable — a separate `publicDir` router mounted at `/` matched every request first and the local `App` never falls through to a second `/` mount, so every non-static path 404'd. `publicDir` serving is now folded into `createWebRouter`.
 - Static file serving (`publicDir`, `/_ratchet/*`) threw `EISDIR` on any path that resolved to a directory (e.g. `/`) instead of falling through — now `stat`-checks for a regular file.
 - `tailwindcss` is a direct dependency again — the console/web CSS build shells out to the standalone Tailwind CLI, which resolves `@import "tailwindcss"` from the top-level `node_modules`; Bun's isolated linker doesn't hoist it there as a transitive dep of `@tailwindcss/cli`.

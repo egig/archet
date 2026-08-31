@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { emptyTurnNotice, turnFailureNotice } from '../src/automation/router.js';
+import { emptyTurnNotice, summarizeTurnError, turnFailureNotice } from '../src/automation/router.js';
 
 // `POST /api/automation/chat` (router.ts) used to persist an assistant `Message` row only when
 // `AssistantPartsBuilder` had something in it — so a turn that threw before any token streamed,
@@ -30,5 +30,40 @@ describe('turnFailureNotice', () => {
 
   it('leads with a blank line when some content already streamed, so it reads as a continuation', () => {
     expect(turnFailureNotice('network error', true)).toBe('\n\n_Agent turn failed: network error_');
+  });
+});
+
+// `POST /api/automation/chat` logs the full thrown error server-side but must never render a raw
+// provider error (often a whole HTTP/JSON body) into the chat bubble — `summarizeTurnError`
+// collapses it to one clean line.
+describe('summarizeTurnError', () => {
+  it('recognises credential failures', () => {
+    expect(summarizeTurnError(new Error('401 {"error":{"message":"Invalid API key provided"}}'))).toContain('API key');
+  });
+
+  it('recognises rate limiting', () => {
+    expect(summarizeTurnError(new Error('Error 429: rate limit exceeded'))).toContain('rate-limiting');
+  });
+
+  it('recognises provider outages', () => {
+    expect(summarizeTurnError(new Error('503 Service Unavailable — overloaded_error'))).toContain('temporarily unavailable');
+  });
+
+  it('recognises network failures', () => {
+    expect(summarizeTurnError(new Error('fetch failed: ECONNREFUSED'))).toContain('reach the model provider');
+  });
+
+  it('recognises an oversized conversation', () => {
+    expect(summarizeTurnError(new Error('This model\'s maximum context length is 8192 tokens'))).toContain('too long');
+  });
+
+  it('falls back to a generic line that points at the logs for anything unrecognised', () => {
+    const huge = new Error('x'.repeat(5000));
+    expect(summarizeTurnError(huge)).toBe('unexpected error — see the server logs for details');
+  });
+
+  it('handles a non-Error throw', () => {
+    expect(summarizeTurnError('boom')).toBe('unexpected error — see the server logs for details');
+    expect(summarizeTurnError(undefined)).toBe('unexpected error — see the server logs for details');
   });
 });

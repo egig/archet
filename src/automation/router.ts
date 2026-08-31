@@ -45,9 +45,37 @@ export function emptyTurnNotice(stopReason: string): string {
 
 /** The notice appended when `runAgentTurn` throws — a leading blank line only when some content
  * already streamed before the failure, so the notice reads as a continuation rather than a
- * standalone paragraph. */
+ * standalone paragraph. `message` is always a `summarizeTurnError` result, never a raw error. */
 export function turnFailureNotice(message: string, hadPriorContent: boolean): string {
   return `${hadPriorContent ? '\n\n' : ''}_Agent turn failed: ${message}_`;
+}
+
+/**
+ * Collapses whatever `runAgentTurn` threw into one short, clean line safe to drop into a chat
+ * bubble. Provider SDK errors routinely carry a whole HTTP response body, a JSON blob, or a
+ * stack-laden string on `.message` — rendering that verbatim is the "ugly error" this avoids. The
+ * unabridged error (with stack/cause) is logged server-side by the caller; the UI only ever sees
+ * this summary. Recognised provider failure modes get a plain-language explanation; anything else
+ * falls back to a generic line pointing at the server logs.
+ */
+export function summarizeTurnError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  const flat = raw.replace(/\s+/g, ' ').trim().toLowerCase();
+
+  if (/\b401\b|\b403\b|unauthorized|forbidden|invalid[ _-]?api[ _-]?key|authentication|permission denied/.test(flat))
+    return 'the model provider rejected the credentials — check the provider API key';
+  if (/\b429\b|rate.?limit|too many requests|quota|insufficient_quota/.test(flat))
+    return 'the model provider is rate-limiting or over quota — try again shortly';
+  if (/\b5\d\d\b|overloaded|service unavailable|internal server error|bad gateway/.test(flat))
+    return 'the model provider is temporarily unavailable — try again shortly';
+  if (/timed out|timeout|etimedout|econnreset|econnrefused|enotfound|fetch failed|network|dns/.test(flat))
+    return 'could not reach the model provider — check the provider URL and network';
+  if (/context length|maximum context|context window|too many tokens|prompt is too long/.test(flat))
+    return 'this conversation is too long for the model context window — start a new chat';
+  if (/unknown model|invalid model|model .*(not found|does not exist)|no such model/.test(flat))
+    return 'the configured model was rejected by the provider — check the agent model id';
+
+  return 'unexpected error — see the server logs for details';
 }
 
 async function loadActiveAgent(db: AnyDb, agentId: unknown): Promise<Record<string, unknown>> {
@@ -327,12 +355,19 @@ export function createAutomationRouter(db: AnyDb, registry: Record<string, Model
           }
         }
       } catch (err) {
+        // Log the unabridged error (stack + `cause`, which is where provider SDKs stash the HTTP
+        // body and request id) — that's the debugging surface. The chat bubble gets only the
+        // one-line `summarizeTurnError` result: a raw provider error `.message` is often a whole
+        // JSON/HTML response body and renders as an unreadable wall of text.
+        console.error(
+          `[automation] chat turn failed (chat ${chatId}, agent ${String(agent.id)}, model ${String(agent.model)})`,
+          err,
+        );
         // written to `parts` too, not just the live `controller` stream — otherwise a turn that
         // throws before any text/tool-call ever streamed leaves `parts` empty, the persistence
         // step below is skipped, and the failure vanishes on the next history reload as if the
         // turn never happened.
-        const message = err instanceof Error ? err.message : 'unknown error';
-        const notice = turnFailureNotice(message, !parts.isEmpty());
+        const notice = turnFailureNotice(summarizeTurnError(err), !parts.isEmpty());
         parts.appendText(notice);
         controller.appendText(notice);
         stopReason = 'error';
