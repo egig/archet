@@ -21,7 +21,7 @@ export function sortableOptions(model: ConsoleModelMeta): { key: string; label: 
   ];
 }
 
-const controlClass = 'rounded border border-gray-300 px-2 py-1 text-sm';
+const controlClass = 'rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground';
 
 function SortKeyRow({
   options,
@@ -48,7 +48,7 @@ function SortKeyRow({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="w-14 text-xs text-gray-500">{index === 0 ? 'Sort by' : 'then by'}</span>
+      <span className="w-14 text-xs text-muted-foreground">{index === 0 ? 'Sort by' : 'then by'}</span>
 
       <select
         value={sortKey.field}
@@ -77,7 +77,7 @@ function SortKeyRow({
           onClick={() => onMove(-1)}
           disabled={index === 0}
           aria-label="Move up"
-          className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-30"
+          className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"
         >
           <ArrowUpIcon className="h-3.5 w-3.5" />
         </button>
@@ -86,7 +86,7 @@ function SortKeyRow({
           onClick={() => onMove(1)}
           disabled={index === count - 1}
           aria-label="Move down"
-          className="rounded p-1 text-gray-500 hover:bg-gray-200 disabled:opacity-30"
+          className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"
         >
           <ArrowDownIcon className="h-3.5 w-3.5" />
         </button>
@@ -96,7 +96,7 @@ function SortKeyRow({
         type="button"
         onClick={onRemove}
         aria-label="Remove sort level"
-        className="inline-flex items-center gap-0.5 text-xs text-red-600 hover:underline"
+        className="inline-flex items-center gap-0.5 text-xs text-destructive hover:underline"
       >
         <XMarkIcon className="h-3.5 w-3.5" />
         Remove
@@ -145,8 +145,8 @@ export function SortBar({ model, value, onChange, onApply, dirty, applying }: So
   }
 
   return (
-    <div className="mb-4 space-y-2 rounded border border-gray-200 bg-gray-50 p-3">
-      {value.length === 0 && <p className="text-sm text-gray-500">No sort — rows use the default order (newest first).</p>}
+    <div className="mb-4 space-y-2 rounded-md border border-border bg-muted p-3">
+      {value.length === 0 && <p className="text-sm text-muted-foreground">No sort — rows use the default order (newest first).</p>}
 
       {value.map((sortKey, i) => (
         <SortKeyRow
@@ -167,7 +167,7 @@ export function SortBar({ model, value, onChange, onApply, dirty, applying }: So
           <button
             type="button"
             onClick={() => onChange([...value, { field: firstUnused.key, direction: 'asc' }])}
-            className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
+            className="inline-flex items-center gap-0.5 text-sm text-muted-foreground hover:underline"
           >
             <PlusIcon className="h-3.5 w-3.5" />
             Add sort
@@ -178,7 +178,7 @@ export function SortBar({ model, value, onChange, onApply, dirty, applying }: So
             type="button"
             disabled={!dirty || applying}
             onClick={() => onApply(value)}
-            className="ml-auto rounded bg-gray-900 px-3 py-1 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
+            className="ml-auto rounded-md bg-accent px-3 py-1 text-sm text-accent-foreground hover:opacity-90 disabled:opacity-40"
           >
             {applying ? 'Applying…' : 'Apply'}
           </button>

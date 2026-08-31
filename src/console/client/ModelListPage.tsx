@@ -17,8 +17,8 @@ export function ModelListPage() {
   const { getModel, loading: modelsLoading } = useModels();
   const model = modelName ? getModel(modelName) : undefined;
 
-  if (modelsLoading) return <p className="text-sm text-gray-500">Loading…</p>;
-  if (!model) return <p className="text-sm text-red-600">Unknown model.</p>;
+  if (modelsLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (!model) return <p className="text-sm text-destructive">Unknown model.</p>;
 
   // carry the current query string (RowTable's ad-hoc `?filter=`) through the form dialog so
   // closing it lands back on the same filtered listing.

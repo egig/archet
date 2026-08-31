@@ -90,7 +90,7 @@ export function WorkspaceViewTable({ view, workspaceId, onChange, locked }: Work
     persistSortMutation.mutate(sort);
   }
 
-  if (!model) return <p className="text-sm text-red-600">Unknown model '{view.targetModel}'.</p>;
+  if (!model) return <p className="text-sm text-destructive">Unknown model '{view.targetModel}'.</p>;
 
   const hasFilterableFields = model.fields.some((f) => f.indexed);
 

@@ -65,7 +65,7 @@ const OPERATORS_BY_KIND: Record<string, string[]> = {
   file: ['is'],
 };
 
-const selectClass = 'rounded border border-gray-300 px-2 py-1 text-sm';
+const selectClass = 'rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground';
 
 function FilterValueInput({
   field,
@@ -198,7 +198,7 @@ function FilterClauseRow({
         type="button"
         onClick={onRemove}
         aria-label="Remove filter"
-        className="inline-flex items-center gap-0.5 text-xs text-red-600 hover:underline"
+        className="inline-flex items-center gap-0.5 text-xs text-destructive hover:underline"
       >
         <XMarkIcon className="h-3.5 w-3.5" />
         Remove
@@ -236,9 +236,9 @@ function FilterGroupBox({
   const [logic, conditions] = group;
 
   return (
-    <div className="space-y-2 rounded border border-gray-300 bg-white p-2">
+    <div className="space-y-2 rounded-md border border-border bg-surface p-2">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 text-xs text-gray-500">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
           Match
           <select
             value={logic}
@@ -253,7 +253,7 @@ function FilterGroupBox({
         <button
           type="button"
           onClick={onRemove}
-          className="inline-flex items-center gap-0.5 text-xs text-red-600 hover:underline"
+          className="inline-flex items-center gap-0.5 text-xs text-destructive hover:underline"
         >
           <XMarkIcon className="h-3.5 w-3.5" />
           Remove group
@@ -273,7 +273,7 @@ function FilterGroupBox({
       <button
         type="button"
         onClick={() => onChange([logic, [...conditions, newClause(fields)]])}
-        className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
+        className="inline-flex items-center gap-0.5 text-sm text-muted-foreground hover:underline"
       >
         <PlusIcon className="h-3.5 w-3.5" />
         Add condition
@@ -308,7 +308,7 @@ export function FilterBar({ fields, value, onChange, onApply, dirty, applying }:
   if (filterable.length === 0) return null;
 
   return (
-    <div className="mb-4 space-y-2 rounded border border-gray-200 bg-gray-50 p-3">
+    <div className="mb-4 space-y-2 rounded-md border border-border bg-muted p-3">
       {value.map((node, i) =>
         isGroup(node) ? (
           <FilterGroupBox
@@ -332,7 +332,7 @@ export function FilterBar({ fields, value, onChange, onApply, dirty, applying }:
         <button
           type="button"
           onClick={() => onChange([...value, newClause(filterable)])}
-          className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
+          className="inline-flex items-center gap-0.5 text-sm text-muted-foreground hover:underline"
         >
           <PlusIcon className="h-3.5 w-3.5" />
           Add filter
@@ -340,7 +340,7 @@ export function FilterBar({ fields, value, onChange, onApply, dirty, applying }:
         <button
           type="button"
           onClick={() => onChange([...value, ['or', [newClause(filterable)]]])}
-          className="inline-flex items-center gap-0.5 text-sm text-gray-600 hover:underline"
+          className="inline-flex items-center gap-0.5 text-sm text-muted-foreground hover:underline"
         >
           <PlusIcon className="h-3.5 w-3.5" />
           Add group
@@ -350,7 +350,7 @@ export function FilterBar({ fields, value, onChange, onApply, dirty, applying }:
             type="button"
             disabled={!dirty || applying}
             onClick={() => onApply(sanitizeFilters(value))}
-            className="ml-auto rounded bg-gray-900 px-3 py-1 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
+            className="ml-auto rounded-md bg-accent px-3 py-1 text-sm text-accent-foreground hover:opacity-90 disabled:opacity-40"
           >
             {applying ? 'Applying…' : 'Apply'}
           </button>

@@ -35,11 +35,11 @@ export function NewChatBar({
   }
 
   return (
-    <div className="flex items-center gap-2 border-b border-gray-200 p-2">
+    <div className="flex items-center gap-2 border-b border-border p-2">
       <button
         type="button"
         onClick={onNewClick}
-        className="flex shrink-0 items-center gap-1 rounded border border-gray-300 px-2 py-1 text-sm text-gray-700 hover:bg-gray-50"
+        className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-sm text-foreground hover:bg-muted"
       >
         <PlusIcon className="h-3.5 w-3.5" />
         New chat

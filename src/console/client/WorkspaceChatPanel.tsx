@@ -14,7 +14,7 @@ function CompactThreadSwitcher() {
     <select
       value={mainId}
       onChange={(e) => aui.threads.switchToThread(e.target.value)}
-      className="w-full border-b border-gray-200 px-2 py-1 text-xs text-gray-600"
+      className="w-full border-b border-border bg-surface px-2 py-1 text-xs text-muted-foreground"
     >
       {active.map((t) => (
         <option key={t.id} value={t.id}>
@@ -63,7 +63,7 @@ export interface WorkspaceChatPanelProps {
 export function WorkspaceChatPanel({ workspaceId, onTurnDone }: WorkspaceChatPanelProps) {
   const [agentId, setAgentId] = useState<string | null>(null);
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l border-gray-200 bg-white">
+    <aside className="flex w-96 shrink-0 flex-col border-l border-border bg-surface">
       <ChatRuntimeProvider agentId={agentId} workspaceId={workspaceId} onTurnFinish={onTurnDone}>
         <ChatPanelBody
           agentId={agentId}

@@ -10,7 +10,7 @@ import { ChatPanelBody } from './WorkspaceChatPanel.js';
 export function ConsoleChatPanel() {
   const [agentId, setAgentId] = useState<string | null>(null);
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l border-gray-200 bg-white">
+    <aside className="flex w-96 shrink-0 flex-col border-l border-border bg-surface">
       <ChatRuntimeProvider agentId={agentId}>
         <ChatPanelBody agentId={agentId} onAgentIdChange={setAgentId} />
       </ChatRuntimeProvider>
