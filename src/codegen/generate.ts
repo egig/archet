@@ -13,6 +13,7 @@ import { generateCustomFormsSource } from './forms-gen.js';
 import { generateFieldInputsSource } from './field-inputs-gen.js';
 import { scanRoutes } from '../web/scan-routes.js';
 import { generateClientRoutesSource, generateServerRoutesSource } from '../web/routes-gen.js';
+import { generateAppBundleSource } from './app-bundle-gen.js';
 
 export interface GenerateOptions {
   modelsDir: string;
@@ -82,9 +83,11 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
 
   // The developer's React Router site — only when opted into (`<routesDir>/root.tsx` exists).
   let routeCount = 0;
+  let hasWeb = false;
   if (opts.routesDir) {
     const routes = await scanRoutes(opts.routesDir);
     if (routes.rootFile) {
+      hasWeb = true;
       const serverRoutesFile = path.join(opts.generatedDir, 'app-routes.server.ts');
       const clientRoutesFile = path.join(opts.generatedDir, 'app-routes.client.ts');
       await writeFile(serverRoutesFile, generateServerRoutesSource(routes, opts.generatedDir), 'utf8');
@@ -93,6 +96,12 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
       routeCount = routes.modules.length + 1;
     }
   }
+
+  // `.ratchet/app.ts` — the single bundle every server entry passes to `createRatchetApp`.
+  // Written last: its `web` key depends on whether `app-routes.server.ts` was emitted above.
+  const appBundleFile = path.join(opts.generatedDir, 'app.ts');
+  await writeFile(appBundleFile, generateAppBundleSource(hasWeb), 'utf8');
+  files.push(appBundleFile);
 
   return {
     modelCount: scanned.length,

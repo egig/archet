@@ -20,6 +20,7 @@
     ".": "./dist/core/index.js",
     "./core": "./dist/core/index.js",
     "./router": "./dist/router/index.js",
+    "./server": "./dist/server/index.js",
     "./auth": "./dist/auth/index.js",
     "./auth/console-forms": "./dist/auth/console-forms.js",
     "./automation": "./dist/automation/index.js",
@@ -37,7 +38,7 @@
   },
   "scripts": {
     "build": "bun scripts/build.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p example/deploy/tsconfig.json",
     "test": "bun test",
     "cli": "cd example && bun ../src/cli/bin.ts",
     "serve": "cd example && bun ../src/cli/bin.ts serve",

@@ -1,9 +1,11 @@
 /**
- * Cloudflare Worker entry point — mounts the same `/api`, `/api/auth`, and console (`/console` by
- * default — see `ratchet.config.ts`'s `consolePath`) routes as `ratchet serve`, on Cloudflare's
- * edge network. This is a user-owned entry file, not something `ratchet build` generates (see
- * docs/guide/deploy.md) — deploy it yourself with `wrangler deploy`, after `ratchet build` has
- * produced `.ratchet/registry.ts` and `.ratchet/console/`.
+ * Cloudflare Worker entry point — hands the generated `.ratchet/app.ts` bundle plus
+ * Worker-scoped infrastructure (Hyperdrive db, R2 storage, Static-Assets console source) to
+ * `createRatchetApp`, which mounts the same routes as `ratchet serve` (`/api/auth`,
+ * `/api/automation`, `/api`, the console at `/console` by default, `/_site-assets`). This is a
+ * user-owned entry file, not something `ratchet build` generates (see docs/guide/deploy.md) —
+ * deploy it yourself with `wrangler deploy`, after `ratchet build` has produced `.ratchet/` and
+ * `.ratchet/console/`.
  *
  * DB: postgres.js through a Hyperdrive binding, Cloudflare's documented way to reach a regular TCP
  * Postgres from a Worker (Hyperdrive pools upstream, so a fresh client per request is the
@@ -25,20 +27,20 @@
  * from a plain config value the way `db.connectionString` can (see `core/storage.ts`'s
  * `FileStorage` doc comment) — this file constructs and injects the concrete adapter itself.
  * Only `write`/`read`/`deleteFile` are real — those are the only three `StorageAdapter` methods
- * `createApiRouter` ever calls (see `router/create-router.ts`); every other method the interface
- * requires is stubbed to throw, since ratchet never reaches them.
+ * the generic API router ever calls (see `router/create-router.ts`); every other method the
+ * interface requires is stubbed to throw, since ratchet never reaches them.
  *
- * The literal `'/console'` below must match `consolePath` in `ratchet.config.ts` if you've
- * customized it (see docs/guide/console.md) — ratchet doesn't patch this file for you.
+ * The `CONSOLE_PATH` below must match `consolePath` in `ratchet.config.ts` if you've customized it
+ * (see docs/guide/console.md) — ratchet doesn't patch this file for you. `createRatchetApp`
+ * validates it and throws on a value that would collide with `/api`.
  */
 import { Readable } from 'node:stream';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { FileStorage, FileWasNotFound, type StatEntry, type StorageAdapter } from '@flystorage/file-storage';
-import { App, createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
-import { createAuthRouter } from '@egig/ratchet/auth';
-import { createConsoleRouter, type ConsoleAsset, type ConsoleAssetSource, type ConsoleManifest } from '@egig/ratchet/console';
-import * as registryModule from '../../.ratchet/registry.js';
+import { createRatchetApp } from '@egig/ratchet/server';
+import type { ConsoleAsset, ConsoleAssetSource, ConsoleManifest } from '@egig/ratchet/console';
+import { bundle } from '../../.ratchet/app.js';
 
 const CONSOLE_PATH = '/console';
 
@@ -155,8 +157,6 @@ function createAssetsBindingSource(assets: AssetsBinding): ConsoleAssetSource {
   };
 }
 
-const registry = buildRegistryMap(registryModule as Record<string, unknown>);
-
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Hyperdrive pools upstream — a fresh client per request is Cloudflare's documented, cheap
@@ -165,17 +165,20 @@ export default {
     const client = postgres(env.HYPERDRIVE.connectionString, { max: 5, fetch_types: false });
     const db = drizzle(client);
 
-    // `/api/auth` and `/api` are registered before the console router so they keep precedence if
-    // `CONSOLE_PATH` is ever set to '/' (root mount) — its own catch-all would otherwise swallow
-    // every path (see `FrameworkConfig.consolePath`).
+    // `createRatchetApp` owns the mount sequence (`/api/auth` → `/api/automation` → `/api` →
+    // `/_site-assets` → console). Rebuilding it per request is cheap — no I/O, just route-table
+    // construction — and the R2/Hyperdrive bindings only exist inside this handler anyway.
     //
-    // The public site (`@egig/ratchet/web` routes) isn't mounted here — this skeleton only serves
-    // the API + console. To serve the site from a Worker, mount `createWebRouter` from
-    // `@egig/ratchet/web/router` last of all (its `/*` is a catch-all).
-    const app = new App();
-    app.route('/api/auth', createAuthRouter(db));
-    app.route('/api', createApiRouter(registry, db, new FileStorage(new R2StorageAdapter(env.FILES))));
-    app.route(CONSOLE_PATH, createConsoleRouter(createAssetsBindingSource(env.ASSETS), registry, db, CONSOLE_PATH));
+    // The public site (`@egig/ratchet/web` routes) isn't mounted here — this skeleton serves the
+    // API + console. To serve the site from a Worker too, pass `web: { entrySrc, publicDir,
+    // generatedDir }` (paths into the Static Assets bundle) alongside `consoleAssets`.
+    const app = await createRatchetApp({
+      db,
+      bundle,
+      storage: new FileStorage(new R2StorageAdapter(env.FILES)),
+      consoleAssets: createAssetsBindingSource(env.ASSETS),
+      consolePath: CONSOLE_PATH,
+    });
 
     return app.fetch(request);
   },

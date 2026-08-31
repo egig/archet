@@ -80,9 +80,22 @@ Every route shares the same error shape. Common codes:
 | `UNFILTERABLE_FIELD` / `UNSORTABLE_FIELD` | 400 | field isn't `indexed: true` |
 | `INVALID_OPERATOR` | 400 | operator invalid, or not valid for the field's kind |
 
+## Assembling a server
+
+Most of the time you don't mount routers by hand — `createRatchetApp` (`@egig/ratchet/server`) does it, in the one correct order, for `ratchet serve` and every deploy target alike:
+
+```ts
+import { createRatchetApp } from '@egig/ratchet/server';
+import { bundle } from './.ratchet/app.js';
+
+const app = await createRatchetApp({ db, bundle, storage, consoleAssets, consolePath: '/console' });
+```
+
+See [Deploying](/docs/deploy) for the full option set.
+
 ## Building your own router
 
-`ratchet/router` exports the pieces `ratchet serve` composes for you, if you need to mount them yourself (e.g. inside a custom `App`):
+`ratchet/router` also exports the individual pieces, if you need to mount them yourself (e.g. inside a custom `App`, or to add routes around them):
 
 ```ts
 import { App, createApiRouter, buildRegistryMap } from '@egig/ratchet/router';

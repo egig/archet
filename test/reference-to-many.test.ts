@@ -77,8 +77,8 @@ describe('core/reference-to-many.ts: inverse field synthesis', () => {
 
   it('injectInverseReferenceFields adds an indexed, non-required `reference` field on the target', () => {
     const [article, comment] = injectInverseReferenceFields([Article, Comment]);
-    expect(article.fields).not.toHaveProperty('articlesId'); // no column on the parent
-    const inverse = comment.fields.articlesId;
+    expect(article!.fields).not.toHaveProperty('articlesId'); // no column on the parent
+    const inverse = comment!.fields.articlesId;
     expect(inverse).toMatchObject({ kind: 'reference', targetModel: 'articles', required: false, indexed: true });
   });
 });

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { FrameworkConfig } from '../core/config.js';
+import { assertValidConsolePath } from '../server/console-path.js';
 
 export async function loadConfig(cwd: string): Promise<FrameworkConfig> {
   const configPath = path.join(cwd, 'ratchet.config.ts');
@@ -12,20 +13,10 @@ export async function loadConfig(cwd: string): Promise<FrameworkConfig> {
   return mod.default;
 }
 
-/** Rejects anything that can't be an unambiguous `App.route()` mount prefix (router/http-app.ts),
- * or that would shadow (or be shadowed by) the framework's own '/api' and '/api/auth' routers —
- * see `FrameworkConfig.consolePath`. */
+/** See `assertValidConsolePath` and `FrameworkConfig.consolePath`. */
 function resolveConsolePath(config: FrameworkConfig): string {
   const consolePath = config.consolePath ?? '/console';
-  if (!consolePath.startsWith('/')) {
-    throw new Error(`consolePath must start with '/', got '${consolePath}'`);
-  }
-  if (consolePath !== '/' && consolePath.endsWith('/')) {
-    throw new Error(`consolePath must not have a trailing slash, got '${consolePath}'`);
-  }
-  if (consolePath === '/api' || consolePath === '/api/auth' || consolePath.startsWith('/api/')) {
-    throw new Error(`consolePath '${consolePath}' collides with the framework's '/api'/'/api/auth' routers`);
-  }
+  assertValidConsolePath(consolePath);
   return consolePath;
 }
 

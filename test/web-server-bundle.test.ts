@@ -8,6 +8,8 @@ import { buildServerBundle } from '../src/cli/build-console.js';
 const REGISTRY_FIXTURE = 'export const models = {};\n';
 const DOMAINS_FIXTURE = 'export const domains = {};\n';
 const APP_ROUTES_SERVER_FIXTURE = 'export const routes = [];\nexport const resourceRouteIds = new Set();\n';
+const APP_BUNDLE_NO_WEB = 'export const bundle = { models: {}, domains: {} };\n';
+const APP_BUNDLE_WEB = 'export const bundle = { models: {}, domains: {}, web: { routes: [], resourceRouteIds: new Set() } };\n';
 
 interface Fixture {
   cwd: string;
@@ -28,6 +30,7 @@ async function makeFixture(withWeb: boolean): Promise<Fixture> {
   await mkdir(generatedDir, { recursive: true });
   await writeFile(path.join(generatedDir, 'registry.ts'), REGISTRY_FIXTURE, 'utf8');
   await writeFile(path.join(generatedDir, 'domains.ts'), DOMAINS_FIXTURE, 'utf8');
+  await writeFile(path.join(generatedDir, 'app.ts'), withWeb ? APP_BUNDLE_WEB : APP_BUNDLE_NO_WEB, 'utf8');
   if (withWeb) {
     await writeFile(path.join(generatedDir, 'app-routes.server.ts'), APP_ROUTES_SERVER_FIXTURE, 'utf8');
   }
@@ -52,34 +55,29 @@ describe('buildServerBundle', () => {
     cleanup = [];
   });
 
-  it('does not mount the web app in the bundled server entry when the site is not opted into', async () => {
+  it('emits a trivial createRatchetApp entry without web wiring when the site is not opted into', async () => {
     const { cwd, dirs } = await makeFixture(false);
     cleanup.push(cwd);
 
     await buildServerBundle(cwd, dirs);
 
     const entrySrc = await readFile(path.join(dirs.generatedDir, 'server-entry.ts'), 'utf8');
-    expect(entrySrc).not.toContain('createWebRouter');
-    expect(entrySrc).not.toContain('/_ratchet');
-    expect(entrySrc).not.toContain('@egig/ratchet/web/router');
-    expect(entrySrc).toContain('createConsoleRouter');
+    expect(entrySrc).toContain("import { createRatchetApp } from '@egig/ratchet/server';");
+    expect(entrySrc).toContain("import { bundle } from './app.js';");
+    expect(entrySrc).toContain('consoleAssets: createNodeFsAssetSource(".ratchet")');
+    expect(entrySrc).toContain('consolePath: "/console"');
+    expect(entrySrc).not.toContain('web:');
     expect(existsSync(path.join(cwd, 'dist', 'server.js'))).toBe(true);
   });
 
-  it('mounts /_ratchet and the web router (with publicDir folded in) in the bundled server entry when routes/root.tsx exists', async () => {
+  it('passes web runtime paths to createRatchetApp when routes/root.tsx exists', async () => {
     const { cwd, dirs } = await makeFixture(true);
     cleanup.push(cwd);
 
     await buildServerBundle(cwd, dirs);
 
     const entrySrc = await readFile(path.join(dirs.generatedDir, 'server-entry.ts'), 'utf8');
-    expect(entrySrc).toContain("import { createWebRouter, createWebAssetsRouter } from '@egig/ratchet/web/router';");
-    expect(entrySrc).toContain("import { routes as webRoutes, resourceRouteIds } from './app-routes.server.js';");
-    expect(entrySrc).toContain('createWebAssetsRouter(".ratchet")');
-    expect(entrySrc).not.toContain('createPublicAssetsRouter');
-    expect(entrySrc).toContain("app.route('/', createWebRouter({ routes: webRoutes, resourceRouteIds,");
-    expect(entrySrc).toContain('publicDir: "public"');
-    expect(entrySrc).toContain('entrySrc: "/_ratchet/entry.client.js"');
+    expect(entrySrc).toContain('web: { entrySrc: "/_ratchet/entry.client.js", publicDir: "public", generatedDir: ".ratchet" }');
     expect(existsSync(path.join(cwd, 'dist', 'server.js'))).toBe(true);
   });
 });

@@ -17,5 +17,5 @@
     "noUncheckedIndexedAccess": true
   },
   "include": ["src", "example", "test"],
-  "exclude": ["dist", "node_modules", "example/.ratchet", "src/cli/stubs"]
+  "exclude": ["dist", "node_modules", "example/.ratchet", "example/deploy", "src/cli/stubs"]
 }

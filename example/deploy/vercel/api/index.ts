@@ -1,7 +1,8 @@
 /**
- * Vercel Function entry point — mounts the same `/api` and `/api/auth` routes as `ratchet serve`.
- * `vercel.json`'s rewrites route every `/api/*` request here (one catch-all function, not a file
- * per model/route) — see docs/guide/deploy.md.
+ * Vercel Function entry point — hands the generated `.ratchet/app.ts` bundle to `createRatchetApp`,
+ * which mounts `/api/auth`, `/api/automation`, `/api`, and `/_site-assets`. `vercel.json`'s
+ * rewrites route every `/api/*` request here (one catch-all function, not a file per model/route)
+ * — see docs/guide/deploy.md.
  *
  * Vercel Functions default to a Node.js runtime (full TCP — the same postgres.js driver as local
  * dev/the VPS bundle would work here too), but each invocation is still a short-lived serverless
@@ -11,9 +12,12 @@
  * pooled connection string (and `drizzle-orm/postgres-js`) if you're not on Neon and your provider
  * already pools for you.
  *
- * The console is intentionally not mounted here: Vercel serves static files under `public/`
- * straight from its CDN, with no function invocation at all, which is a better fit for the
- * console SPA's built assets than routing them through this function — see `vercel.json` / deploy.md.
+ * The console and the public site are intentionally not mounted here: Vercel serves static files
+ * under `public/` straight from its CDN, with no function invocation at all, which is a better fit
+ * for the console SPA's built assets and the prerendered site than routing them through this
+ * function — see `vercel.json` / deploy.md. `createRatchetApp` mounts the console only when given
+ * a `consoleAssets` source, and the web app only when given `web` runtime paths — omit both and
+ * this stays an API-only function.
  *
  * File storage: unlike Cloudflare's R2 binding (only reachable inside a Worker's `fetch`
  * handler), a Vercel Function is a regular Node process — credentials for a well-known backend
@@ -25,14 +29,11 @@
  */
 import { drizzle } from 'drizzle-orm/neon-http';
 import { neon } from '@neondatabase/serverless';
-import { App, createApiRouter, buildRegistryMap } from '@egig/ratchet/router';
-import { createAuthRouter } from '@egig/ratchet/auth';
+import { createRatchetApp } from '@egig/ratchet/server';
 import { buildStorageAdapter } from '@egig/ratchet/storage';
-import * as registryModule from '../../../.ratchet/registry.js';
+import { bundle } from '../../../.ratchet/app.js';
 
-const registry = buildRegistryMap(registryModule as Record<string, unknown>);
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql);
+const db = drizzle(neon(process.env.DATABASE_URL!));
 
 const storage = await buildStorageAdapter(
   {
@@ -44,10 +45,6 @@ const storage = await buildStorageAdapter(
   '', // no local-fs fallback dir needed — this config never falls back to `driver: 'local'`
 );
 
-const app = new App();
-app.route('/api/auth', createAuthRouter(db));
-app.route('/api', createApiRouter(registry, db, storage));
-
 // `App`'s own `.fetch` (router/http-app.ts) matches Vercel's "fetch Web Standard" function export
 // convention directly — no adapter needed.
-export default app;
+export default await createRatchetApp({ db, bundle, storage });

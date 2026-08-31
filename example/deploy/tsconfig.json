@@ -1,0 +1,11 @@
+{
+  "//": "Type-checks the user-owned deploy entry files against the framework. Separate from the root project because they statically import the generated `.ratchet/app.ts`, whose web route manifest imports `.tsx` route modules by extension — legal at runtime (Bun), but needs `allowImportingTsExtensions` for tsc.",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rootDir": "../.."
+  },
+  "include": ["cloudflare/**/*.ts", "vercel/**/*.ts"],
+  "exclude": []
+}
