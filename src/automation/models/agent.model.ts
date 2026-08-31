@@ -2,9 +2,9 @@ import { defineModel, field } from '../../core/index.js';
 
 /**
  * A reusable assistant config — system prompt + provider/model + tools — not a live
- * conversation. `Chat` rows reference an `Agent`; every turn in that chat is served by
- * whichever `ChatProvider` `provider` resolves to (src/automation/providers/index.ts), calling
- * out with the API key/base URL from whichever `Provider` row `providerId` points at
+ * conversation. `Chat` rows reference an `Agent`; every turn in that chat is run by
+ * `runAgentTurn` (src/automation/run-turn.ts) via LangChain's `createAgent`, with the chat model
+ * built by `src/automation/model-factory.ts` from whichever `Provider` row `providerId` points at
  * (src/automation/models/provider.model.ts) rather than an agent typing a key directly. An
  * agent's tools aren't declared here at all — they're whatever grants sit in `roleId`'s `Role`'s
  * own `permissions` array (src/auth/models/role.model.ts), expanded into callable model-operation

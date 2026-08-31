@@ -1,4 +1,4 @@
-import type { ChatMessage } from './provider.js';
+import type { ChatMessage } from './events.js';
 
 /**
  * The shape persisted in `Message.content` (src/automation/models/message.model.ts) — a parts
@@ -36,10 +36,10 @@ function textOf(parts: StoredPart[]): string {
 }
 
 /**
- * Persisted rows -> provider `ChatMessage[]` for `runAgentTurn`. An assistant row that carried
- * tool calls expands to two provider messages (the assistant turn + a synthetic `tool` turn with
- * the results), matching what the adapters in `src/automation/providers/*` expect. `reasoning`
- * parts are dropped — no adapter round-trips them.
+ * Persisted rows -> the neutral `ChatMessage[]` shape `runAgentTurn` takes (it converts these to
+ * LangChain `BaseMessage`s at its own boundary). An assistant row that carried tool calls expands
+ * to two messages — the assistant turn + a synthetic `tool` turn with the results. `reasoning`
+ * parts are dropped — no provider round-trips them.
  */
 export function storedToProviderMessages(rows: readonly StoredMessage[]): ChatMessage[] {
   const out: ChatMessage[] = [];

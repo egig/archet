@@ -13,7 +13,7 @@ import type { UserRow } from '../auth/lookup.js';
 import { Agent, Chat, Message } from './models/index.js';
 import { assertOwnsChat } from './pipeline.js';
 import { runAgentTurn } from './run-turn.js';
-import type { ChatMessage } from './provider.js';
+import type { ChatMessage } from './events.js';
 import {
   AssistantPartsBuilder,
   storedToProviderMessages,

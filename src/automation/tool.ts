@@ -7,7 +7,7 @@ import { listPermissionsForRole } from '../auth/lookup.js';
 import { listRows, getOneRow } from '../router/list.js';
 import { parseListQuery, parseInclude } from '../router/query.js';
 import { assertReadFieldsAllowed, filterIncludedRelations } from '../router/read-access.js';
-import type { ToolSpec } from './provider.js';
+import type { ToolSpec } from './events.js';
 
 type AnyDb = PgDatabase<any, any, any>;
 
