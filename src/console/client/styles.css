@@ -7,6 +7,73 @@
    a per-consumer-project path). */
 @source ".";
 
+/* Makes `dark:*` utilities respond to a `.dark` class on an ancestor (set by `theme.ts`, persisted
+   per-browser) instead of only `prefers-color-scheme` — the toggle in `Layout`'s header needs an
+   explicit override, not just a media query. `router.ts`'s `renderShell` inlines a small
+   pre-hydration script that applies this class before first paint, so there's no flash of the
+   wrong theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens — the console's own compact, dense visual language (small text/controls, tight
+   spacing, subtle borders — no version of this is meant to look "spacious"). Raw values live here
+   as plain CSS custom properties, redeclared per-mode in `.dark`; the `@theme inline` block below
+   re-exposes each one as a Tailwind color/radius token (`bg-background`, `border-border`, ...) that
+   resolves to whichever mode is active at paint time, instead of a value baked in at build time.
+   Everything outside `ui/` and this file still uses plain Tailwind grays (`bg-white`,
+   `text-gray-900`, ...) and won't re-theme in dark mode yet — see CHANGELOG.md for the plan to
+   bring the rest of the console onto these tokens. */
+:root {
+  /* lets native form control chrome (checkboxes, date/file pickers, the native `<select>`s that
+     haven't been migrated onto `ui/` yet) render with the browser's own dark variant instead of
+     always defaulting to light regardless of `.dark` — cheap, broad coverage for exactly the
+     controls this pass doesn't reach. */
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #1a1d23;
+  --surface: #ffffff;
+  --muted: #f6f7f9;
+  --muted-foreground: #5b6470;
+  --border: #e4e7eb;
+  --accent: #2563eb; /* matches the `ratchet init` public-site stub's `--accent` (theme.css) */
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --ring: #2563eb;
+  --radius: 0.5rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0d1117;
+  --foreground: #e8eaed;
+  --surface: #161b22;
+  --muted: #12161d;
+  --muted-foreground: #9aa4b2;
+  --border: #262c36;
+  --accent: #60a5fa;
+  --accent-foreground: #0b1220;
+  --destructive: #f87171;
+  --destructive-foreground: #200808;
+  --ring: #60a5fa;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 0.125rem);
+  --radius-sm: calc(var(--radius) - 0.25rem);
+}
+
 /* CodeJar-backed code input (CodeEditor.tsx) — plain Tailwind utility classes can't reach into
    CodeJar's own `contenteditable` markup (it re-renders its `innerHTML` from `highlight()` on
    every keystroke), so this lives here as real CSS instead. */

@@ -6,6 +6,8 @@ import { useDomains } from './domains.js';
 import { BrandMark } from './BrandMark.js';
 import { ChevronDownIcon, LogOutIcon, ProfileIcon, SettingsIcon, SparklesIcon, WorkspaceIcon } from './icons.js';
 import { ConsoleChatPanel } from './ConsoleChatPanel.js';
+import { ThemeToggle } from './ThemeToggle.js';
+import { Button } from './ui/button.js';
 import type { ConsoleModelMeta } from '../serialize-model.js';
 import type { ConsoleDomainMeta } from '../serialize-domain.js';
 
@@ -14,8 +16,8 @@ import type { ConsoleDomainMeta } from '../serialize-domain.js';
 const CHAT_OPEN_STORAGE_KEY = 'ratchet:workspace-chat-open';
 
 const navLinkClassName = ({ isActive }: { isActive: boolean }) =>
-  `block truncate rounded-md px-3 py-1.5 text-sm ${
-    isActive ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+  `block truncate rounded-md px-3 py-1 text-sm ${
+    isActive ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
   }`;
 
 function humanizeDomain(domain: string): string {
@@ -47,7 +49,7 @@ function groupByDomain(models: ConsoleModelMeta[]): { domain: string; models: Co
 function NavSection({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <div className="px-2 py-2">
-      {title && <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</p>}
+      {title && <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>}
       <div className="space-y-0.5">{children}</div>
     </div>
   );
@@ -119,25 +121,25 @@ function AccountMenu() {
   return (
     <div ref={ref} className="relative p-2">
       {open && (
-        <div className="absolute bottom-full left-2 right-2 mb-1 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+        <div className="absolute bottom-full left-2 right-2 mb-1 rounded-md border border-border bg-surface py-1 shadow-lg">
           {/* `/` is `IndexRedirect`, which navigates to the signed-in user's own Workspace
               (or the create form if they have none) — no id to look up here. */}
           <NavLink
             to="/"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted"
           >
-            <WorkspaceIcon className="h-4 w-4 text-gray-400" />
+            <WorkspaceIcon className="h-4 w-4 text-muted-foreground" />
             Workspace
           </NavLink>
           <NavLink
             to="/profile"
             onClick={() => setOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-2 px-3 py-2 text-sm ${isActive ? 'font-medium text-gray-900' : 'text-gray-700'} hover:bg-gray-50`
+              `flex items-center gap-2 px-3 py-2 text-sm ${isActive ? 'font-medium text-foreground' : 'text-foreground'} hover:bg-muted`
             }
           >
-            <ProfileIcon className="h-4 w-4 text-gray-400" />
+            <ProfileIcon className="h-4 w-4 text-muted-foreground" />
             Edit profile
           </NavLink>
           <button
@@ -146,9 +148,9 @@ function AccountMenu() {
               setOpen(false);
               void logout();
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
           >
-            <LogOutIcon className="h-4 w-4 text-gray-400" />
+            <LogOutIcon className="h-4 w-4 text-muted-foreground" />
             Log out
           </button>
         </div>
@@ -158,14 +160,14 @@ function AccountMenu() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-gray-50"
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted"
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-medium text-white">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-medium text-background">
           {initials(user.email)}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{user.email}</span>
+        <span className="min-w-0 flex-1 truncate text-sm text-foreground">{user.email}</span>
         <ChevronDownIcon
-          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
     </div>
@@ -195,10 +197,10 @@ export function Layout() {
   }, [chatOpen]);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-gray-200 bg-white">
+    <div className="flex min-h-screen bg-muted">
+      <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-surface">
         {/* 1. Header — brand */}
-        <div className="flex h-14 items-center gap-2 border-b border-gray-200 px-4">
+        <div className="flex h-12 items-center gap-2 border-b border-border px-4">
           <BrandMark />
         </div>
 
@@ -214,32 +216,32 @@ export function Layout() {
             </NavSection>
           )}
 
-          {loading && <p className="px-4 py-2 text-xs text-gray-400">Loading models…</p>}
-          {error && <p className="px-4 py-2 text-xs text-red-600">{error}</p>}
+          {loading && <p className="px-4 py-2 text-xs text-muted-foreground">Loading models…</p>}
+          {error && <p className="px-4 py-2 text-xs text-destructive">{error}</p>}
 
           <DomainsMenu groups={grouped} domains={domains} getDomain={getDomain} />
 
           {!loading && !hasModelSections && !error && (
-            <p className="px-4 py-2 text-xs text-gray-400">No models registered.</p>
+            <p className="px-4 py-2 text-xs text-muted-foreground">No models registered.</p>
           )}
         </nav>
 
         {/* 4. Bottom bar — Settings (app config, only once a Domain declares settings) sits above
             the account menu; the two share one top border. */}
-        <div className="border-t border-gray-200">
+        <div className="border-t border-border">
           {domains.some((d) => d.fields.length > 0) && (
             <div className="px-2 pt-2">
               <NavLink
                 to="/settings"
                 className={({ isActive }) =>
-                  `flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
+                  `flex items-center gap-2 rounded-md px-2 py-1 text-sm ${
                     isActive
-                      ? 'bg-gray-100 font-medium text-gray-900'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'bg-muted font-medium text-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   }`
                 }
               >
-                <SettingsIcon className="h-4 w-4 text-gray-400" />
+                <SettingsIcon className="h-4 w-4 text-muted-foreground" />
                 Settings
               </NavLink>
             </div>
@@ -249,22 +251,22 @@ export function Layout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top header for the console content area — brand on the left, the chat toggle on the
-            right. The chat panel mounts to the right of <main> (below this header) when open. */}
-        <header className="flex h-14 items-center border-b border-gray-200 bg-white px-4">
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
+        {/* Top header for the console content area — brand on the left, the theme/chat toggles on
+            the right. The chat panel mounts to the right of <main> (below this header) when open. */}
+        <header className="flex h-12 items-center border-b border-border bg-surface px-4">
+          <div className="ml-auto flex items-center gap-1">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setChatOpen((v) => !v)}
               aria-label="Toggle chat"
               aria-pressed={chatOpen}
               title="Toggle chat"
-              className={`flex h-7 w-7 items-center justify-center rounded ${
-                chatOpen ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'
-              }`}
+              className={chatOpen ? 'bg-muted text-foreground' : 'text-muted-foreground'}
             >
               <SparklesIcon className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         </header>
 

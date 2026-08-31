@@ -236,4 +236,22 @@ export default function CustomersEmailInput({ value, onChange, inputKey, error }
 
 Tailwind classes used in a `*.input.tsx` are picked up the same way `*.form.tsx`'s are — no extra config needed.
 
+## UI primitives (experimental)
+
+The console is being migrated onto its own small primitive layer — `Button`, `Input`, `Label`, and `Dialog`, built on unstyled [Radix Primitives](https://www.radix-ui.com/primitives) and restyled onto the console's token-based light/dark theme. They're exported from `@egig/ratchet/console/client` alongside everything above, so a `*.form.tsx`/`*.input.tsx` can match the console's own look instead of reinventing a button:
+
+```tsx
+import { Button, Input, Label } from '@egig/ratchet/console/client';
+
+<Label htmlFor="email">Email</Label>
+<Input id="email" type="email" value={email} onChange={(e) => onChange('email', e.target.value)} />
+<Button type="submit">Save</Button>
+```
+
+This is still an early, small slice — only these four primitives exist so far, and their props may still change shape as the rest of the console (model list/form pages, the comboboxes, `RowTable`) migrates onto them. Pin your `@egig/ratchet` version if you depend on this today.
+
+## Dark mode
+
+The console has a per-browser light/dark toggle in the top-right of its header, persisted to `localStorage` and defaulting to the OS/browser preference on first visit. Only the UI primitives above and the console's own shell (sidebar, header, login/setup pages) follow it so far — the rest of the console doesn't re-theme yet.
+
 Aside from custom forms, custom field inputs, and the [branding](#branding) config, every app gets the same console shell (model list/table views, settings tabs) — there's still no custom pages, and no `console/client/main.tsx` to author; the entry point that mounts `<ConsoleApp />` lives in the framework.

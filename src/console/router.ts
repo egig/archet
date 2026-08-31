@@ -49,6 +49,19 @@ export interface ConsoleAssetSource {
  * against the *current path*, so it broke on every route without a trailing slash once the SPA
  * got real sub-routes (`./assets/main.js` from a nested route resolves relative to that route,
  * not the shell's own path, 404ing every asset). */
+// Applies the `.dark` class (see styles.css's `@custom-variant dark`, and `theme.ts`) before the
+// stylesheet paints anything, so a returning visitor with dark mode chosen never sees a flash of
+// the light theme first. Static — no request/user data ever goes into this string, so it's safe to
+// inline verbatim; kept in sync with `theme.ts`'s `getInitialTheme` by hand (see that file's
+// comment) since the two can't share source (this runs before the client bundle even loads).
+const THEME_BOOTSTRAP_SCRIPT =
+  '<script>' +
+  '(function(){try{var t=localStorage.getItem("ratchet:theme");' +
+  'if(t!=="light"&&t!=="dark"){t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}' +
+  'if(t==="dark")document.documentElement.classList.add("dark")' +
+  '}catch(e){}})()' +
+  '</script>';
+
 function renderShell(manifest: ConsoleManifest, mountPath: string): string {
   const prefix = mountPath === '/' ? '' : mountPath;
   const css = manifest['main.css'] ? `<link rel="stylesheet" href="${prefix}/${manifest['main.css']}">` : '';
@@ -58,6 +71,7 @@ function renderShell(manifest: ConsoleManifest, mountPath: string): string {
     '<head>',
     '<meta charset="utf-8">',
     '<title>Ratchet console</title>',
+    THEME_BOOTSTRAP_SCRIPT,
     css,
     '</head>',
     '<body>',

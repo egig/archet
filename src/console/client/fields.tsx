@@ -18,7 +18,8 @@ import { CodeEditor } from './CodeEditor.js';
 export type FileFieldValue = { url?: string; key?: string; filename: string; mimeType: string; size: number };
 
 const inputClass =
-  'w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none';
+  'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
 
 export interface ReferenceOption {
   id: string;
