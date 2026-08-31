@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Dialog } from '../Dialog.js';
 import { listRows } from '../api.js';
 import { queryKeys } from '../query-keys.js';
+import { Button } from '../ui/button.js';
 
 export interface AgentOption {
   id: string;
@@ -38,13 +39,13 @@ export function AgentPicker({ onPick, onClose }: { onPick: (id: string) => void;
 
   return (
     <Dialog onClose={onClose}>
-      <h2 className="mb-1 text-base font-semibold text-gray-900">New chat</h2>
-      <p className="mb-4 text-sm text-gray-500">Choose an agent to talk to.</p>
+      <h2 className="mb-1 text-base font-semibold text-foreground">New chat</h2>
+      <p className="mb-4 text-sm text-muted-foreground">Choose an agent to talk to.</p>
 
-      {loading && <p className="text-sm text-gray-400">Loading agents…</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {loading && <p className="text-sm text-muted-foreground">Loading agents…</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       {!loading && !error && agents.length === 0 && (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           No active agents. Create one under <span className="font-medium">Automation → Agents</span> first.
         </p>
       )}
@@ -55,22 +56,18 @@ export function AgentPicker({ onPick, onClose }: { onPick: (id: string) => void;
             key={a.id}
             type="button"
             onClick={() => onPick(a.id)}
-            className="flex w-full flex-col items-start rounded-md border border-gray-200 px-3 py-2 text-left hover:border-gray-400 hover:bg-gray-50"
+            className="flex w-full flex-col items-start rounded-md border border-border px-3 py-2 text-left hover:border-muted-foreground hover:bg-muted"
           >
-            <span className="text-sm font-medium text-gray-900">{a.name}</span>
-            {a.description && <span className="mt-0.5 line-clamp-2 text-xs text-gray-500">{a.description}</span>}
+            <span className="text-sm font-medium text-foreground">{a.name}</span>
+            {a.description && <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{a.description}</span>}
           </button>
         ))}
       </div>
 
       <div className="mt-4 flex justify-end">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
-        >
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancel
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

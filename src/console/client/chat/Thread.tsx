@@ -15,7 +15,7 @@ function ReasoningPart({ text }: ReasoningMessagePartProps) {
   const [open, setOpen] = useState(false);
   if (!text) return null;
   return (
-    <div className="mb-2 rounded border border-gray-200 bg-gray-50 text-xs text-gray-500">
+    <div className="mb-2 rounded border border-border bg-muted text-xs text-muted-foreground">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -33,28 +33,28 @@ function ToolCallPart({ toolName, args, result, isError, status }: ToolCallMessa
   const [open, setOpen] = useState(false);
   const running = status?.type === 'running';
   return (
-    <div className="mb-2 rounded-md border border-gray-200 bg-white text-xs">
+    <div className="mb-2 rounded-md border border-border bg-surface text-xs">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-gray-600"
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-muted-foreground"
       >
-        <ToolIcon className={`h-3.5 w-3.5 shrink-0 ${isError ? 'text-red-500' : 'text-gray-400'}`} />
-        <span className="font-mono text-gray-800">{toolName}</span>
-        <span className="text-gray-400">
+        <ToolIcon className={`h-3.5 w-3.5 shrink-0 ${isError ? 'text-destructive' : 'text-muted-foreground'}`} />
+        <span className="font-mono text-foreground">{toolName}</span>
+        <span className="text-muted-foreground">
           {running ? 'running…' : isError ? 'failed' : 'done'}
         </span>
         <ChevronDownIcon className={`ml-auto h-3.5 w-3.5 transition-transform ${open ? '' : '-rotate-90'}`} />
       </button>
       {open && (
-        <div className="space-y-1 border-t border-gray-100 px-2 py-1.5">
-          <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-gray-500">
+        <div className="space-y-1 border-t border-border px-2 py-1.5">
+          <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] text-muted-foreground">
             {JSON.stringify(args ?? {}, null, 2)}
           </pre>
           {result !== undefined && (
             <pre
-              className={`overflow-x-auto whitespace-pre-wrap rounded bg-gray-50 p-1.5 text-[11px] ${
-                isError ? 'text-red-600' : 'text-gray-600'
+              className={`overflow-x-auto whitespace-pre-wrap rounded bg-muted p-1.5 text-[11px] ${
+                isError ? 'text-destructive' : 'text-muted-foreground'
               }`}
             >
               {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
@@ -81,9 +81,9 @@ const STOP_REASON_NOTICE: Record<string, string> = {
 function ThinkingIndicator() {
   return (
     <div className="flex items-center gap-1 px-1 py-1.5" aria-label="Thinking">
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" />
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" />
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
+      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" />
     </div>
   );
 }
@@ -92,7 +92,7 @@ function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="mb-4 flex justify-start">
       <div className="max-w-[85%] min-w-0">
-        <div className="rounded-lg bg-gray-100 px-3 py-2 text-gray-900">
+        <div className="rounded-lg bg-muted px-3 py-2 text-foreground">
           {/* the newest assistant message is added (empty, status "running") the instant a turn
               starts, before any network response — this fills that gap instead of an empty bubble. */}
           <MessagePrimitive.If last hasContent={false}>
@@ -125,14 +125,14 @@ function MessageMetadataFooter() {
   const notice = custom.stopReason && custom.stopReason !== 'end_turn' ? STOP_REASON_NOTICE[custom.stopReason] : null;
   const usage = custom.usage;
   return (
-    <div className="mt-1 flex items-center gap-2 px-1 text-[11px] text-gray-400">
+    <div className="mt-1 flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
       {custom.model && <span>{custom.model}</span>}
       {usage && (
         <span title={`${usage.inputTokens ?? 0} in / ${usage.outputTokens ?? 0} out tokens`}>
           · {(usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)} tok
         </span>
       )}
-      {notice && <span className="text-amber-600">· {notice}</span>}
+      {notice && <span className="text-amber-600 dark:text-amber-400">· {notice}</span>}
     </div>
   );
 }
@@ -140,7 +140,7 @@ function MessageMetadataFooter() {
 function UserMessage() {
   return (
     <MessagePrimitive.Root className="mb-4 flex justify-end">
-      <div className="max-w-[85%] rounded-lg bg-gray-900 px-3 py-2 text-sm whitespace-pre-wrap text-white">
+      <div className="max-w-[85%] rounded-lg bg-foreground px-3 py-2 text-sm whitespace-pre-wrap text-background">
         <MessagePrimitive.Parts />
       </div>
     </MessagePrimitive.Root>
@@ -149,15 +149,15 @@ function UserMessage() {
 
 function Composer() {
   return (
-    <ComposerPrimitive.Root className="flex items-end gap-2 border-t border-gray-200 p-3">
+    <ComposerPrimitive.Root className="flex items-end gap-2 border-t border-border p-3">
       <ComposerPrimitive.Input
         autoFocus
         placeholder="Message…"
-        className="max-h-40 flex-1 resize-none rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400"
+        className="max-h-40 flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-muted-foreground"
       />
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send
-          className="flex h-9 items-center gap-1.5 rounded bg-gray-900 px-3 text-sm text-white hover:bg-gray-800 disabled:opacity-40"
+          className="flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-sm text-accent-foreground hover:opacity-90 disabled:opacity-40"
           aria-label="Send message"
         >
           <PaperAirplaneIcon className="h-4 w-4" />
@@ -165,7 +165,7 @@ function Composer() {
       </ThreadPrimitive.If>
       <ThreadPrimitive.If running>
         <ComposerPrimitive.Cancel
-          className="flex h-9 items-center gap-1.5 rounded border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"
+          className="flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-foreground hover:bg-muted"
           aria-label="Stop"
         >
           <StopIcon className="h-4 w-4" />
@@ -184,9 +184,9 @@ function ChatAgentHeader() {
   const { nameById } = useAgents();
   if (!agentId) return null;
   return (
-    <div className="flex items-center gap-1.5 border-b border-gray-200 px-4 py-2 text-xs text-gray-500">
-      <SparklesIcon className="h-3.5 w-3.5 text-gray-400" />
-      <span className="truncate font-medium text-gray-700">{nameById.get(agentId) ?? 'Unknown agent'}</span>
+    <div className="flex items-center gap-1.5 border-b border-border px-4 py-2 text-xs text-muted-foreground">
+      <SparklesIcon className="h-3.5 w-3.5 text-muted-foreground" />
+      <span className="truncate font-medium text-foreground">{nameById.get(agentId) ?? 'Unknown agent'}</span>
     </div>
   );
 }
@@ -195,11 +195,11 @@ function ChatAgentHeader() {
  * edit / regenerate affordances are deliberately omitted (Q14). */
 export function Thread({ emptyHint = 'Send a message to start.' }: { emptyHint?: string }) {
   return (
-    <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col bg-white">
+    <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col bg-background">
       <ChatAgentHeader />
       <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto p-4">
         <ThreadPrimitive.Empty>
-          <div className="flex h-full items-center justify-center text-sm text-gray-400">{emptyHint}</div>
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{emptyHint}</div>
         </ThreadPrimitive.Empty>
         <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
       </ThreadPrimitive.Viewport>

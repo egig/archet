@@ -6,6 +6,7 @@ import { Dialog } from './Dialog.js';
 import { FieldInput, type FileFieldValue } from './fields.js';
 import { datetimeLocalToIso } from './format.js';
 import { CheckIcon, XMarkIcon } from './icons.js';
+import { Button } from './ui/button.js';
 
 type ParamValues = Record<string, string | boolean | FileFieldValue>;
 
@@ -116,14 +117,14 @@ function OperationParamsDialog({ operation, modelName, onCancel, onSubmit }: Ope
 
   return (
     <Dialog onClose={onCancel}>
-      <h2 className="mb-4 text-lg font-semibold text-gray-900">{operation.label}</h2>
-      {formError && <p className="mb-4 text-sm text-red-600">{formError}</p>}
+      <h2 className="mb-4 text-lg font-semibold text-foreground">{operation.label}</h2>
+      {formError && <p className="mb-4 text-sm text-destructive">{formError}</p>}
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
         {operation.params.map((f) => (
           <label key={f.key} className="block text-sm">
-            <span className="mb-1 block text-gray-700">
+            <span className="mb-1 block text-foreground">
               {f.label}
-              {f.required && <span className="text-red-500"> *</span>}
+              {f.required && <span className="text-destructive"> *</span>}
             </span>
             <FieldInput
               field={f}
@@ -137,22 +138,14 @@ function OperationParamsDialog({ operation, modelName, onCancel, onSubmit }: Ope
           </label>
         ))}
         <div className="flex gap-2 pt-2">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex items-center gap-1.5 rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={submitting}>
             <CheckIcon className="h-4 w-4" />
             {submitting ? 'Submitting…' : 'Submit'}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex items-center gap-1.5 rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
+          </Button>
+          <Button type="button" variant="outline" onClick={onCancel}>
             <XMarkIcon className="h-4 w-4" />
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>
@@ -202,10 +195,10 @@ export function OperationButton({ modelName, id, row, operation, onDone, classNa
 
   return (
     <>
-      <button type="button" onClick={handleClick} className={className ?? 'mr-3 text-gray-600 hover:underline'}>
+      <button type="button" onClick={handleClick} className={className ?? 'mr-3 text-muted-foreground hover:underline'}>
         {operation.label}
       </button>
-      {error && <span className="ml-1 text-xs text-red-600">{error}</span>}
+      {error && <span className="ml-1 text-xs text-destructive">{error}</span>}
       {open && (
         <OperationParamsDialog
           operation={operation}

@@ -21,14 +21,14 @@ export function ColumnsBar({ fields, hidden, onChange }: ColumnsBarProps) {
   }
 
   return (
-    <div className="mb-4 flex flex-wrap gap-x-4 gap-y-2 rounded border border-gray-200 bg-gray-50 p-3">
+    <div className="mb-4 flex flex-wrap gap-x-4 gap-y-2 rounded-md border border-border bg-muted p-3">
       {fields.map((f) => (
-        <label key={f.key} className="flex items-center gap-1.5 text-sm text-gray-700">
+        <label key={f.key} className="flex items-center gap-1.5 text-sm text-foreground">
           <input
             type="checkbox"
             checked={!hidden.has(f.key)}
             onChange={() => toggle(f.key)}
-            className="rounded border-gray-300"
+            className="rounded border-border"
           />
           {f.label}
         </label>

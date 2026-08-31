@@ -5,7 +5,8 @@ import type { ReferenceOption } from './fields.js';
 import { ChevronUpDownIcon, MagnifyingGlassIcon, XMarkIcon } from './icons.js';
 
 const controlClass =
-  'flex w-full items-center gap-2 rounded border border-gray-300 px-3 py-2 text-left text-sm focus:border-gray-500 focus:outline-none disabled:opacity-50';
+  'flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:opacity-50';
 
 /** A large-enough ceiling that a real chart-of-accounts/category tree fits in one fetch — this
  * component builds the whole hierarchy client-side (there's no server-side "give me this node's
@@ -151,17 +152,17 @@ export function TreeCombobox({ value, onChange, targetModel, required, disabled,
         className={controlClass}
       >
         {selected ? (
-          <span className="min-w-0 flex-1 truncate text-gray-900">{selected.label}</span>
+          <span className="min-w-0 flex-1 truncate text-foreground">{selected.label}</span>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-gray-400">{required ? 'Select…' : '— (root) —'}</span>
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">{required ? 'Select…' : '— (root) —'}</span>
         )}
-        <ChevronUpDownIcon className="h-4 w-4 shrink-0 text-gray-400" />
+        <ChevronUpDownIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-gray-200 bg-white shadow-lg">
-          <div className="flex items-center gap-2 border-b border-gray-200 px-3">
-            <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-gray-400" />
+        <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-border bg-surface shadow-lg">
+          <div className="flex items-center gap-2 border-b border-border px-3">
+            <MagnifyingGlassIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input
               autoFocus
               type="text"
@@ -175,7 +176,7 @@ export function TreeCombobox({ value, onChange, targetModel, required, disabled,
                   choose(results[0]);
                 }
               }}
-              className="w-full py-2 text-sm focus:outline-none"
+              className="w-full bg-transparent py-2 text-sm text-foreground focus:outline-none"
             />
           </div>
           <div className="max-h-60 overflow-y-auto py-1">
@@ -183,7 +184,7 @@ export function TreeCombobox({ value, onChange, targetModel, required, disabled,
               <button
                 type="button"
                 onClick={() => choose(null)}
-                className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-sm text-gray-500 hover:bg-gray-50"
+                className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted"
               >
                 <XMarkIcon className="h-3.5 w-3.5" />
                 Clear (make root)
@@ -195,14 +196,14 @@ export function TreeCombobox({ value, onChange, targetModel, required, disabled,
                 type="button"
                 onClick={() => choose(opt)}
                 className={`block w-full truncate px-3 py-1.5 text-left text-sm ${
-                  opt.id === value ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-700 hover:bg-gray-50'
+                  opt.id === value ? 'bg-muted font-medium text-foreground' : 'text-foreground hover:bg-muted'
                 }`}
               >
                 {opt.label}
               </button>
             ))}
             {results.length === 0 && (
-              <p className="px-3 py-2 text-xs text-gray-400">{allOptions === null ? 'Loading…' : 'No matches'}</p>
+              <p className="px-3 py-2 text-xs text-muted-foreground">{allOptions === null ? 'Loading…' : 'No matches'}</p>
             )}
           </div>
         </div>

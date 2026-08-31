@@ -122,12 +122,12 @@ export function ManyToManyMultiSelect({ value, onChange, targetModel, disabled }
 
   return (
     <div ref={ref} className="relative">
-      <div className="flex min-h-[38px] w-full flex-wrap items-center gap-1 rounded border border-gray-300 px-2 py-1.5 focus-within:border-gray-500">
+      <div className="flex min-h-[38px] w-full flex-wrap items-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1">
         {value.map((id) => (
-          <span key={id} className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+          <span key={id} className="flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs text-foreground">
             {labels[id] ?? id}
             {!disabled && (
-              <button type="button" onClick={() => remove(id)} className="text-gray-400 hover:text-gray-600" aria-label={`Remove ${labels[id] ?? id}`}>
+              <button type="button" onClick={() => remove(id)} className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${labels[id] ?? id}`}>
                 <XMarkIcon className="h-3 w-3" />
               </button>
             )}
@@ -143,26 +143,26 @@ export function ManyToManyMultiSelect({ value, onChange, targetModel, disabled }
               setOpen(true);
             }}
             placeholder={value.length === 0 ? 'Add…' : ''}
-            className="min-w-[80px] flex-1 border-none py-0.5 text-sm focus:outline-none"
+            className="min-w-[80px] flex-1 border-none bg-transparent py-0.5 text-sm text-foreground focus:outline-none"
           />
         )}
       </div>
 
       {open && !disabled && (
-        <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-gray-200 bg-white shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-border bg-surface shadow-lg">
           <div className="max-h-60 overflow-y-auto py-1">
             {results.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
                 onClick={() => add(opt)}
-                className="block w-full truncate px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                className="block w-full truncate px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
               >
                 {opt.label}
               </button>
             ))}
             {results.length === 0 && (
-              <p className="px-3 py-2 text-xs text-gray-400">{searching || baseOptions === null ? 'Loading…' : 'No matches'}</p>
+              <p className="px-3 py-2 text-xs text-muted-foreground">{searching || baseOptions === null ? 'Loading…' : 'No matches'}</p>
             )}
           </div>
         </div>

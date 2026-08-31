@@ -8,6 +8,7 @@ import { WorkspaceViewTable, type WorkspaceViewRow } from './WorkspaceViewTable.
 import { Dialog } from './Dialog.js';
 import { FilterBar, sanitizeFilters, type FilterNode } from './FilterBar.js';
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SparklesIcon, XMarkIcon } from './icons.js';
+import { Button } from './ui/button.js';
 
 export interface WorkspaceTabsProps {
   workspaceId: string;
@@ -180,14 +181,14 @@ export function WorkspaceTabs({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-6">
-      <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-gray-200">
+      <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-border">
         {views?.map((v, i) => (
           <div
             key={v.id}
             className={`flex items-center gap-1 rounded-t border border-b-0 px-3 py-1.5 text-sm ${
               v.id === activeId
-                ? 'border-gray-200 bg-white font-medium text-gray-900'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-border bg-surface font-medium text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
             {editingId === v.id ? (
@@ -207,7 +208,7 @@ export function WorkspaceTabs({
                 }}
                 // borderless / zero-padding so swapping the label button for this input doesn't
                 // resize the tab — it sits in the exact box the label text occupied, just editable.
-                className="w-28 bg-transparent p-0 text-sm font-medium text-gray-900 underline decoration-gray-300 outline-none"
+                className="w-28 bg-transparent p-0 text-sm font-medium text-foreground underline decoration-border outline-none"
               />
             ) : (
               <button
@@ -226,7 +227,7 @@ export function WorkspaceTabs({
                   disabled={i === 0}
                   onClick={() => void move(v.id, -1)}
                   aria-label="Move tab left"
-                  className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                 >
                   <ChevronLeftIcon className="h-3.5 w-3.5" />
                 </button>
@@ -235,7 +236,7 @@ export function WorkspaceTabs({
                   disabled={i === views.length - 1}
                   onClick={() => void move(v.id, 1)}
                   aria-label="Move tab right"
-                  className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
                 >
                   <ChevronRightIcon className="h-3.5 w-3.5" />
                 </button>
@@ -243,7 +244,7 @@ export function WorkspaceTabs({
                   type="button"
                   onClick={() => void closeTab(v.id)}
                   aria-label="Close tab"
-                  className="ml-1 text-gray-400 hover:text-red-600"
+                  className="ml-1 text-muted-foreground hover:text-destructive"
                 >
                   <XMarkIcon className="h-3.5 w-3.5" />
                 </button>
@@ -257,7 +258,7 @@ export function WorkspaceTabs({
             <button
               type="button"
               onClick={() => setShowAddDialog(true)}
-              className="flex items-center gap-1 rounded border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700"
+              className="flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:border-muted-foreground hover:text-foreground"
             >
               <PlusIcon className="h-3.5 w-3.5" />
               Add tab
@@ -274,7 +275,7 @@ export function WorkspaceTabs({
               aria-label={chatOpen ? 'Hide chat' : 'Show chat'}
               aria-pressed={chatOpen}
               className={`flex h-7 w-7 items-center justify-center rounded ${
-                chatOpen ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'
+                chatOpen ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
             >
               <SparklesIcon className="h-4 w-4" />
@@ -283,7 +284,7 @@ export function WorkspaceTabs({
         )}
       </div>
 
-      {loadError && <p className="mb-3 text-sm text-red-600">{loadError}</p>}
+      {loadError && <p className="mb-3 text-sm text-destructive">{loadError}</p>}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {active ? (
@@ -301,7 +302,7 @@ export function WorkspaceTabs({
             }
           />
         ) : (
-          views && views.length === 0 && <p className="text-sm text-gray-400">No tabs yet — add one above.</p>
+          views && views.length === 0 && <p className="text-sm text-muted-foreground">No tabs yet — add one above.</p>
         )}
       </div>
 
@@ -331,11 +332,11 @@ function AddTabDialog({
 
   return (
     <Dialog onClose={onClose}>
-      <h2 className="mb-4 text-base font-semibold text-gray-900">Add tab</h2>
+      <h2 className="mb-4 text-base font-semibold text-foreground">Add tab</h2>
 
       <div className="space-y-4">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Model</label>
+          <label className="mb-1 block text-sm font-medium text-foreground">Model</label>
           <select
             value={targetModel}
             onChange={(e) => {
@@ -344,7 +345,7 @@ function AddTabDialog({
               setFilters([]);
               if (!labelEdited) setLabel(getModel(next)?.label ?? '');
             }}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
           >
             <option value="">Select a model…</option>
             {models.map((m) => (
@@ -356,7 +357,7 @@ function AddTabDialog({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Tab name</label>
+          <label className="mb-1 block text-sm font-medium text-foreground">Tab name</label>
           <input
             type="text"
             value={label}
@@ -365,36 +366,31 @@ function AddTabDialog({
               setLabelEdited(true);
             }}
             placeholder="e.g. Open orders"
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
           />
         </div>
 
         {model && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Initial filters</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">Initial filters</label>
             <FilterBar fields={model.fields} value={filters} onChange={setFilters} />
           </div>
         )}
       </div>
 
       <div className="mt-6 flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-        >
+        <Button type="button" variant="outline" onClick={onClose}>
           <XMarkIcon className="h-4 w-4" />
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           disabled={!model || !label.trim()}
           onClick={() => model && onCreate({ targetModel: model.name, label: label.trim(), filters: sanitizeFilters(filters) })}
-          className="flex items-center gap-1.5 rounded bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
         >
           <PlusIcon className="h-4 w-4" />
           Add tab
-        </button>
+        </Button>
       </div>
     </Dialog>
   );

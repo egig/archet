@@ -158,13 +158,13 @@ function HeaderCell({
     ) : direction === 'asc' ? (
       <ChevronUpIcon className="h-3.5 w-3.5" />
     ) : (
-      <ChevronUpDownIcon className="h-3.5 w-3.5 text-gray-300 group-hover:text-gray-400" />
+      <ChevronUpDownIcon className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-muted-foreground" />
     );
   const inner = (
     <>
       {label}
       {indicator}
-      {ordinal != null && <span className="text-[10px] font-semibold text-gray-400">{ordinal}</span>}
+      {ordinal != null && <span className="text-[10px] font-semibold text-muted-foreground">{ordinal}</span>}
     </>
   );
 
@@ -175,7 +175,7 @@ function HeaderCell({
           type="button"
           onClick={(e) => onSort(e.shiftKey)}
           title="Click to sort · Shift-click to add a secondary sort"
-          className="group -mx-1 flex items-center gap-1 rounded px-1 uppercase hover:text-gray-700"
+          className="group -mx-1 flex items-center gap-1 rounded px-1 uppercase hover:text-foreground"
         >
           {inner}
         </button>
@@ -563,18 +563,18 @@ export function RowTable({
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">{model.label}</h1>
+        <h1 className="text-lg font-semibold text-foreground">{model.label}</h1>
         <div className="flex flex-wrap items-center gap-2">
           {searchableFields.length > 0 && (
             <div className="relative">
-              <MagnifyingGlassIcon className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search…"
                 aria-label="Search"
-                className="w-48 rounded border border-gray-300 py-1.5 pl-8 pr-3 text-sm"
+                className="w-48 rounded-md border border-border bg-background py-1.5 pl-8 pr-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               />
             </div>
           )}
@@ -583,10 +583,8 @@ export function RowTable({
               type="button"
               onClick={() => setShowFilters((v) => !v)}
               aria-expanded={showFilters}
-              className={`flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${
-                showFilters
-                  ? 'border-gray-400 bg-gray-100 text-gray-800'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+                showFilters ? 'border-border bg-muted text-foreground' : 'border-border text-foreground hover:bg-muted'
               }`}
             >
               <FilterIcon className="h-4 w-4" />
@@ -598,10 +596,8 @@ export function RowTable({
               type="button"
               onClick={() => setShowSort((v) => !v)}
               aria-expanded={showSort}
-              className={`flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${
-                showSort
-                  ? 'border-gray-400 bg-gray-100 text-gray-800'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+                showSort ? 'border-border bg-muted text-foreground' : 'border-border text-foreground hover:bg-muted'
               }`}
             >
               <SortIcon className="h-4 w-4" />
@@ -613,10 +609,8 @@ export function RowTable({
               type="button"
               onClick={() => setShowColumns((v) => !v)}
               aria-expanded={showColumns}
-              className={`flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${
-                showColumns
-                  ? 'border-gray-400 bg-gray-100 text-gray-800'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm ${
+                showColumns ? 'border-border bg-muted text-foreground' : 'border-border text-foreground hover:bg-muted'
               }`}
             >
               <ColumnsIcon className="h-4 w-4" />
@@ -627,7 +621,7 @@ export function RowTable({
             type="button"
             disabled={exporting}
             onClick={() => void handleExport()}
-            className="flex items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-40"
           >
             <ExportIcon className="h-4 w-4" />
             {exporting ? 'Exporting…' : 'Export CSV'}
@@ -635,7 +629,7 @@ export function RowTable({
           {canCreate && (
             <Link
               to={{ pathname: `${base}/new`, search }}
-              className="flex items-center gap-1.5 rounded bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800"
+              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm text-accent-foreground hover:opacity-90"
             >
               <PlusIcon className="h-4 w-4" />
               New
@@ -648,12 +642,12 @@ export function RowTable({
       {sortPanel && showSort && sortPanel}
       {columnsPanel && showColumns && columnsPanel}
 
-      {exportNotice && <p className="mb-3 text-sm text-amber-700">{exportNotice}</p>}
-      {errorMessage && <p className="mb-3 text-sm text-red-600">{errorMessage}</p>}
+      {exportNotice && <p className="mb-3 text-sm text-amber-700 dark:text-amber-400">{exportNotice}</p>}
+      {errorMessage && <p className="mb-3 text-sm text-destructive">{errorMessage}</p>}
 
-      <div className="overflow-x-auto rounded border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-md border border-border bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
+          <thead className="border-b border-border bg-muted text-xs uppercase text-muted-foreground">
             <tr>
               <HeaderCell
                 label="id"
@@ -681,8 +675,8 @@ export function RowTable({
             {page?.rows.map((row) => {
               const id = String(row.id);
               return (
-                <tr key={id} className="border-b border-gray-100 last:border-0">
-                  <td className="px-3 py-2 font-mono text-xs text-gray-500">{id.slice(0, 8)}</td>
+                <tr key={id} className="border-b border-border last:border-0">
+                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{id.slice(0, 8)}</td>
                   {visibleColumns.map((f) => {
                     if (f.kind === 'reference' || f.kind === 'tree') {
                       const relation = f.key.replace(/Id$/, '');
@@ -703,7 +697,7 @@ export function RowTable({
                           ) : f.preview === 'image' && stored.url ? (
                             <img src={stored.url} alt={stored.filename ?? ''} className="h-8 w-8 rounded object-cover" />
                           ) : (
-                            <span className="text-xs text-gray-600">{stored.filename ?? '—'}</span>
+                            <span className="text-xs text-muted-foreground">{stored.filename ?? '—'}</span>
                           )}
                         </td>
                       );
@@ -719,7 +713,7 @@ export function RowTable({
                       {canUpdate && (
                         <Link
                           to={{ pathname: `${base}/${id}`, search }}
-                          className="mr-3 inline-flex items-center gap-1 align-middle text-gray-600 hover:underline"
+                          className="mr-3 inline-flex items-center gap-1 align-middle text-muted-foreground hover:underline"
                         >
                           <EditIcon className="h-4 w-4" />
                           Edit
@@ -732,7 +726,7 @@ export function RowTable({
                         <button
                           type="button"
                           onClick={() => void handleDelete(id)}
-                          className="inline-flex items-center gap-1 align-middle text-red-600 hover:underline"
+                          className="inline-flex items-center gap-1 align-middle text-destructive hover:underline"
                         >
                           <TrashIcon className="h-4 w-4" />
                           Delete
@@ -745,7 +739,7 @@ export function RowTable({
             })}
             {!loading && page?.rows.length === 0 && (
               <tr>
-                <td colSpan={visibleColumns.length + 2} className="px-3 py-6 text-center text-gray-400">
+                <td colSpan={visibleColumns.length + 2} className="px-3 py-6 text-center text-muted-foreground">
                   No records.
                 </td>
               </tr>
@@ -755,7 +749,7 @@ export function RowTable({
       </div>
 
       {page && (
-        <div className="mt-3 flex items-center justify-between text-sm text-gray-600">
+        <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
           <span>
             {page.total === 0
               ? '0 records'
@@ -766,7 +760,7 @@ export function RowTable({
               type="button"
               disabled={offset === 0}
               onClick={() => setOffset(Math.max(0, offset - limit))}
-              className="flex items-center gap-1 rounded border border-gray-300 py-1 pl-2 pr-3 disabled:opacity-40"
+              className="flex items-center gap-1 rounded-md border border-border py-1 pl-2 pr-3 disabled:opacity-40"
             >
               <ChevronLeftIcon className="h-4 w-4" />
               Prev
@@ -775,7 +769,7 @@ export function RowTable({
               type="button"
               disabled={offset + limit >= page.total}
               onClick={() => setOffset(offset + limit)}
-              className="flex items-center gap-1 rounded border border-gray-300 py-1 pl-3 pr-2 disabled:opacity-40"
+              className="flex items-center gap-1 rounded-md border border-border py-1 pl-3 pr-2 disabled:opacity-40"
             >
               Next
               <ChevronRightIcon className="h-4 w-4" />
