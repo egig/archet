@@ -2,6 +2,9 @@ import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { ApiRequestError } from './api.js';
 import { useAuth } from './auth.js';
+import { Button } from './ui/button.js';
+import { Input } from './ui/input.js';
+import { Label } from './ui/label.js';
 
 /** Shown instead of `/login` until `GET /api/auth/setup` reports a root admin already exists
  * (see `useAuth().setupRequired`). Creates the one `*:*` user via `POST /api/auth/setup` and
@@ -51,94 +54,91 @@ export function SetupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="mb-1 text-lg font-semibold text-gray-900">Create the root admin</h1>
-        <p className="mb-6 text-sm text-gray-500">This is a one-time setup step — this account gets full access.</p>
+    <div className="flex min-h-screen items-center justify-center bg-muted">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-sm">
+        <h1 className="mb-1 text-lg font-semibold text-foreground">Create the root admin</h1>
+        <p className="mb-6 text-sm text-muted-foreground">This is a one-time setup step — this account gets full access.</p>
 
-        <label className="mb-3 block text-sm">
-          <span className="mb-1 block text-gray-700">Email</span>
-          <input
+        <div className="mb-3 space-y-1.5">
+          <Label htmlFor="setup-email">Email</Label>
+          <Input
+            id="setup-email"
             type="email"
             required
             autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
           />
-        </label>
+        </div>
 
-        <label className="mb-3 block text-sm">
-          <span className="mb-1 block text-gray-700">Password</span>
-          <input
+        <div className="mb-3 space-y-1.5">
+          <Label htmlFor="setup-password">Password</Label>
+          <Input
+            id="setup-password"
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
           />
-        </label>
+        </div>
 
-        <label className="mb-4 block text-sm">
-          <span className="mb-1 block text-gray-700">Confirm password</span>
-          <input
+        <div className="mb-4 space-y-1.5">
+          <Label htmlFor="setup-confirm-password">Confirm password</Label>
+          <Input
+            id="setup-confirm-password"
             type="password"
             required
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
           />
-        </label>
+        </div>
 
-        <hr className="mb-4 border-gray-200" />
-        <p className="mb-3 text-sm text-gray-500">
-          This also sets up <span className="font-medium text-gray-700">Ratchet</span>, the built-in assistant — it needs a model
-          provider to talk to.
+        <hr className="mb-4 border-border" />
+        <p className="mb-3 text-sm text-muted-foreground">
+          This also sets up <span className="font-medium text-foreground">Ratchet</span>, the built-in assistant — it needs a
+          model provider to talk to.
         </p>
 
-        <label className="mb-3 block text-sm">
-          <span className="mb-1 block text-gray-700">Provider</span>
+        <div className="mb-3 space-y-1.5">
+          <Label htmlFor="setup-provider">Provider</Label>
           <select
+            id="setup-provider"
             value={providerKind}
             onChange={(e) => setProviderKind(e.target.value as 'anthropic' | 'openai')}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+            className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
           >
             <option value="anthropic">Anthropic</option>
             <option value="openai">OpenAI-compatible</option>
           </select>
-        </label>
+        </div>
 
-        <label className="mb-3 block text-sm">
-          <span className="mb-1 block text-gray-700">API key</span>
-          <input
+        <div className="mb-3 space-y-1.5">
+          <Label htmlFor="setup-provider-key">API key</Label>
+          <Input
+            id="setup-provider-key"
             type="password"
             required
             value={providerApiKey}
             onChange={(e) => setProviderApiKey(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
           />
-        </label>
+        </div>
 
-        <label className="mb-4 block text-sm">
-          <span className="mb-1 block text-gray-700">Base URL (optional)</span>
-          <input
+        <div className="mb-4 space-y-1.5">
+          <Label htmlFor="setup-provider-url">Base URL (optional)</Label>
+          <Input
+            id="setup-provider-url"
             type="url"
             placeholder="https://..."
             value={providerUrl}
             onChange={(e) => setProviderUrl(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
           />
-        </label>
+        </div>
 
-        {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-        >
+        <Button type="submit" disabled={submitting} className="w-full">
           {submitting ? 'Creating…' : 'Create root admin'}
-        </button>
+        </Button>
       </form>
     </div>
   );

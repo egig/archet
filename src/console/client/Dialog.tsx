@@ -1,5 +1,5 @@
-import { useEffect, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import type { ReactNode } from 'react';
+import { Dialog as DialogRoot, DialogContent } from './ui/dialog.js';
 
 export interface DialogProps {
   onClose: () => void;
@@ -8,28 +8,21 @@ export interface DialogProps {
 
 /** A route-driven modal: mounted alongside whatever's already on screen (a `WorkspacePage` tab, a
  * `ModelListPage` table) instead of replacing it, so opening/closing a form never unmounts the
- * page behind it. Portals to `document.body` so it always sits above the page regardless of where
- * it's rendered in the tree, and closes on Escape or a click on the backdrop itself. */
+ * page behind it. Built on Radix's `Dialog` (`ui/dialog.tsx`) rather than the hand-rolled
+ * portal/Escape-listener/backdrop-click this used to be — same external behavior (Escape or a
+ * backdrop click calls `onClose`), plus a focus trap and scroll lock Radix handles for free. Always
+ * `open` since there's no separate trigger here: mounting *is* opening, and `onOpenChange(false)`
+ * (Escape, backdrop click, or the close button) is the only way `open` would become false, so it
+ * maps straight to `onClose` instead of local state. */
 export function Dialog({ onClose, children }: DialogProps) {
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-6 pt-16"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+  return (
+    <DialogRoot
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
       }}
     >
-      <div role="dialog" aria-modal="true" className="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
-        {children}
-      </div>
-    </div>,
-    document.body,
+      <DialogContent>{children}</DialogContent>
+    </DialogRoot>
   );
 }

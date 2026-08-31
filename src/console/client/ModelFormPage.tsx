@@ -11,6 +11,7 @@ import { queryKeys } from './query-keys.js';
 import { datetimeLocalToIso, isoToDatetimeLocal } from './format.js';
 import { CheckIcon, XMarkIcon } from './icons.js';
 import { createModelFieldRenderers, useCustomForms } from './custom-forms.js';
+import { Button } from './ui/button.js';
 
 type FormValues = Record<string, string | boolean | FileFieldValue | string[]>;
 
@@ -188,13 +189,13 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
     },
   });
 
-  if (modelsLoading) return <p className="text-sm text-gray-500">Loading…</p>;
-  if (!model) return <p className="text-sm text-red-600">Unknown model.</p>;
+  if (modelsLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (!model) return <p className="text-sm text-destructive">Unknown model.</p>;
   if (CustomForm) return <CustomForm model={model} mode={mode} id={id} onDone={() => {
     refetchRows();
     onDone()
   }} fields={customFormFields} models={models} />;
-  if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
 
   const resourceKey = resourceFieldKey(model);
 
@@ -250,11 +251,11 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-gray-900">
+      <h1 className="mb-4 text-lg font-semibold text-foreground">
         {mode === 'create' ? `New ${model.label.replace(/s$/, '')}` : `Edit ${model.label.replace(/s$/, '')}`}
       </h1>
 
-      {(formError ?? loadError) && <p className="mb-4 text-sm text-red-600">{formError ?? loadError}</p>}
+      {(formError ?? loadError) && <p className="mb-4 text-sm text-destructive">{formError ?? loadError}</p>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {model.fields
@@ -271,9 +272,9 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
             const key = inputKeyFor(f);
             return (
               <label key={key} className="block text-sm">
-                <span className="mb-1 block text-gray-700">
+                <span className="mb-1 block text-foreground">
                   {f.label}
-                  {effectiveRequired(f, mode) && <span className="text-red-500"> *</span>}
+                  {effectiveRequired(f, mode) && <span className="text-destructive"> *</span>}
                 </span>
                 <FieldInput
                   field={f}
@@ -292,27 +293,19 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
           })}
 
         <div className="flex gap-2 pt-2">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex items-center gap-1.5 rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={submitting}>
             <CheckIcon className="h-4 w-4" />
             {submitting ? 'Saving…' : 'Save'}
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
-            className="flex items-center gap-1.5 rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
+          </Button>
+          <Button type="button" variant="outline" onClick={onDone}>
             <XMarkIcon className="h-4 w-4" />
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
 
       {detailOperations.length > 0 && (
-        <div className="mt-4 flex gap-4 border-t border-gray-200 pt-4">
+        <div className="mt-4 flex gap-4 border-t border-border pt-4">
           {detailOperations.map((op) => (
             <OperationButton
               key={op.name}
@@ -321,7 +314,7 @@ export function ModelFormPage({ onDone }: ModelFormPageProps) {
               row={rowQuery.data ?? null}
               operation={op}
               onDone={() => void refetchRow()}
-              className="text-sm text-gray-600 hover:underline"
+              className="text-sm text-muted-foreground hover:underline"
             />
           ))}
         </div>

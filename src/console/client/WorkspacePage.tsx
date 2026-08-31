@@ -10,6 +10,8 @@ import { WorkspaceChatPanel } from './WorkspaceChatPanel.js';
 import { ModelFormDialog } from './ModelFormDialog.js';
 import { BrandMark } from './BrandMark.js';
 import { ConsoleIcon, LockClosedIcon, LockOpenIcon, LogOutIcon, ProfileIcon } from './icons.js';
+import { ThemeToggle } from './ThemeToggle.js';
+import { Button } from './ui/button.js';
 
 interface WorkspaceOption {
   id: string;
@@ -49,7 +51,7 @@ function UserMenu({
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [open]);
 
-  const itemClass = 'flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50';
+  const itemClass = 'flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground hover:bg-muted';
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -57,21 +59,21 @@ function UserMenu({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-medium text-white"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-medium text-background"
       >
         {user.email.slice(0, 2).toUpperCase()}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-10 mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
-          <p className="truncate px-3 py-1.5 text-xs text-gray-500">{user.email}</p>
+        <div className="absolute right-0 top-full z-10 mt-1 w-48 rounded-md border border-border bg-surface py-1 shadow-lg">
+          <p className="truncate px-3 py-1.5 text-xs text-muted-foreground">{user.email}</p>
           <Link to="/profile" onClick={() => setOpen(false)} className={itemClass}>
-            <ProfileIcon className="h-4 w-4 text-gray-400" />
+            <ProfileIcon className="h-4 w-4 text-muted-foreground" />
             Edit profile
           </Link>
           {isRoot && (
             <Link to={consolePath} onClick={() => setOpen(false)} className={itemClass}>
-              <ConsoleIcon className="h-4 w-4 text-gray-400" />
+              <ConsoleIcon className="h-4 w-4 text-muted-foreground" />
               Console
             </Link>
           )}
@@ -83,7 +85,7 @@ function UserMenu({
             }}
             className={itemClass}
           >
-            <LogOutIcon className="h-4 w-4 text-gray-400" />
+            <LogOutIcon className="h-4 w-4 text-muted-foreground" />
             Log out
           </button>
         </div>
@@ -163,8 +165,8 @@ export function WorkspacePage() {
   }
 
   return (
-    <div className="flex h-screen min-h-0 flex-col bg-gray-50">
-      <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-2">
+    <div className="flex h-screen min-h-0 flex-col bg-muted">
+      <header className="flex items-center gap-3 border-b border-border bg-surface px-4 py-2">
         <div className="flex shrink-0 items-center gap-2">
           <BrandMark />
         </div>
@@ -172,7 +174,7 @@ export function WorkspacePage() {
         <select
           value={workspaceId}
           onChange={(e) => navigate(`/workspace/${e.target.value}`)}
-          className="rounded border border-gray-300 px-2 py-1 text-sm"
+          className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
         >
           {workspaces?.map((w) => (
             <option key={w.id} value={w.id}>
@@ -181,22 +183,23 @@ export function WorkspacePage() {
           ))}
         </select>
 
-        <div className="ml-auto flex shrink-0 items-center gap-3">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {activeWorkspace && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => void toggleLock()}
               title={activeWorkspace.locked ? 'Unlock workspace' : 'Lock workspace'}
               aria-label={activeWorkspace.locked ? 'Unlock workspace' : 'Lock workspace'}
-              className="flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700"
             >
               {activeWorkspace.locked ? (
                 <LockClosedIcon className="h-4 w-4" />
               ) : (
                 <LockOpenIcon className="h-4 w-4" />
               )}
-            </button>
+            </Button>
           )}
+          <ThemeToggle />
           {user && (
             <UserMenu user={user} isRoot={isRoot} consolePath={consolePath} onLogout={() => void logout()} />
           )}

@@ -7,7 +7,7 @@ export function BrandMark() {
       {__CONSOLE_BRAND__.logoUrl && (
         <img src={__CONSOLE_BRAND__.logoUrl} alt="" className="h-5 w-5 shrink-0 rounded object-contain" />
       )}
-      <p className="truncate text-sm font-semibold text-gray-900">{__CONSOLE_BRAND__.name ?? 'Ratchet console'}</p>
+      <p className="truncate text-sm font-semibold text-foreground">{__CONSOLE_BRAND__.name ?? 'Ratchet console'}</p>
     </>
   );
 }

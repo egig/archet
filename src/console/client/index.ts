@@ -16,3 +16,11 @@ export { useModels } from './models.js';
 export { useAuth } from './auth.js';
 export type { AuthUser, OffsetPage } from './api.js';
 export { getRow, createRow, updateRow, listRows, callOperation, hasPermission, ApiRequestError } from './api.js';
+
+// **Experimental**: the console's own UI primitive layer (`ui/index.ts` — Radix Primitives
+// restyled onto the token-based light/dark theme in styles.css, with `class-variance-authority`
+// variants). Exported so a `*.form.tsx`/`*.input.tsx` can match the console's own look instead of
+// reinventing buttons/inputs from scratch, but only `Button`/`Input`/`Label`/`Dialog` exist so far
+// and their props may still change shape as the rest of the console migrates onto them — pin your
+// `@egig/ratchet` version if you depend on this today.
+export * from './ui/index.js';

@@ -2,6 +2,9 @@ import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router';
 import { ApiRequestError } from './api.js';
 import { useAuth } from './auth.js';
+import { Button } from './ui/button.js';
+import { Input } from './ui/input.js';
+import { Label } from './ui/label.js';
 
 export function LoginPage() {
   const { user, loading, setupRequired, login } = useAuth();
@@ -29,42 +32,38 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="mb-6 text-lg font-semibold text-gray-900">Ratchet console</h1>
+    <div className="flex min-h-screen items-center justify-center bg-muted">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-border bg-surface p-8 shadow-sm">
+        <h1 className="mb-6 text-lg font-semibold text-foreground">Ratchet console</h1>
 
-        <label className="mb-3 block text-sm">
-          <span className="mb-1 block text-gray-700">Email</span>
-          <input
+        <div className="mb-3 space-y-1.5">
+          <Label htmlFor="login-email">Email</Label>
+          <Input
+            id="login-email"
             type="email"
             required
             autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
           />
-        </label>
+        </div>
 
-        <label className="mb-4 block text-sm">
-          <span className="mb-1 block text-gray-700">Password</span>
-          <input
+        <div className="mb-4 space-y-1.5">
+          <Label htmlFor="login-password">Password</Label>
+          <Input
+            id="login-password"
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
           />
-        </label>
+        </div>
 
-        {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-        >
+        <Button type="submit" disabled={submitting} className="w-full">
           {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
+        </Button>
       </form>
     </div>
   );

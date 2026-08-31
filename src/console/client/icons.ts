@@ -43,4 +43,6 @@ export {
   RectangleStackIcon as WorkspaceIcon,
   UserCircleIcon as ProfileIcon,
   Squares2X2Icon as ConsoleIcon,
+  SunIcon,
+  MoonIcon,
 } from '@heroicons/react/20/solid';
