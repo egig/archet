@@ -34,11 +34,11 @@
   --muted: #f6f7f9;
   --muted-foreground: #5b6470;
   --border: #e4e7eb;
-  --accent: #2563eb; /* matches the `ratchet init` public-site stub's `--accent` (theme.css) */
+  --accent: #333333; /* matches the `ratchet init` public-site stub's `--accent` (theme.css) */
   --accent-foreground: #ffffff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --ring: #2563eb;
+  --ring: #333333;
   --radius: 0.5rem;
 }
 
